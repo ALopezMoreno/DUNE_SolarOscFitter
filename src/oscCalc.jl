@@ -1,3 +1,22 @@
+"""
+Neutrino Oscillation Module
+Functions and data structures for calculating neutrino oscillation probabilities using the MSW effect
+
+# Main Components
+
+- `OscillationParameters`: A mutable struct to hold the oscillation parameters with default values.
+- `update_oscpars!`: A function to update the oscillation parameters with new values.
+- `mswProb`: A function to calculate MSW oscillation probabilities.
+- `peanutsProb`: A function to calculate oscillation probabilities using the PEANuTS model.
+- `solarSurfaceProbs`: A function to calculate integrated neutrino oscillation probabilities at the solar surface using a specified solar model.
+
+# Constants
+
+- `G_f`: The Fermi constant.
+- `m32`: The mass splitting constant, currently set to the normal ordering (NO) value.
+"""
+
+
 using StaticArrays
 using JLD2
 
@@ -207,7 +226,7 @@ end
 
 
 
-function solarSurfaceProbs(params::OscillationParameters, E_true::Float64, solarModel="inputs/AGSS09_high_z")
+function solarSurfaceProbs(params::OscillationParameters, E_true::Float64; process="8B", solarModel="inputs/AGSS09_high_z")
     """
     Calculate the neutrino oscillation probabilities at the solar surface for a given energy and solar model.
 
@@ -230,38 +249,46 @@ function solarSurfaceProbs(params::OscillationParameters, E_true::Float64, solar
 
     # Check if the file exists and read the datasets
     if isfile(filePath)
-        radii, prodFractionBoron, prodFractionHep, n_e = jldopen(filePath, "r") do file
+        radii, prodFraction, n_e = jldopen(filePath, "r") do file
             # Load the necessary datasets from the file
             radii = file["radii"]
-            prodFractionBoron = file["prodFractionBoron"]
-            prodFractionHep = file["prodFractionHep"]
+            if process == "8B"
+                prodFraction = file["prodFractionBoron"]
+            elseif process == "hep"
+                prodFraction = file["prodFractionHep"]
+            else
+                error("Invalid process. process must be '8B' or 'hep'")
+            end
+            
             n_e = file["n_e"]
-            return (radii, prodFractionBoron, prodFractionHep, n_e)
+            return (radii, prodFraction, n_e)
         end
     else
         error("File not found: $filePath")
     end
-
+    println(n_e)
+    println(proFraction)
     # Calculate the neutrino oscillation probabilities using the electron density
     enuOscProb = peanutsProb(params, E_true, n_e)
 
     # Define a local function to integrate probabilities over the solar radius
-    function integrateProb(radii::Vector{Float64}, prodFractionBoron::Vector{Float64}, prodFractionHep::Vector{Float64}, enuOscProb::Vector{Float64})
+    function integrateProb(radii::Vector{Float64}, prodFraction::Vector{Float64}, enuOscProb::Vector{Float64})
         # Ensure all vectors have the same length
-        if length(prodFractionBoron) != length(enuOscProb) || length(prodFractionHep) != length(enuOscProb)
+        if length(prodFraction) != length(enuOscProb)
             error("Dimension mismatch: Vectors must be of the same length.")
         end
         # Calculate the bin widths for integration
         b_edges = [0; radii]
         @views bin_widths = diff(b_edges)
         # Integrate the probabilities for Boron and Hep neutrinos
-        intBoron = sum(@. prodFractionBoron * bin_widths * enuOscProb)
-        intHep = sum(@. prodFractionHep * bin_widths * enuOscProb)
-        return (intBoron, intHep)
+        integral = sum(@. prodFraction * bin_widths * enuOscProb)
+        return integral
     end
 
     # Call the integration function with the loaded data
-    pBoron, pHep = integrateProb(radii, prodFractionBoron, prodFractionHep, enuOscProb)
+    prob_nue = integrateProb(radii, prodFraction, enuOscProb)
 
-    return pBoron, pHep
+    return prob_nue
 end
+
+
