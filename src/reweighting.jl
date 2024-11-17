@@ -1,27 +1,4 @@
-using StaticArrays
 include("../src/oscCalc.jl")
-
-mutable struct NuSpectrum
-    ETrue8B::Vector{Float64}
-    events8B_es::Vector{Float64}
-    events8B_cc::Vector{Float64}
-
-    ETrueHep::Vector{Float64}
-    eventsHep_es::Vector{Float64}
-    eventsHep_cc::Vector{Float64}
-
-    oscweights8B::Union{Vector{Float64}, Nothing}
-    oscweightsHep::Union{Vector{Float64}, Nothing}
-
-    events_es_oscillated_nue::Union{Vector{Float64}, Nothing}
-    events_es_oscillated_other::Union{Vector{Float64}, Nothing}
-    events_cc_oscillated::Union{Vector{Float64}, Nothing}
-
-    function NuSpectrum(ETrue8B, events8B_es, events8B_cc, ETrueHep, eventsHep_es, eventsHep_cc)
-        new(ETrue8B, events8B_es, events8B_cc, ETrueHep, eventsHep_es, eventsHep_cc, nothing, nothing, nothing, nothing, nothing)
-    end
-end
-
 
 # Getter functions
 function get_ETrue8B(s::NuSpectrum)
@@ -113,13 +90,64 @@ function set_events_cc_oscillated!(s::NuSpectrum, new_value::Vector{Float64})
     s.events_cc_oscillated = new_value
 end
 
-function oscReweight!(s::NuSpectrum, oscpars)
+function oscReweight!(s::NuSpectrum, osc_parameters)
+    oscpars = OscillationParameters()
+    update_oscpars!(oscpars, SVector{3,Float64}(osc_parameters.sin2_th12, osc_parameters.sin2_th13, osc_parameters.dm2_21))
+
     # Calculate the oscillation weights for 8B and Hep using solarSurfaceProbs
-    s.oscweights8B = [solarSurfaceProbs(oscpars, e, process="8B") for e in s.ETrue8B]
-    s.oscweightsHep = [solarSurfaceProbs(oscpars, e, process="hep") for e in s.ETrueHep]
+    @views s.oscweights8B = [solarSurfaceProbs(oscpars, e, solarModel, process="8B") for e in s.ETrue8B]
+    @views s.oscweightsHep = [solarSurfaceProbs(oscpars, e,solarModel, process="hep") for e in s.ETrueHep]
 
     # Update the values of the oscillated fluxes
     @inbounds set_events_cc_oscillated!(s, s.events8B_cc .* s.oscweights8B .+ s.eventsHep_cc .* s.oscweightsHep)
     @inbounds set_events_es_oscillated_nue!(s, s.events8B_es .* s.oscweights8B .+ s.eventsHep_es .* s.oscweightsHep)
     @inbounds set_events_es_oscillated_other!(s, s.events8B_es .* (1 .- s.oscweights8B) .+ s.eventsHep_es .* (1 .- s.oscweightsHep))
 end
+
+
+function oscReweight!(s::NuSpectrum, oscpars::OscillationParameters)
+    # Calculate the oscillation weights for 8B and Hep using solarSurfaceProbs
+    @views s.oscweights8B = [solarSurfaceProbs(oscpars, e, solarModel, process="8B") for e in s.ETrue8B]
+    @views s.oscweightsHep = [solarSurfaceProbs(oscpars, e,solarModel, process="hep") for e in s.ETrueHep]
+
+    # Update the values of the oscillated fluxes
+    @inbounds set_events_cc_oscillated!(s, s.events8B_cc .* s.oscweights8B .+ s.eventsHep_cc .* s.oscweightsHep)
+    @inbounds set_events_es_oscillated_nue!(s, s.events8B_es .* s.oscweights8B .+ s.eventsHep_es .* s.oscweightsHep)
+    @inbounds set_events_es_oscillated_other!(s, s.events8B_es .* (1 .- s.oscweights8B) .+ s.eventsHep_es .* (1 .- s.oscweightsHep))
+end
+
+#performance test
+using Test
+using BenchmarkTools
+
+function test_oscillation_weights_performance_large_input()
+    # Setup
+    ETrue8B = fill(10.0, 200)
+    ETrueHep = fill(20.0, 200)
+    events8B_cc = fill(1.0, 200)
+    eventsHep_cc = fill(1.0, 200)
+    events8B_es = fill(1.0, 200)
+    eventsHep_es = fill(1.0, 200)
+    s = NuSpectrum(
+        ETrue8B,  # ETrue8B
+        events8B_es,  # events8B_es
+        events8B_cc,  # events8B_cc
+        ETrueHep,  # ETrueHep
+        eventsHep_es,  # eventsHep_es
+        eventsHep_cc   # eventsHep_cc
+    )
+    osc_parameters = NamedTuple{(:sin2_th12, :sin2_th13, :dm2_21)}((0.3, 0.02, 7.5e-5))
+    # osc_parameters = OscillationParameters()
+
+    # Action
+    @time oscReweight!(s, osc_parameters)
+    
+    # Assertions
+    @test length(s.oscweights8B) == 200
+    @test length(s.oscweightsHep) == 200
+    @test all(w -> w >= 0 && w <= 1, s.oscweights8B)
+    @test all(w -> w >= 0 && w <= 1, s.oscweightsHep)
+end
+
+#test_oscillation_weights_performance_large_input()
+#test_oscillation_weights_performance_large_input()

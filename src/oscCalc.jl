@@ -16,21 +16,7 @@ Functions and data structures for calculating neutrino oscillation probabilities
 - `m32`: The mass splitting constant, currently set to the normal ordering (NO) value.
 """
 
-
-using StaticArrays
-using JLD2
-
-# Fermi constant
-const G_f = 5.4489e-5
-# For now, we keep the remaining mass splitting constant and in NO
-const m32 = 2.43e-3
-# Define a mutable struct to hold the oscillation parameters with default values
-mutable struct OscillationParameters
-    oscpars::SVector{3,Float64}
-    function OscillationParameters()
-        new(SVector{3,Float64}(0.307, 0.022, 7.53e-5))  # Default values
-    end
-end
+include("../src/objects.jl")
 
 # Function to update the oscillation parameters
 function update_oscpars!(params::OscillationParameters, new_oscpars::SVector{3,Float64})
@@ -226,69 +212,59 @@ end
 
 
 
-function solarSurfaceProbs(params::OscillationParameters, E_true::Float64; process="8B", solarModel="inputs/AGSS09_high_z")
+function solarSurfaceProbs(params::OscillationParameters, E_true::Float64, solarModel; process="8B")
     """
     Calculate the neutrino oscillation probabilities at the solar surface for a given energy and solar model.
 
     # Arguments
     - `params::OscillationParameters`: The oscillation parameters used for the calculation.
     - `E_true::Float64`: The true energy of the neutrino.
-    - `solarModel::String`: The name of the solar model file (default is "inputs/AGSS09_high_z").
+    - `solarModel: the solar model object (radius, electron density, and production regions).
 
     # Returns
     - A tuple `(pBoron, pHep)` where:
     - `pBoron`: The integrated probability for Boron neutrinos.
     - `pHep`: The integrated probability for Hep neutrinos.
-
-    # Throws
-    - An error if the specified solar model file does not exist.
-    - An error if there is a dimension mismatch between the vectors used in integration.
     """
 
-    filePath = solarModel * ".jld2"
-
-    # Check if the file exists and read the datasets
-    if isfile(filePath)
-        radii, prodFraction, n_e = jldopen(filePath, "r") do file
-            # Load the necessary datasets from the file
-            radii = file["radii"]
-            if process == "8B"
-                prodFraction = file["prodFractionBoron"]
-            elseif process == "hep"
-                prodFraction = file["prodFractionHep"]
-            else
-                error("Invalid process. process must be '8B' or 'hep'")
-            end
-            
-            n_e = file["n_e"]
-            return (radii, prodFraction, n_e)
-        end
-    else
-        error("File not found: $filePath")
-    end
-    println(n_e)
-    println(proFraction)
     # Calculate the neutrino oscillation probabilities using the electron density
-    enuOscProb = peanutsProb(params, E_true, n_e)
+    enuOscProb = peanutsProb(params, E_true, solarModel.n_e)
 
     # Define a local function to integrate probabilities over the solar radius
     function integrateProb(radii::Vector{Float64}, prodFraction::Vector{Float64}, enuOscProb::Vector{Float64})
-        # Ensure all vectors have the same length
-        if length(prodFraction) != length(enuOscProb)
-            error("Dimension mismatch: Vectors must be of the same length.")
-        end
         # Calculate the bin widths for integration
         b_edges = [0; radii]
         @views bin_widths = diff(b_edges)
         # Integrate the probabilities for Boron and Hep neutrinos
-        integral = sum(@. prodFraction * bin_widths * enuOscProb)
+        integral = @inbounds sum(@. prodFraction * bin_widths * enuOscProb)
         return integral
     end
 
+    if process == "8B"
+        prodFraction = solarModel.prodFractionBoron
+    elseif process == "hep"
+        prodFraction = solarModel.prodFractionHep
+    else
+        error("Invalid process specified. Please use '8B' or 'hep'.")
+    end
+
     # Call the integration function with the loaded data
-    prob_nue = integrateProb(radii, prodFraction, enuOscProb)
+    prob_nue = integrateProb(solarModel.radii, prodFraction, enuOscProb)
 
     return prob_nue
 end
 
 
+# TESTING
+using Test
+
+function test_solar_surface_probs_8b_valid_inputs()
+    # Assuming OscillationParameters and a mock solarModel are defined elsewhere
+    params = OscillationParameters()  # Fill with appropriate values
+    E_true = 10.0  # Example energy value
+
+    # Call the function with "8B" process
+    @time prob_nue = solarSurfaceProbs(params, E_true, solarModel, process="8B")
+
+
+end

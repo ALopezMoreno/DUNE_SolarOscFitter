@@ -10,7 +10,7 @@ import h5py
 plt.rcParams['text.usetex'] = True
 hep.style.use("CMS")
 
-model = peanuts.SolarModel(solar_model_file="../PEANUTS/Data/nudistr_b16_gs98.dat")
+model = peanuts.SolarModel(solar_model_file="../PEANUTS/Data/nudistr_b16_agss09.dat")
 
 radii = model.radius()
 prodFractionBoron = model.fraction("8B")
@@ -18,7 +18,7 @@ prodFractionHep = model.fraction("hep")
 n_e = model.density()
 
 # Save data to a JLD2-compatible HDF5 file
-with h5py.File('inputs/GS98_low_z.jld2', 'w') as f:
+with h5py.File('inputs/AGSS09_high_z.jld2', 'w') as f:
     f.create_dataset('radii', data=radii)
     f.create_dataset('prodFractionBoron', data=prodFractionBoron)
     f.create_dataset('prodFractionHep', data=prodFractionHep)
