@@ -4,6 +4,18 @@ using StaticArrays
 const G_f = 5.4489e-5
 # For now, we keep the remaining mass splitting constant and in NO
 const m32 = 2.43e-3
+# Electron mass in GeV/c^2
+m_e = 5.11e-4
+# Weinberg angle
+sin2nuW = 0.231
+
+# Cross section Constants
+g1_nue = 1/2 + sin2nuW
+g2_nue = sin2nuW
+
+g1_nuother = -1/2 + sin2nuW
+g2_nuother = sin2nuW
+sigma_0 = 1.939e-13 * 1.97e-16^2 # in cm^-2
 
 # Define a mutable struct to hold the oscillation parameters with default values
 mutable struct OscillationParameters
