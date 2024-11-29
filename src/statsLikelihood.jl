@@ -87,7 +87,7 @@ likelihood_all_samples_avg = let nObserved = ereco_data,
 
         loglh = loglh_ES_nue + loglh_ES_nuother + loglh_CC
 
-        return loglh_CC
+        return loglh
     end)
 end
 
@@ -177,7 +177,7 @@ likelihood_all_samples_ctr = let nObserved = ereco_data,
 
         loglh = loglh_ES_nue + loglh_ES_nuother + loglh_CC
 
-        return loglh_CC
+        return loglh
     end)
 end
 
