@@ -1,5 +1,40 @@
-using Logging
+"""
+This script performs a likelihood scan over neutrino oscillation parameters using a grid search approach. 
+It calculates the log-likelihood values for different combinations of the squared sine of mixing angles 
+(`sin²θ₁₂`, `sin²θ₁₃`) and the squared mass difference (`Δm²₂₁`) and stores the results in CSV files.
 
+Modules and Libraries:
+- Utilizes various Julia packages such as `LinearAlgebra`, `Statistics`, `Distributions`, `StatsBase`, 
+  `BAT`, `DensityInterface`, `IntervalSets`, and `DelimitedFiles` for mathematical operations, statistical 
+  distributions, and file handling.
+- Includes a setup script from `../src/setup.jl` to configure the fitting process.
+
+Parameters:
+- `nbins`: Number of bins for the grid search, defined by `llhBins`.
+- `lim_th12`, `lim_th13`, `lim_dm21`: Arrays defining the parameter limits for `sin²θ₁₂`, `sin²θ₁₃`, and 
+  `Δm²₂₁` respectively.
+
+Process:
+1. Initializes parameter ranges for `sin²θ₁₂`, `sin²θ₁₃`, and `Δm²₂₁` based on specified limits and number of bins.
+2. Computes log-likelihood values for each parameter combination using either `likelihood_all_samples_avg` 
+   or `likelihood_all_samples_ctr` based on the `fast` flag.
+3. Stores the results in matrices and writes them to CSV files with appropriate headers indicating the 
+   parameter limits.
+
+Output:
+- Three CSV files containing the log-likelihood scans for:
+  1. `sin²θ₁₂` vs `sin²θ₁₃`
+  2. `sin²θ₁₂` vs `Δm²₂₁`
+  3. `sin²θ₁₃` vs `Δm²₂₁`
+
+Note:
+- The script assumes the existence of certain global variables such as `true_params`, `fast`, and `outFile`.
+- Logging is set up but commented out; adjust the logging level as needed for debugging.
+"""
+
+
+
+using Logging
 # DEBUGGING AND TESTING: Set the logging level to Warn to suppress Info messages
 # global_logger(ConsoleLogger(stderr, Logging.Warn))
 
