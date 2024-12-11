@@ -1,4 +1,5 @@
 using YAML
+using Distributions
 using Printf
 
 # Function to load parameters from the YAML file
@@ -10,6 +11,11 @@ function load_parameters(yaml_file::String)
         println("Error loading YAML file: $e")
         return nothing
     end
+end
+
+# Function to convert string to distribution
+function string_to_distribution(dist_str)
+    return eval(Meta.parse(dist_str))
 end
 
 # Function to construct argument strings for the called script
@@ -85,6 +91,11 @@ function main()
     global mcmcChains = config["nChains"]
     global tuningSteps = config["nTuning"]
     global maxTuningAttempts = config["maxTuningAttempts"]
+
+    # Prior distributions
+    global prior_sin2_th12 = string_to_distribution(config["prior_sin2_th12"])
+    global prior_sin2_th13 = string_to_distribution(config["prior_sin2_th13"])
+    global prior_dm2_21 = string_to_distribution(config["prior_dm2_21"])
 
     # LLH parameters
     global llhBins = config["llh_bins"]
