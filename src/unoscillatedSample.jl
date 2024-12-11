@@ -1,3 +1,48 @@
+"""
+This script calculates unoscillated neutrino event rates at a detector for different interaction channels 
+and solar neutrino sources. It integrates flux and cross-section data over specified energy bins to produce 
+binned event rates, which are then saved for further analysis.
+
+Dependencies:
+- Uses the `QuadGK` package for numerical integration.
+- Includes external modules `solarFlux.jl` and `xsec.jl` for solar neutrino flux and cross-section data.
+- Assumes the existence of constants `ES_normalisation` and `CC_normalisation` for normalizing event rates.
+
+Functions:
+- `unoscillatedRate_ES_nue_8B`, `unoscillatedRate_ES_nue_hep`: Calculate unoscillated event rates for 
+  electron neutrinos (nue) from 8B and hep solar processes using elastic scattering (ES) cross-sections.
+- `unoscillatedRate_ES_nuother_8B`, `unoscillatedRate_ES_nuother_hep`: Calculate unoscillated event rates 
+  for other neutrino flavors (nuother) from 8B and hep processes using ES cross-sections.
+- `unoscillatedRate_CC_8B`, `unoscillatedRate_CC_hep`: Calculate unoscillated event rates for 8B and hep 
+  processes using charged current (CC) cross-sections.
+
+- `calculate_bins`: Computes bin edges and centers for a given range and number of bins, facilitating 
+  energy binning for integration.
+- `average_over_bins`: Integrates a given function over specified energy bins and calculates the average 
+  value in each bin.
+
+Process:
+1. Defines functions to compute unoscillated event rates for different neutrino flavors and interaction 
+   channels using flux and cross-section data.
+2. Calculates bin edges and centers for energy integration using `calculate_bins`.
+3. Integrates the unoscillated rate functions over energy bins using `average_over_bins` to obtain binned 
+   event rates.
+4. Normalizes the binned event rates using predefined normalization constants.
+5. Stores the results in a constant `unoscillatedSample` for easy access and saves the data to a JLD2 file 
+   for further analysis.
+
+Output:
+- A JLD2 file named `unoscillatedSamples.jld2` containing binned event rates for different neutrino flavors 
+  and interaction channels, along with the energy bin centers.
+
+Note:
+- The script uses a temporary scaling factor (`1e38`) in the rate calculations, which should be adjusted 
+  once the cross-section units are finalized.
+- Ensure that the included modules and constants are correctly defined and accessible in the working 
+  environment.
+"""
+
+
 # Create the unoscillated flux at the detector
 using QuadGK
 
@@ -79,3 +124,5 @@ const unoscillatedSample = (ES_nue_8B = unoscillated_ES_nue_sample_8B,
                             ES_nue_hep = unoscillated_ES_nue_sample_hep,
                             ES_nuother_hep = unoscillated_ES_nuother_sample_hep,
                             CC_hep = unoscillated_CC_sample_hep)
+
+@save "outputs/unoscillatedSamples.jld2" unoscillated_ES_nue_sample_8B unoscillated_ES_nuother_sample_8B unoscillated_CC_sample_8B unoscillated_ES_nue_sample_hep unoscillated_ES_nuother_sample_hep unoscillated_CC_sample_hep energies_GeV

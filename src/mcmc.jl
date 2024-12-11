@@ -1,3 +1,37 @@
+"""
+This script performs Bayesian parameter estimation for neutrino oscillation parameters using Markov Chain 
+Monte Carlo (MCMC) sampling. It leverages the BAT.jl library to sample from the posterior distribution 
+defined by a likelihood function and prior distributions over the parameters of interest.
+
+Modules and Libraries:
+- Utilizes Julia packages such as `LinearAlgebra`, `Statistics`, `Distributions`, `StatsBase`, `BAT`, 
+  `DensityInterface`, `IntervalSets`, `Plots`, and `JLD2` for mathematical operations, statistical 
+  distributions, Bayesian analysis, plotting, and data storage.
+- Includes a setup script from `../src/setup.jl` to configure the fitting process.
+
+Parameters:
+- `prior`: A product of distributions defining uniform priors for the squared sine of mixing angles 
+  (`sin²θ₁₂`, `sin²θ₁₃`) and the squared mass difference (`Δm²₂₁`).
+- `fast`: A boolean flag that determines which likelihood function to use (`likelihood_all_samples_ctr` 
+  or `likelihood_all_samples_avg`).
+
+Process:
+1. Defines a Bayesian model using the `PosteriorMeasure` with the specified likelihood and prior.
+2. Configures MCMC chain parameters, including initialization, burn-in, and convergence settings.
+3. Executes MCMC sampling using the Metropolis-Hastings algorithm, logging the number of chains and steps.
+4. Extracts parameter samples and metadata (step number and chain ID) from the MCMC results.
+5. Saves the extracted data and additional sample information to a JLD2 file for further analysis.
+
+Output:
+- A JLD2 file containing arrays of sampled parameter values (`sin²θ₁₂`, `sin²θ₁₃`, `Δm²₂₁`), step numbers, 
+  chain IDs, and sample data (`ES_nue`, `ES_nuother`, `CC`).
+
+Note:
+- The script assumes the existence of certain global variables such as `mcmcChains`, `mcmcSteps`, 
+  `tuningSteps`, `maxTuningAttempts`, `outFile`, and `ereco_data`.
+- Logging is set up but commented out; adjust the logging level as needed for debugging.
+"""
+
 using Logging
 
 # DEBUGGING AND TESTING: Set the logging level to Warn to suppress Info messages
@@ -10,16 +44,16 @@ include("../src/setup.jl")
 
 # Set uniform priors in reasonable parameter regions
 prior = distprod(
-    sin2_th12=Uniform(0.01, 0.99),
-    sin2_th13= Uniform(0.0001, 0.1), #Truncated(Normal(0.022, 0.0007), 0.0001, 0.035), # Fix to reactor data for now
-    dm2_21=Uniform(1e-8, 3 * 2.5e-4)
+    sin2_th12=prior_sin2_th12,
+    sin2_th13= prior_sin2_th13, # Uniform(0.0001, 0.1), #Truncated(Normal(0.022, 0.0007), 0.0001, 0.035), # Fix to reactor data for now
+    dm2_21=prior_dm2_21
 )
 
 # Define Bayesian model
 if fast
-    posterior = PosteriorMeasure(likelihood_all_samples_avg, prior)
-else
     posterior = PosteriorMeasure(likelihood_all_samples_ctr, prior)
+else
+    posterior = PosteriorMeasure(likelihood_all_samples_avg, prior)
 end
 
 # Set chain parameters
@@ -47,7 +81,7 @@ println("tuning will be performed with $tuningSteps steps up to a maximum of $ma
                                             nchains=mcmcChains,
                                             init=init,
                                             burnin=burnin,
-                                            convergence=convergence
+                                            #convergence=convergence
                                             )).result
 
 

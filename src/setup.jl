@@ -44,16 +44,6 @@ include("../src/unoscillatedSample.jl")
 include("../src/propagateSample.jl")
 include("../src/response.jl")
 
-# Initialise parameters and set oservations to Asimov parameter values (PDG)
-true_params = (sin2_th12=sin2_th12_true,
-    sin2_th13=sin2_th13_true,
-    dm2_21=dm2_21_true)
-
-# Propagate Asimov point to generate Asimov event rates
-measuredRate_ES_nue, measuredRate_ES_nuother, measuredRate_CC = propagateSamplesAvg(unoscillatedSample, responseMatrices, true_params, solarModel, bin_edges)
-
-index_above_threshold = findfirst(x -> x > E_threshold.ES, energies_GeV)
-
 # Set up backgrounds
 df_ES_nue = CSV.File(ES_nue_filepath_BG) |> DataFrame
 df_ES_nuother = CSV.File(ES_nuother_filepath_BG) |> DataFrame
@@ -61,10 +51,25 @@ df_CC = CSV.File(CC_filepath_BG) |> DataFrame
 
 ES_nue_bg, ES_nue_bg_etrue = create_histogram(df_ES_nue.Ereco, bins)
 ES_nuother_bg, ES_nuother_bg_etrue = create_histogram(df_ES_nuother.Ereco, bins)
-CC_bg, CC_bg_etrue = create_histogram(df_CC.Ereco .* 1e-3, bins)
+CC_bg, CC_bg_etrue = create_histogram(df_CC.Ereco .* 1e-6, bins)
+
+# println(df_CC.Ereco .* 1e-6)
+# println(CC_bg)
+# println(sum(CC_bg.*200))
+
+# Initialise parameters and set oservations to Asimov parameter values (PDG)
+true_params = (sin2_th12=sin2_th12_true,
+    sin2_th13=sin2_th13_true,
+    dm2_21=dm2_21_true)
+
+# Propagate Asimov point to generate Asimov event rates
+measuredRate_ES_nue, measuredRate_ES_nuother, measuredRate_CC = propagateSamplesAvg(unoscillatedSample, responseMatrices, true_params, solarModel, bin_edges, CC_bg)
+
+index_above_threshold = findfirst(x -> x > E_threshold.ES, energies_GeV)
 
 backgrounds = (ES=(nue=ES_nue_bg, nuother=ES_nuother_bg), CC=CC_bg)
 ereco_data = (ES_nue=measuredRate_ES_nue, ES_nuother=measuredRate_ES_nuother, CC=measuredRate_CC)
+ereco_data_mergedES = (ES=measuredRate_ES_nue .+ measuredRate_ES_nuother, CC=measuredRate_CC)
 
 # Check if index_above_threshold is not nothing
 if index_above_threshold !== nothing
