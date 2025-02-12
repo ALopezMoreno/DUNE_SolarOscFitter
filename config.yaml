@@ -1,7 +1,7 @@
 ###############################
 ##### Output and run type #####
 
-outFile: "outputs/both_leptonReco_3MeV_woBG_PDGlike_fast"    # Files are nominally saved in the outputs folder as jld2 or csv files with the appropriate suffixes
+outFile: "outputs/both_ereco_woBG_3MeV_PDGlike_RC_fast_freeflux"    # Files are nominally saved in the outputs folder as jld2 or csv files with the appropriate suffixes
 LLH: false    # Log Likelihood scan or MCMC fit
 Asimov: true    # Data fit or Asimov fit?
 fastFit: true    # Accelerate calculations by evaluating parameters at bin centers instead of averaging and evaluating oscprob at the average solar density
@@ -13,34 +13,42 @@ true_sin2_th12: 0.304
 true_sin2_th13: 0.0224
 true_dm2_21: 7.53e-5 # PDG: 7.53e-5,  SNO: 5.113e-5
 
+###############################
+##### Prior distributions #####
+
+prior_sin2_th12: Uniform(0.001, 0.999) 
+prior_sin2_th13: Truncated(Normal(0.022, 0.0007), 0.0001, 0.035)
+prior_dm2_21: Uniform(1e-8, 3 * 2.5e-4)
+prior_8B_flux: Uniform(1e5, 2e7)
+# prior_8B_flux: Truncated(Normal(2.314e6, 0.054e6), 0.1, 1e7)
 
 ###########################
 ##### MCMC parameters #####
 
-nChains: 12
-nSteps: 50000
-nTuning: 20000
+nChains: 10
+nSteps: 500000
+nTuning: 200000
 maxTuningAttempts: 30
 
 
 ##########################
 ##### LLH parameters #####
 
-llh_bins: 150
+llh_bins: 80
 
 
-########################################
+#################################
 ##### MC and fit properties #####
 
-CC_flux_normalisation: 619
-CC_background_normalisation: 1.0
+CC_flux_normalisation: 0.1
+CC_background_normalisation: 0.0
 
-ES_flux_normalisation: 47000
-ES_background_normalisation: 1.0
+ES_flux_normalisation: 3
+ES_background_normalisation: 0.0
 
-nBins: 20
-energy_range: [0.1, 16]
-emin_ES: 3
+nBins: 50
+energy_range: [0.1, 20]
+emin_ES: 3.5
 emin_CC: 3
 
 
@@ -50,9 +58,9 @@ emin_CC: 3
 solar_model_file: "inputs/AGSS09_high_z.jld2"
 flux_model_file: "inputs/fluxes.jld2"
 
-reconstruction_sample_CC: "inputs/Enu_Esmeared_CC.csv"
-reconstruction_sample_ES_nue: "inputs/Enu_Esmeared_nue.csv"
-reconstruction_sample_ES_nuother: "inputs/Enu_Esmeared_numunutau.csv"
+reconstruction_sample_CC: "inputs/Enu_Ereco_CC.csv"
+reconstruction_sample_ES_nue: "inputs/Enu_Ereco_ES_nue.csv"
+reconstruction_sample_ES_nuother: "inputs/Enu_Ereco_ES_nuother.csv"
 
 CC_background_file: "inputs/Ereco_NGamma_1e6-1_evts.csv"
 ES_nue_background_file: "inputs/Ereco_NGamma_1e6-1_evts.csv"
