@@ -1,67 +1,102 @@
 ###############################
 ##### Output and run type #####
 
-outFile: "outputs/both_ereco_woBG_3MeV_PDGlike_RC_fast_freeflux"    # Files are nominally saved in the outputs folder as jld2 or csv files with the appropriate suffixes
+outFile: "outputs/CC_only_sergioReco_woBG_11MeV_SKlike_RC_4%flux_woPREMerror_wExposure_2"    # Files are nominally saved in the outputs folder as jld2 or csv files with the appropriate suffixes
 LLH: false    # Log Likelihood scan or MCMC fit
 Asimov: true    # Data fit or Asimov fit?
 fastFit: true    # Accelerate calculations by evaluating parameters at bin centers instead of averaging and evaluating oscprob at the average solar density
 
+
 ##########################
 ##### Asimov details #####
 
-true_sin2_th12: 0.304
+true_sin2_th12: 0.307
 true_sin2_th13: 0.0224
-true_dm2_21: 7.53e-5 # PDG: 7.53e-5,  SNO: 5.113e-5
+true_dm2_21: 5.113e-5 # PDG: 7.53e-5,  SNO: 5.113e-5
+
 
 ###############################
 ##### Prior distributions #####
 
-prior_sin2_th12: Uniform(0.001, 0.999) 
+##### Priors on mixing parameters
+
+prior_sin2_th12: Uniform(0.2, 0.45) 
 prior_sin2_th13: Truncated(Normal(0.022, 0.0007), 0.0001, 0.035)
-prior_dm2_21: Uniform(1e-8, 3 * 2.5e-4)
-prior_8B_flux: Uniform(1e5, 2e7)
-# prior_8B_flux: Truncated(Normal(2.314e6, 0.054e6), 0.1, 1e7)
+prior_dm2_21: Uniform(1.5e-5, 3 * 2e-4)
+
+##### Priors on systematic parameters
+
+#prior_8B_flux: Uniform(1e5, 2e7)
+#prior_8B_flux: Truncated(Normal(2.314e6, 0.054e6), 0.1, 1e7)
+prior_8B_flux: Truncated(Normal(2.314e6, 0.092e6), 0.1, 1e7)
 
 ###########################
 ##### MCMC parameters #####
 
 nChains: 10
-nSteps: 500000
-nTuning: 200000
-maxTuningAttempts: 30
+nSteps: 90000
 
+# Set  to zero for no adaptive stepsize tuning
+maxTuningAttempts: 30
+nTuning: 4000
+
+# Turn on and off different uncertainties (turning off parameters makes the fit faster)
+earth_potential_uncertainties: true
 
 ##########################
 ##### LLH parameters #####
 
-llh_bins: 80
+llh_bins: 50
 
 
 #################################
 ##### MC and fit properties #####
 
-CC_flux_normalisation: 0.1
-CC_background_normalisation: 0.0
+CC_flux_normalisation: 4 # 4 (70.000)
+CC_background_normalisation: 0 #10000 # SEEMS EMPTY ABOVE 10 MEV
 
 ES_flux_normalisation: 3
 ES_background_normalisation: 0.0
 
-nBins: 50
-energy_range: [0.1, 20]
-emin_ES: 3.5
-emin_CC: 3
+nBins_Etrue: 30
+range_Etrue: [5, 20]
 
+nBins_Ereco_CC: 40
+nBins_Ereco_ES: 40
+
+range_Ereco_CC: [5, 25]
+range_Ereco_ES: [5, 25]
+
+Ereco_min_ES: 11
+Ereco_min_CC: 11
+
+nBins_cosz: 30
 
 #######################
 ##### Input files #####
 
+# Prior covariance matrix and default values for nuisance parameters
+# Must be a jld2 file with a 'covariance' matrix object and a 'true' vector object
+earth_normalisation_prior_file: "BUILD FILE"
+
+# Optional: covariance matrix for proposal function (covariance matrix from a posterior) to help with stepsizes
+# Must be a jld2 file with a 'posterior_cov' matrix object
+# Comment out if not desired
+proposal_matrix: "inputs/CC_only_sergioReco_woBG_11MeV_SKlike_RC_4%flux_woPREMerror_wExposure_cov1.jld2"
+
+# Matter potential and oscillation files
 solar_model_file: "inputs/AGSS09_high_z.jld2"
 flux_model_file: "inputs/fluxes.jld2"
+earth_model_file: "inputs/EARTH_MODEL_PREM_DENSE.dat"
+earth_uncertainty_file: "inputs/earth_uncertainty_4.5e-5.jld2"
+solar_exposure_file: "inputs/solarExposure.csv"
 
+# Detector response files
 reconstruction_sample_CC: "inputs/Enu_Ereco_CC.csv"
 reconstruction_sample_ES_nue: "inputs/Enu_Ereco_ES_nue.csv"
 reconstruction_sample_ES_nuother: "inputs/Enu_Ereco_ES_nuother.csv"
 
+# Background files
 CC_background_file: "inputs/Ereco_NGamma_1e6-1_evts.csv"
 ES_nue_background_file: "inputs/Ereco_NGamma_1e6-1_evts.csv"
 ES_nuother_background_file: "inputs/Ereco_NGamma_1e6-1_evts.csv"

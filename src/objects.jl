@@ -13,8 +13,6 @@ Constants:
 - `sigma_0`: Base cross-section value in cm⁻², used for calculating interaction probabilities.
 
 Data Structures:
-- `OscillationParameters`: A mutable struct that holds neutrino oscillation parameters (`sin²θ₁₂`, 
-  `sin²θ₁₃`, `Δm²₂₁`) with default values. Utilizes `StaticArrays` for efficient storage and manipulation.
 - `NuSpectrum`: A mutable struct that stores measured and expected binned spectra for neutrino events 
   from different sources (e.g., 8B and Hep neutrinos). It includes fields for true energy, elastic 
   scattering events, charged current events, and oscillation weights.
@@ -35,14 +33,20 @@ Note:
 
 using StaticArrays
 
-# Fermi constant
-const G_f = 5.4489e-5
-# For now, we keep the remaining mass splitting constant and in NO
-const m32 = 2.43e-3
-# Electron mass in GeV/c^2
-m_e = 5.11e-4
-# Weinberg angle
-sin2nuW = 0.231
+#####################################################################
+#### THESE MAY OR MAY NOT BE USED BY THE OSCILLATIONS CALCULATOR ####
+#####################################################################
+                                                                    #
+# Fermi constant                                                    #
+const G_f = 5.4489e-5                                               #
+# For now, we keep the remaining mass splitting constant and in NO  #
+const m32 = 2.43e-3                                                 #
+# Electron mass in GeV/c^2                                          #
+m_e = 5.11e-4                                                       #
+# Weinberg angle                                                    #
+sin2nuW = 0.231                                                     #
+                                                                    #
+#####################################################################
 
 # Cross section Constants
 g1_nue = 1/2 + sin2nuW
@@ -50,15 +54,8 @@ g2_nue = sin2nuW
 
 g1_nuother = -1/2 + sin2nuW
 g2_nuother = sin2nuW
-sigma_0 = 1.939e-13 * 1.97e-16^2 # in cm^-2
 
-# Define a mutable struct to hold the oscillation parameters with default values
-mutable struct OscillationParameters
-    oscpars::SVector{3,Float64}
-    function OscillationParameters()
-        new(SVector{3,Float64}(0.307, 0.022, 7.53e-5))  # Default values
-    end
-end
+sigma_0 = 88.06e-46 #1.939e-13 * (1.97e-16)^2 # in cm^-2
 
 # Define a mutable struct to hold the measured and expected binned spectra
 mutable struct NuSpectrum
@@ -70,14 +67,22 @@ mutable struct NuSpectrum
     eventsHep_es::Vector{Float64}
     eventsHep_cc::Vector{Float64}
 
-    oscweights8B::Union{Vector{Float64},Nothing}
-    oscweightsHep::Union{Vector{Float64},Nothing}
+    oscweights8B_day::Union{Vector{Float64},Nothing}
+    oscweightsHep_day::Union{Vector{Float64},Nothing}
 
-    events_es_oscillated_nue::Union{Vector{Float64},Nothing}
-    events_es_oscillated_other::Union{Vector{Float64},Nothing}
-    events_cc_oscillated::Union{Vector{Float64},Nothing}
+    oscweights8B_night::Union{Matrix{Float64},Nothing}
+    oscweightsHep_night::Union{Matrix{Float64},Nothing}
+
+    events_es_oscillated_nue_day::Union{Vector{Float64},Nothing}
+    events_es_oscillated_other_day::Union{Vector{Float64},Nothing}
+    events_cc_oscillated_day::Union{Vector{Float64},Nothing}
+
+    events_es_oscillated_nue_night::Union{Matrix{Float64},Nothing}
+    events_es_oscillated_other_night::Union{Matrix{Float64},Nothing}
+    events_cc_oscillated_night::Union{Matrix{Float64},Nothing}
 
     function NuSpectrum(ETrue8B, events8B_es, events8B_cc, ETrueHep, eventsHep_es, eventsHep_cc)
-        new(ETrue8B, events8B_es, events8B_cc, ETrueHep, eventsHep_es, eventsHep_cc, nothing, nothing, nothing, nothing, nothing)
+        new(ETrue8B, events8B_es, events8B_cc, ETrueHep, eventsHep_es, eventsHep_cc, nothing, nothing, nothing, nothing, nothing,
+                                                                                     nothing, nothing, nothing, nothing, nothing)
     end
 end
