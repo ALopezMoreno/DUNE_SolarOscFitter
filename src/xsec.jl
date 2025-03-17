@@ -1,6 +1,7 @@
 using CSV
 using DataFrames
 using Interpolations
+
 # Calculate binned cross sections for convolving
 include("../src/objects.jl")
 
@@ -27,22 +28,23 @@ CC_xsec = LinearInterpolation(CC_xsec_energy_unique, CC_xsec_unique)
 
 function ES_xsec_nue(enu)
     Emin = E_threshold.ES
-    if enu <= Emin
-        return 0
-    else
-        T_max = 2 * enu^2 / (m_e + 2 * enu)
 
-        xsec = sigma_0 / m_e *
-            (
-            (g1_nue^2 + g2_nue^2) * (T_max - Emin)
-            -
-            (g2_nue^2 + g1_nue * g2_nue * m_e / (2 * enu)) * (T_max^2 - Emin^2) / enu
-            +
-            1 / 3 * g2_nue^2 * ((T_max^3 - Emin^3) / enu^2)
+    T_max = 2 * enu^2 / (m_e + 2 * enu)
+
+    xsec = sigma_0 / m_e *
+        (
+        (g1_nue^2 + g2_nue^2) * (T_max - Emin)
+        -
+        (g2_nue^2 + g1_nue * g2_nue * m_e / (2 * enu)) * (T_max^2 - Emin^2) / enu
+        +
+        1 / 3 * g2_nue^2 * ((T_max^3 - Emin^3) / enu^2)
         )
-        return xsec
+    
+        if xsec < 0
+            xsec = 0
+        end
 
-    end
+    return xsec
 end
 
 

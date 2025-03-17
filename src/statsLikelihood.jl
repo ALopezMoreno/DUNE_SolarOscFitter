@@ -51,7 +51,7 @@ using Random, LinearAlgebra, Statistics, Distributions, StatsBase
 using BAT, DensityInterface, IntervalSets
 
 
-likelihood_all_samples_avg = let nObserved = ereco_data,
+likelihood_all_samples_avg = let nObserved = ereco_data_mergedES,
     energies = bin_edges,
     Mreco = responseMatrices,
     SSM = solarModel,
@@ -196,9 +196,73 @@ likelihood_all_samples_ctr = let nObserved = ereco_data_mergedES,
             return -llh
         end
 
+        function systematicLogLikelihood(nExpected, nMeasured, sigmaVar)
+        """
+            Calculate the Poisson log likelihood given expected and measured counts with uncertainties in the expectation.
+
+            # Arguments
+            - `nExpected::Vector{Float64}`: A vector of expected counts.
+            - `nMeasured::Vector{Float64}`: A vector of measured counts.
+
+            # Returns
+            - `Float64`: The calculated log-likelihood.
+
+            # Errors
+            - Throws an error if any input is negative or if the vectors have different lengths.
+            """
+            if !all(x -> x >= 0, nExpected) || !all(x -> x >= 0, nMeasured)
+                throw(ArgumentError("Inputs must be non-negative"))
+            end
+            if length(nExpected) != length(nMeasured)
+                throw(ArgumentError("Inputs must have the same length"))
+            end
+
+            llh = 0.0
+            @inbounds for i in eachindex(nExpected)
+                e = nExpected[i]
+                m = nMeasured[i]
+                s = sigmaVar[i]
+
+                if m > 0
+                    if e > 0
+                        if s == 0
+                            llh += (e - m + m * log(m / e)) 
+                        else
+                            beta = 0.5 * ( 1 - e*s^2 + sqrt( (e*s^2 - 1)^2 + 4*m*s^2 ) )
+                            llh += beta * e - m + m * log(m / (beta*e)) + (beta - 1)^2 / (2*s^2) 
+                        end
+                    elseif e == 0
+                        e = 0.5
+                        if s == 0
+                            llh += (e - m + m * log(m / e)) 
+                        else
+                            beta = 0.5 * ( 1 - e*s^2 + sqrt( (e*s^2 - 1)^2 + 4*m*s^2 ) )
+                            llh += beta * e - m + m * log(m / (beta*e)) + (beta - 1)^2 / (2*s^2) 
+                        end
+                    end
+
+                else
+                    if e == 0
+                        llh += 0
+                    else
+                        m = 0.5
+                        if s == 0
+                            llh += (e - m + m * log(m / e)) 
+                        else
+                            beta = 0.5 * ( 1 - e*s^2 + sqrt( (e*s^2 - 1)^2 + 4*m*s^2 ) )
+                            llh += beta * e - m + m * log(m / (beta*e)) + (beta - 1)^2 / (2*s^2) 
+                        end
+                    end
+                end
+            end
+            return -llh
+        end
+
         # Propagate MC
-        expectedRate_ES_nue, expectedRate_ES_nuother, expectedRate_CC = f(MC_no_osc, Mreco, parameters, SSM, energies, backgrounds.CC)
-        expectedRate_ES = expectedRate_ES_nue .+ expectedRate_ES_nuother
+        expectedRate_ES_nue_day, expectedRate_ES_nuother_day, expectedRate_CC_day, expectedRate_ES_nue_night, expectedRate_ES_nuother_night, expectedRate_CC_night = f(MC_no_osc, Mreco, parameters, SSM, energies, backgrounds.CC)
+        
+        expectedRate_ES_day = expectedRate_ES_nue_day .+ expectedRate_ES_nuother_day
+        expectedRate_ES_night = expectedRate_ES_nue_night .+ expectedRate_ES_nuother_night
 
         # THIS SHOULD GO OUTSIDE EVENTUALLY
         # Find the first index where energy is greater than Emin.ES
@@ -221,12 +285,22 @@ likelihood_all_samples_ctr = let nObserved = ereco_data_mergedES,
             error("No energies greater than Emin found for CC.")
         end
 
-        loglh_ES = poissonLogLikelihood(expectedRate_ES[index_ES:end], nObserved.ES[index_ES:end])
-        loglh_CC = poissonLogLikelihood(expectedRate_CC[index_CC:end], nObserved.CC[index_CC:end])
+        # loglh_ES_day = poissonLogLikelihood(expectedRate_ES_day[index_ES:end], nObserved.ES_day[index_ES:end])
+        loglh_CC_day = poissonLogLikelihood(expectedRate_CC_day[index_CC:end], nObserved.CC_day[index_CC:end])
 
-        loglh = loglh_ES + loglh_CC
+        #loglh_ES_night = sum([poissonLogLikelihood(row[index_ES:end], obs_row[index_ES:end])
+        #for (row, obs_row) in zip(eachrow(expectedRate_ES_night), eachrow(nObserved.ES_night))])
 
-        return loglh_CC
+        # loglh_CC_night = sum([systematicLogLikelihood(row[index_CC:end], obs_row[index_CC:end], sys_row[index_CC:end])
+        # for (row, obs_row, sys_row) in zip(eachrow(expectedRate_CC_night), eachrow(nObserved.CC_night), eachrow(uncertainty_ratio_matrix_CC_night))])
+
+        loglh_CC_night = sum([poissonLogLikelihood(row[index_CC:end], obs_row[index_CC:end])
+        for (row, obs_row) in zip(eachrow(expectedRate_CC_night), eachrow(nObserved.CC_night))])
+
+        # loglh = loglh_ES_day + loglh_CC_day + loglh_ES_night + loglh_CC_night
+        loglh = loglh_CC_night + loglh_CC_day
+
+        return loglh
     end)
 end
 

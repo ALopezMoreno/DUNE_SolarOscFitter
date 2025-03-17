@@ -191,10 +191,9 @@ function averageProbOverBins(bin_edges::Vector{Float64}, params, solarModel; pro
     return bin_probs
 end
 
-function centralProbOverBins(bin_edges::Vector{Float64}, params, solarModel; process="8B")
+function centralProbOverBins(bin_centers::Vector{Float64}, params, solarModel; process="8B")
     # Pre-allocate the bin_probs array
     bin_probs = Vector{Float64}(undef, length(bin_edges) - 1)
-    bin_centers = (bin_edges[1:end-1] + bin_edges[2:end]) / 2.0
 
     # Evaluate solarSurfaceProbs at all bin centers using broadcasting
     bin_probs = solarSurfaceProbs_approx.(bin_centers, Ref(params), Ref(solarModel); process=process)
