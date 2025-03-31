@@ -113,9 +113,10 @@ def fade_color_to_white(color, alpha):
     rgb_color = colors.to_rgba(color)[:3]
 
     # Calculate the faded color by interpolating towards white
-    faded_color = tuple(np.array(rgb_color) * (1 - alpha) + alpha)
+    faded_color = np.array(rgb_color, dtype='float') * (1 - alpha) + alpha
 
-    return faded_color
+    # Convert the numpy array to a list of Python floats
+    return faded_color.tolist()
 
 
 def plot_corner(variables, data, externalContours=False, color='b', weights=None):
@@ -155,7 +156,8 @@ def plot_corner(variables, data, externalContours=False, color='b', weights=None
                     lower_bound = sorted_data[np.searchsorted(cdf, (1 - sigma) / 2)]
                     upper_bound = sorted_data[np.searchsorted(cdf, 1 - (1 - sigma) / 2)]
                     mask = (data[i] >= lower_bound) & (data[i] <= upper_bound)
-                    if weights != None:
+                    if weights is not None:
+                        print('plotting according to weights')
                         axes[i, j].hist(data[i][mask], bins=30, range=(global_min[i], global_max[i]), color=color, alpha=alpha, density=False, weights=weights[mask])
                     else:
                         axes[i, j].hist(data[i][mask], bins=30, range=(global_min[i], global_max[i]), color=color, alpha=alpha, density=False)
@@ -246,36 +248,36 @@ def plot_corner(variables, data, externalContours=False, color='b', weights=None
     return fig, axes
 
 
+def overlay_contours(data, ax, fill=False, **plotKwargs):
+    hull = ConvexHull(data)
+    ordered_points = data[hull.vertices]
+    # Extract x and y coordinates from ordered points
+    x, y = ordered_points[:, 0], ordered_points[:, 1]
+
+    # Close the contour by adding the first point at the end
+    sorted_x = np.append(x, x[0])
+    sorted_y = np.append(y, y[0])
+
+    t = np.arange(0, len(sorted_x))
+    cs_x = CubicSpline(t, sorted_x)
+    cs_y = CubicSpline(t, sorted_y)
+
+    # Generate the smoothed perimeter points
+    num_points = int(len(x) * 2.7 )  # Adjust as needed
+    smoothed_t = np.linspace(0, len(sorted_x) - 1, num_points)
+    smoothed_x = cs_x(smoothed_t)
+    smoothed_y = cs_y(smoothed_t)
+
+    # Plot the smoothed contour
+
+    if not fill:
+        ax.plot(smoothed_x, smoothed_y, **plotKwargs)
+    else:
+        polygon = np.asarray([smoothed_x, smoothed_y]).T
+        pol = plt.Polygon(polygon, closed=False, fill=True, **plotKwargs)
+        ax.add_patch(pol)
+
 def add_external_solar_data(ax):
-    def overlay_contours(data, ax, fill=False, **plotKwargs):
-        hull = ConvexHull(data)
-        ordered_points = data[hull.vertices]
-        # Extract x and y coordinates from ordered points
-        x, y = ordered_points[:, 0], ordered_points[:, 1]
-
-        # Close the contour by adding the first point at the end
-        sorted_x = np.append(x, x[0])
-        sorted_y = np.append(y, y[0])
-
-        t = np.arange(0, len(sorted_x))
-        cs_x = CubicSpline(t, sorted_x)
-        cs_y = CubicSpline(t, sorted_y)
-
-        # Generate the smoothed perimeter points
-        num_points = int(len(x) * 2.7 )  # Adjust as needed
-        smoothed_t = np.linspace(0, len(sorted_x) - 1, num_points)
-        smoothed_x = cs_x(smoothed_t)
-        smoothed_y = cs_y(smoothed_t)
-
-        # Plot the smoothed contour
-
-        if not fill:
-            ax.plot(smoothed_x, smoothed_y, **plotKwargs)
-        else:
-            polygon = np.asarray([smoothed_x, smoothed_y]).T
-            pol = plt.Polygon(polygon, closed=False, fill=True, **plotKwargs)
-            ax.add_patch(pol)
-        
     # Add external data
     solar1 = np.genfromtxt('inputs/contours/contour1.csv', delimiter=',')
     solar1[:, 0] = np.sin(np.arctan(np.sqrt(solar1[:, 0])))**2

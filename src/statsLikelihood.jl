@@ -196,6 +196,7 @@ likelihood_all_samples_ctr = let nObserved = ereco_data_mergedES,
             return -llh
         end
 
+        # LLH FOR BARLOW BEESTON
         function systematicLogLikelihood(nExpected, nMeasured, sigmaVar)
         """
             Calculate the Poisson log likelihood given expected and measured counts with uncertainties in the expectation.
@@ -222,7 +223,11 @@ likelihood_all_samples_ctr = let nObserved = ereco_data_mergedES,
                 e = nExpected[i]
                 m = nMeasured[i]
                 s = sigmaVar[i]
-
+                if e < 0
+                    println("model predicted negative event rate: ", e)
+                    e = 0
+                end
+                
                 if m > 0
                     if e > 0
                         if s == 0
@@ -259,7 +264,7 @@ likelihood_all_samples_ctr = let nObserved = ereco_data_mergedES,
         end
 
         # Propagate MC
-        expectedRate_ES_nue_day, expectedRate_ES_nuother_day, expectedRate_CC_day, expectedRate_ES_nue_night, expectedRate_ES_nuother_night, expectedRate_CC_night = f(MC_no_osc, Mreco, parameters, SSM, energies, backgrounds.CC)
+        expectedRate_ES_nue_day, expectedRate_ES_nuother_day, expectedRate_CC_day, expectedRate_ES_nue_night, expectedRate_ES_nuother_night, expectedRate_CC_night = f(MC_no_osc, Mreco, parameters, SSM, energies, backgrounds)
         
         expectedRate_ES_day = expectedRate_ES_nue_day .+ expectedRate_ES_nuother_day
         expectedRate_ES_night = expectedRate_ES_nue_night .+ expectedRate_ES_nuother_night
@@ -291,6 +296,7 @@ likelihood_all_samples_ctr = let nObserved = ereco_data_mergedES,
         #loglh_ES_night = sum([poissonLogLikelihood(row[index_ES:end], obs_row[index_ES:end])
         #for (row, obs_row) in zip(eachrow(expectedRate_ES_night), eachrow(nObserved.ES_night))])
 
+        # EXAMPLE FOR BARLOW BEESTON
         # loglh_CC_night = sum([systematicLogLikelihood(row[index_CC:end], obs_row[index_CC:end], sys_row[index_CC:end])
         # for (row, obs_row, sys_row) in zip(eachrow(expectedRate_CC_night), eachrow(nObserved.CC_night), eachrow(uncertainty_ratio_matrix_CC_night))])
 

@@ -50,8 +50,9 @@ using QuadGK
 include("../src/solarFlux.jl")
 include("../src/xsec.jl")
 
-detector_ne = 2 * 2.7e33 #2 * 2.7e34 # 2 x number of electrons in 10KTon of LAr (2 modules)
-detection_time = 3600 * 24 * 365 * 10  #10 * 3.1536e7 # 10 years of runtime x number of seconds in a year
+detector_ne = 10 * 2.7e33 # 2.7e33 = 1kTons #  1 module = 10kT
+detector_nAr40 = 10 * 1.45e31 # 1.45e31 = 1 kTons #  1 module = 10kT
+detection_time = 3600 * 24 * 365  * 10
 
 function unoscillatedRate_ES_nue_8B(enu)
     return flux_8B(enu) * ES_xsec_nue(enu)
@@ -114,11 +115,11 @@ global bin_edges_calc, energies_calc = calculate_bins((max=Etrue_bins.max, min=E
 
 unoscillated_ES_nue_sample_8B = integrate_over_bins(unoscillatedRate_ES_nue_8B, bin_edges) * detector_ne * detection_time * ES_normalisation
 unoscillated_ES_nuother_sample_8B = integrate_over_bins(unoscillatedRate_ES_nuother_8B, bin_edges) * detector_ne * detection_time * ES_normalisation
-unoscillated_CC_sample_8B = integrate_over_bins(unoscillatedRate_CC_8B, bin_edges) * detector_ne * detection_time * CC_normalisation
+unoscillated_CC_sample_8B = integrate_over_bins(unoscillatedRate_CC_8B, bin_edges)  * detector_nAr40 * detection_time * CC_normalisation
 
 unoscillated_ES_nue_sample_hep = integrate_over_bins(unoscillatedRate_ES_nue_hep, bin_edges) * detector_ne * detection_time * ES_normalisation
 unoscillated_ES_nuother_sample_hep = integrate_over_bins(unoscillatedRate_ES_nuother_hep, bin_edges) * detector_ne * detection_time * ES_normalisation
-unoscillated_CC_sample_hep = integrate_over_bins(unoscillatedRate_CC_hep, bin_edges) * detector_ne * detection_time * CC_normalisation
+unoscillated_CC_sample_hep = integrate_over_bins(unoscillatedRate_CC_hep, bin_edges) * detector_nAr40 * detection_time * CC_normalisation
 
 unoscillatedSample = (ES_nue_8B = unoscillated_ES_nue_sample_8B,
                       ES_nuother_8B = unoscillated_ES_nuother_sample_8B,

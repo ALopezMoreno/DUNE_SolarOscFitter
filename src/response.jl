@@ -1,14 +1,14 @@
 using StatsBase
 using LinearAlgebra
 
-# THIS SHOULD NOT LIVE HERE FOREVER!
-function create_histogram(data, bin_info)
-    # Extract values from the named tuples
+function create_histogram(data, bin_info; weights=nothing)
+    # Extract values from the named tuple
     bin_number = bin_info.bin_number
     min_val = bin_info.min
     max_val = bin_info.max
 
     bins = get(bin_info, :bins, nothing)
+    weights = coalesce.(weights, 0)
     
     if bins === nothing
         # Create bins if 'bins' field is not present
@@ -21,8 +21,17 @@ function create_histogram(data, bin_info)
         end
     end
 
-    # Create histogram
-    hist = fit(Histogram, data, bins)
+    # Check if optional weights are provided and have valid length
+    if weights !== nothing
+        if length(data) != length(weights)
+            error("Weights vector length must match the length of data.")
+        end
+        # Create histogram using weights
+        hist = fit(Histogram, data, Weights(weights), bins)
+    else
+        # Create unweighted histogram
+        hist = fit(Histogram, data, bins)
+    end
 
     # Normalize the histogram
     total_count = sum(hist.weights)
