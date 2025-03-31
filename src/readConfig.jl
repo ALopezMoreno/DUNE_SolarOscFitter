@@ -3,6 +3,46 @@ using Distributions
 using Printf
 using JLD2
 using PDMats
+using Plots
+
+using Printf
+
+
+# Function to retrieve process RSS (Resident Set Size) in MB by parsing /proc/self/status.
+function get_rss_mb()
+    for line in eachline("/proc/self/status")
+         if startswith(line, "VmRSS:")
+             # Expected line format: "VmRSS:   123456 kB"
+             parts = split(line)
+             value_kb = parse(Float64, parts[2])
+             return value_kb / 1024  # Convert kB to MB
+         end
+    end
+    return 0.0
+end
+
+# Function to track memory usage over time.
+# Samples memory usage every `interval` seconds and returns two vectors: memory usage and elapsed times,
+# along with a function to stop the tracker.
+function track_memory(interval::Float64=0.1)
+    mem_usages = Float64[]
+    times = Float64[]
+    start_time = time()
+    stop_tracker = false
+    tracker_task = @async begin
+        while !stop_tracker
+            current_mem = get_rss_mb()
+            push!(mem_usages, current_mem)
+            push!(times, time() - start_time)
+            sleep(interval)
+        end
+    end
+    # Return the vectors and a closure to stop the tracker.
+    return mem_usages, times, ()->(stop_tracker = true; wait(tracker_task))
+end
+
+
+
 
 include("../src/logger.jl")
 
@@ -129,10 +169,16 @@ function main()
     global CC_normalisation = config["CC_flux_normalisation"]
 
     # Background MC
-    global ES_nue_filepath_BG = config["reconstruction_sample_ES_nue"]
-    global ES_nuother_filepath_BG = config["reconstruction_sample_ES_nuother"]
-    global CC_filepath_BG = config["CC_background_file"]
-    global CC_bg_norm = config["CC_background_normalisation"]
+    global ES_filepaths_BG = config["ES_background_files"]
+    global CC_filepaths_BG = config["CC_background_files"]
+
+    # Background normalisations (MC gets normalised to 1)
+    global ES_bg_norms = config["ES_background_normalisations"]
+    global CC_bg_norms = config["CC_background_normalisations"]
+
+    # Systematic uncertainties on the background rates (constant over bins)
+    global ES_bg_sys = config["ES_background_systematics"]
+    global CC_bg_sys = config["CC_background_systematics"]
 
     # Binning
     global Etrue_bins = (bin_number=config["nBins_Etrue"], min=config["range_Etrue"][1]*1e-3, max=config["range_Etrue"][2]*1e-3)
@@ -170,13 +216,72 @@ function main()
     # Uncertainties?
     global earthUncertainty = config["earth_potential_uncertainties"]
 
+    # Previous file?
+    global prevFile = haskey(config, "prevFile") ? config["prevFile"] : nothing
+
     # Determine which script to call based on LLH
     script_to_run = config["LLH"] ? "llhScan.jl" : "mcmc.jl"
+
     script_path = joinpath(@__DIR__, script_to_run)  # Reference script in the same directory
 
     # include the corresponding script
     include(script_path)
 end
 
-# Run the main function
-main()
+
+
+# --- Begin Memory Tracking & Main Execution ---
+
+@printf("Starting memory tracking...\n")
+mem_usages, times, stop_tracking = track_memory(0.1)
+
+@printf("Executing main()...\n")
+main()   # Execution of the main function
+
+@printf("Stopping memory tracking...\n")
+# Stop the memory tracker and wait for the task to finish.
+stop_tracking()
+
+# --- Plot Memory Usage Over Time ---
+
+@printf("Plotting memory usage over time...\n")
+usage_plot = plot(times, mem_usages, xlabel="Time (s)", ylabel="Memory (MB)", 
+                  title="Memory Usage During Execution", legend=false)
+savefig(usage_plot, "memory_usage.png")
+display(usage_plot)
+
+# --- Memory Breakdown by Global Objects ---
+@printf("Collecting memory breakdown for global objects...\n")
+global_names = names(Main, all=true)
+object_sizes = Dict{Symbol,Float64}()
+
+for name in global_names
+
+        try
+            obj = getfield(Main, name)
+            # Compute size in MB using ObjectSizes.osize (if ObjectSizes is available)
+            # Otherwise, use Base.summarysize. Here we use Base.summarysize for simplicity
+            object_sizes[name] = Base.summarysize(obj) / 1024^2
+        catch
+            object_sizes[name] = 0.0
+        end
+end
+
+# Create vectors for plotting: convert the Symbol keys to Strings.
+labels = map(string, collect(keys(object_sizes)))
+sizes = collect(values(object_sizes))
+
+@printf("Plotting memory breakdown by global object...\n")
+breakdown_plot = bar(labels, sizes,
+                      xlabel="Global Object", ylabel="Memory (MB)", 
+                      title="Memory Breakdown by Global Object", legend=false,
+                      xticks=:(auto), xrotation=45)
+savefig(breakdown_plot, "memory_object_breakdown.png")
+display(breakdown_plot)
+
+@printf("Memory profiling complete. See 'memory_usage.png' and 'memory_object_breakdown.png' for results.\n")
+
+
+
+# Execution of the main function
+# main()

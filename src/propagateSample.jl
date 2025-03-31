@@ -99,7 +99,7 @@ function propagateSamplesAvg(unoscillatedSample, responseMatrices, params, solar
 end
 
 
-function propagateSamplesCtr(unoscillatedSample, responseMatrices, params, solarModel, bin_edges, BG_CC)
+function propagateSamplesCtr(unoscillatedSample, responseMatrices, params, solarModel, bin_edges, raw_backgrounds)
     mixingPars = oscPars(params.dm2_21, asin(sqrt(params.sin2_th12)), asin(sqrt(params.sin2_th13)))
 
     bin_centers = (bin_edges[1:end-1] + bin_edges[2:end]) / 2.0
@@ -112,7 +112,36 @@ function propagateSamplesCtr(unoscillatedSample, responseMatrices, params, solar
     oscProbs_nuother_8B_day = 1 .- oscProbs_nue_8B_day
     oscProbs_nuother_hep_day = 1 .- oscProbs_nue_hep_day
 
-    oscProbs_1e = get_1e(bin_centers_calc, mixingPars, earth_paths)
+    # call the appropriate function for getting the earth propagation matrix
+    if earthUncertainty
+        oscProbs_1e = get_1e(bin_centers_calc, mixingPars, params.earth_norm, earth_paths)
+    else
+        oscProbs_1e = get_1e(bin_centers_calc, mixingPars, earth_paths)
+    end
+
+    # Treat backgrounds accordingly
+    backgrounds = deepcopy(raw_backgrounds)
+
+    norm_index = 1
+    for (i, behaviour) in enumerate(ES_bg_par_counts)
+        if behaviour != 0
+            # Access field named "ES_bg_norm_<index>" from params
+            backgrounds.ES[i] .*= getfield(params, Symbol("ES_bg_norm_", norm_index))
+            norm_index += 1
+        end
+    end
+  
+    norm_index = 1
+    for (i, behaviour) in enumerate(CC_bg_par_counts)
+        if behaviour != 0
+            # Access field named "CC_bg_norm_<index>" from params
+            backgrounds.CC[i] .*= getfield(params, Symbol("CC_bg_norm_", norm_index))
+            norm_index += 1
+        end
+    end
+
+    BG_ES = reduce(+, backgrounds.ES)
+    BG_CC = reduce(+, backgrounds.CC)
 
     oscProbs_nue_8B_night = block_average(get_probs(bin_centers_calc, oscProbs_1e, mixingPars, solarModel.avgNeBoron)) 
     oscProbs_nue_hep_night = block_average(get_probs(bin_centers_calc, oscProbs_1e, mixingPars, solarModel.avgNeHep))
@@ -124,7 +153,7 @@ function propagateSamplesCtr(unoscillatedSample, responseMatrices, params, solar
     # oscillated_sample_ES_nue_day = unoscillatedSample.ES_nue_8B .* oscProbs_nue_8B_day .* params.integrated_8B_flux .+ unoscillatedSample.ES_nue_hep .* oscProbs_nue_hep_day .* params.integrated_8B_flux * 2e-4 #ESTIMATE OF HEP FLUX
     # oscillated_sample_ES_nuother_day = unoscillatedSample.ES_nuother_8B .* oscProbs_nuother_8B_day  .* params.integrated_8B_flux .+ unoscillatedSample.ES_nuother_hep .* oscProbs_nuother_hep_day .* params.integrated_8B_flux * 2e-4 #ESTIMATE OF HEP FLUX
     oscillated_sample_CC_day = unoscillatedSample.CC_8B .* oscProbs_nue_8B_day .* params.integrated_8B_flux .+ unoscillatedSample.CC_hep .* oscProbs_nue_hep_day .* params.integrated_8B_flux * 2e-4 #ESTIMATE OF HEP FLUX
-
+    
     # oscillated_sample_ES_nue_night = (unoscillatedSample.ES_nue_8B' .* (params.integrated_8B_flux' .* oscProbs_nue_8B_night .* exposure_weights)) .+
     #                                  (unoscillatedSample.ES_nue_hep' .* (2e-4 .* params.integrated_8B_flux' .* oscProbs_nue_hep_night .* exposure_weights)) # ESTIMATE OF HEP FLUX
 
@@ -145,11 +174,11 @@ function propagateSamplesCtr(unoscillatedSample, responseMatrices, params, solar
     #println("Shape of BG_CC: ", size(BG_CC))
     #sleep(10)
 
-    eventRate_CC_day = 0.5 .* (responseMatrices.CC' * oscillated_sample_CC_day  + BG_CC .* CC_bg_norm)
+    eventRate_CC_day = 0.5 .* (responseMatrices.CC' * oscillated_sample_CC_day  .+ BG_CC )
 
     # eventRate_ES_nue_night = vcat([0.5 .* (row' * responseMatrices.ES.nue) for row in eachrow(oscillated_sample_ES_nue_night)]...)
     # eventRate_ES_nuother_night = vcat([0.5 .* (row' * responseMatrices.ES.nuother) for row in eachrow(oscillated_sample_ES_nuother_night)]...)
-    eventRate_CC_night = vcat([0.5 .* (row' * responseMatrices.CC .+ BG_CC' .* CC_bg_norm) for row in eachrow(oscillated_sample_CC_night)]...)
+    eventRate_CC_night = vcat([0.5 .* (row' * responseMatrices.CC .+ (BG_CC' ./ cosz_bins.bin_number) ) for row in eachrow(oscillated_sample_CC_night)]...)
 
     eventRate_ES_nue_day = eventRate_CC_day
     eventRate_ES_nuother_day = eventRate_CC_day
@@ -205,11 +234,11 @@ function propagateSamplesUncertainty(unoscillatedSample, responseMatrices, param
   # eventRate_ES_nue_day = 0.5 .* (responseMatrices.ES.nue' * oscillated_sample_ES_nue_day)
   # eventRate_ES_nuother_day = 0.5 .* (responseMatrices.ES.nuother' * oscillated_sample_ES_nuother_day)
 
-  eventRate_CC_day = 0.5 .* (responseMatrices.CC' * oscillated_sample_CC_day  + BG_CC .* CC_bg_norm)
+  eventRate_CC_day = 0.5 .* (responseMatrices.CC * oscillated_sample_CC_day  + BG_CC .* CC_bg_norm)
 
   # eventRate_ES_nue_night = vcat([0.5 .* (row' * responseMatrices.ES.nue) for row in eachrow(oscillated_sample_ES_nue_night)]...)
   # eventRate_ES_nuother_night = vcat([0.5 .* (row' * responseMatrices.ES.nuother) for row in eachrow(oscillated_sample_ES_nuother_night)]...)
-  eventRate_CC_night = vcat([0.5 .* (row' * responseMatrices.CC .+ BG_CC' .* CC_bg_norm) for row in eachrow(oscillated_sample_CC_night)]...)
+  eventRate_CC_night = vcat([0.5 .* (row' * responseMatrices.CC' .+ BG_CC' .* CC_bg_norm) for row in eachrow(oscillated_sample_CC_night)]...)
 
   eventRate_ES_nue_day = eventRate_CC_day
   eventRate_ES_nuother_day = eventRate_CC_day

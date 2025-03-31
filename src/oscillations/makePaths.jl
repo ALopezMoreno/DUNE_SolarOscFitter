@@ -20,6 +20,7 @@ struct Jump
 end
 
 struct Segment
+    index::Int16
     start::Float64
     finish::Float64
     nodes::Vector{Float64}
@@ -36,7 +37,6 @@ global depth = 0.001 # basically sea level
 ################################################################################
 # Track Computation Functions
 ################################################################################
-
 
 function find_jumps(x, f; threshold_factor::Float64=5.0)
     # Convert inputs to arrays and check length consistency.
@@ -171,20 +171,40 @@ end
 
 
 function make_potential_for_integrand(cosz, earth_potential_function, n=3)
+    # generate a vertical (reference) path to identify layers
+    _, _, ref_jumps = get_potential(-1, earth_potential_function)
+
+    # generate a list of which jump values correspond to each layer
+    # Take the first half of the ref_jumps (rounded up)
+    half_count = ceil(Int, length(ref_jumps) / 2)
+    collected_jumps = ref_jumps[1:half_count]
+    
+    # Generate a layers array where each element is a tuple of (previous_jump, following_jump)
+    layers = Vector{Tuple{typeof(collected_jumps[1]), typeof(collected_jumps[1])}}(undef, length(collected_jumps))
+    for i in 1:length(collected_jumps)-1
+        layers[i] = (collected_jumps[i], collected_jumps[i+1])
+    end
+    # For the final layer (near the core) we reflect the final jump
+    layers[end] = (collected_jumps[end], collected_jumps[end])
+
+    # Check if the number of layers is equal to the length of the earth normalisation vector
+    if length(layers) != length(earth_normalisation_true)
+        error("Mismatch in length: layers has ", length(layers), " elements, but earth_normalisation_true has ", length(earth_normalisation_true), " elements. Check your earth matter potential uncertainties prior covariance file")
+    end
+
     distances, matter_potential, jumps = get_potential(cosz, earth_potential_function)
     jump_positions = [jump.x for jump in jumps]
 
     # create interpolated function for finding optimal integration points
     f = LinearInterpolation(distances, matter_potential; extrapolation_bc=Flat())
 
-    # find optimal integration points for each interval between jumps
     segments = []
 
     @views for i in 1:(length(jump_positions)-1)
         a = jump_positions[i]
         b = jump_positions[i+1]
 
-        # nodes = optimal_integration_nodes(f, a, b) #NOT SURE THIS IS WORKING
+        # nodes = optimal_integration_nodes(f, a, b) # NOT SURE THIS IS WORKING
         nodes = collect(range(a, stop=b, length=n + 2))
         values = f(nodes)
 
@@ -192,8 +212,47 @@ function make_potential_for_integrand(cosz, earth_potential_function, n=3)
         values[1]   = jumps[i].b  
         values[end] = jumps[i+1].a
 
+        # Create a candidate pair from the segment boundaries.
+        # Using the left jump's "b" and the right jump's "a".
+        candidate = sort([jumps[i].b, jumps[i+1].a])
+        
+        # Find a matching layer in the layers array.
+        seg_index = 0  # default value if no matching layer is found
+        for (layer_idx, layer) in enumerate(layers)
+            if isapprox(candidate[1], candidate[2]; atol=1e-7)
+                # Only search for a match on the beginning value (left jump's b)
+                if isapprox(candidate[1], layer[1].b; atol=1e-7)
+                    seg_index = layer_idx
+                    break
+                end
+            else
+                # For the layer, consider its two jump values:
+                # we compare the left jump's b and the right jump's a.
+                layer_candidate = sort([layer[1].b, layer[2].a])
+                if isapprox(candidate[1], layer_candidate[1]; atol=1e-7) && isapprox(candidate[2], layer_candidate[2]; atol=1e-10)
+                    seg_index = layer_idx
+                    break
+                end
+            end
+        end
 
-        push!(segments, Segment(a, b, nodes, values))
+        if seg_index == 0
+            # Prepare error message with all layer candidate pairs.
+            layer_candidates = ""
+            for (layer_idx, layer) in enumerate(layers)
+                # Determine candidate for each layer. If both jump values are nearly identical,
+                # only include one value; else, include both values sorted.
+                if isapprox(layer[1].b, layer[2].a; atol=1e-10)
+                    candidate_layer = string(layer[1].b)
+                else
+                    candidate_layer = string(([layer[1].b, layer[2].a]))
+                end
+                layer_candidates *= "Layer " * string(layer_idx) * ": " * candidate_layer * "\n"
+            end
+            error("No matching layer found for segment ", i, " with candidate jumps: ", string(candidate), "\nLayer candidates:\n", layer_candidates)
+        end
+
+        push!(segments, Segment(seg_index, a, b, nodes, values))
     end
 
     return Path(jumps, segments)
