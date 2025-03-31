@@ -213,6 +213,20 @@ function get_1e(E, mixingPars::oscPars, paths)
     return matrix_p_1e
 end
 
+function get_1e(E, mixingPars::oscPars, earth_norm, paths)
+    # Create new path objects with modified potential values according to earth_norm
+    new_paths = [Path(path.jumps,
+                      [ Segment(seg.index, seg.start, seg.finish, seg.nodes, seg.values .* earth_norm[seg.index])
+                        for seg in path.segments ]
+                     ) for path in paths]
+
+    # Propagate each new path
+    p_1e = [propagate_path(new_path, mixingPars, E) for new_path in new_paths]
+    matrix_p_1e = reduce(vcat, [vec' for vec in p_1e])
+    
+    return matrix_p_1e
+end
+
 function get_probs(E, mixingPars::oscPars, paths, prod_density=90)
     th13 = mixingPars.th13
 

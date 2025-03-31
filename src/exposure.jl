@@ -28,4 +28,4 @@ bin_edges = range(cosz_bins.min, cosz_bins.max, length=cosz_bins.bin_number+1)
 compute_integral(lower, upper) = quadgk(exposure_intp, lower, upper)[1]
 
 # Use broadcasting to compute integrals for each bin
-global exposure_weights = compute_integral.(bin_edges[1:end-1], bin_edges[2:end]) ./ exposure_intp_int * cosz_bins.bin_number
+global exposure_weights = compute_integral.(bin_edges[1:end-1], bin_edges[2:end]) ./ exposure_intp_int 

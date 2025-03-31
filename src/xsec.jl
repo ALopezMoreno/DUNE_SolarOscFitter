@@ -6,7 +6,10 @@ using Interpolations
 include("../src/objects.jl")
 
 # Load CC cross section from Gardiner 2020
-df = CSV.File("inputs/CC_nue_40Ar_total_Gardiner2020.csv") |> DataFrame
+# df = CSV.File("inputs/CC_nue_40Ar_total_Gardiner2020.csv") |> DataFrame
+
+# Load CC cross section from Marley
+df = CSV.File("inputs/CC_nue_40Ar_total_marley.csv") |> DataFrame
 
 # Extract the first column as energy and the second as cross section
 CC_xsec_energy_raw = vcat(0.0, df[:, 1] * 1e-3)
@@ -23,7 +26,9 @@ unique_indices = [findfirst(==(val), CC_xsec_energy_sorted) for val in CC_xsec_e
 CC_xsec_unique = CC_xsec_sorted[unique_indices]
 
 # Interpolate
-CC_xsec = LinearInterpolation(CC_xsec_energy_unique, CC_xsec_unique)
+# CC_xsec = LinearInterpolation(CC_xsec_energy_unique, CC_xsec_unique)
+CC_xsec = LinearInterpolation(CC_xsec_energy_unique, CC_xsec_unique, extrapolation_bc=Flat())
+
 # Calculate ES cross section from formulae
 
 function ES_xsec_nue(enu)
