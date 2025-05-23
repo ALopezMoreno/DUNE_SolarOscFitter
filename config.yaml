@@ -4,7 +4,7 @@
 # If prevFile is not commented, the fitter will search for prevFile and continue the MCMC chain
 # from where it left off. ====> This field is compulsory when calculating derived quantities! <====
 # prevFile: "outputs/CC-only__sergioReco__10MeV__0BG__4%8B-sys__2%BG-sys__12%Earth-sys__dm21-4.5"
-outFile: "outputs/test_llhScan"
+outFile: "outputs/test_fit"
 
 # Will you run in "LLH" (Log likelihood scan), "MCMC" (Markov Chain Monte-Carlo fit), or "derived" (calculate derived quantities from an existing fit) mode?
 RunMode: "MCMC"  
