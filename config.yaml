@@ -7,13 +7,13 @@
 outFile: "outputs/test_llhScan"
 
 # Will you run in "LLH" (Log likelihood scan), "MCMC" (Markov Chain Monte-Carlo fit), or "derived" (calculate derived quantities from an existing fit) mode?
-RunMode: "LLH"  
+RunMode: "MCMC"  
 
 # GET LLH SCANS WORKING!!!!
 
 Asimov: true    # Data fit or Asimov fit?
 fastFit: true    # Accelerate calculations by evaluating parameters at bin centers instead of averaging and evaluating oscprob at the average solar density
-# FIX FASTFIT!!!
+# FIX NON-FASTFIT!!!
 
 
 ##############################
@@ -24,7 +24,7 @@ fastFit: true    # Accelerate calculations by evaluating parameters at bin cente
 true_sin2_th12: 0.307
 true_sin2_th13: 0.0224
 true_dm2_21: 7.5e-5 # PDG: 7.53e-5,  SNO: 5.113e-5
-true_integrated_HEP_flux: 8250.0 # b16_agss09
+true_integrated_HEP_flux: 8250.0 # as given by b16_agss09
 
 
 ###############################
@@ -57,8 +57,8 @@ prior_HEP_flux: Uniform(0, 2e4) # Assume at most 2-3 orders of magnitude smaller
 ###########################
 ##### MCMC parameters #####
 
-nChains: 10
-nSteps: 75000 # Number of post-stabilisation steps
+nChains: 5
+nSteps: 15000 # Number of post-stabilisation steps
 
 maxTuningAttempts: 30 # Set  to zero for no adaptive stepsize tuning
 nTuning: 2500 # Number of tuning steps on each cycle
@@ -87,12 +87,12 @@ ES_background_normalisations: [0.0]
 # CURRENT NORMALISATION OF CC FLUX IS AT 400 kTon year
 # ==> CC backgrounds: [3.524e8, 1.887e8]
 
-CC_background_normalisations: [3.524e8, 1.887e8]
+CC_background_normalisations: [3.524e5, 1.887e5]  # Currently at 1e-3 * nominal
 
 ES_background_systematics: [0.0]
 CC_background_systematics: [0.02, 0.02] # Fractional Currently at 2%
 
-nBins_Etrue: 30
+nBins_Etrue: 40
 
 range_Etrue: [5, 25]
 
@@ -106,7 +106,7 @@ range_Ereco_ES: [5, 25]
 Ereco_min_ES: 10
 Ereco_min_CC: 10
 
-nBins_cosz: 30
+nBins_cosz: 40
 
 
 #######################
