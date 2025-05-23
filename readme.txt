@@ -1,6 +1,6 @@
 Oscillation calculator and fitter for solar neutrino oscillations at DUNE
 
-Usage: julia -t nProcesses src/readConfig.jl path_to_config.yaml
+Usage: julia -t nProcesses src/readConfig.jl path_to_config.yaml (will default to ./config.yaml)
 
 Display outputs:
 
