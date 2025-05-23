@@ -48,7 +48,8 @@ Note:
 
 
 include("../src/oscCalc.jl")
-include("../src/oscillations/earthPropagation.jl")
+include("../src/oscillations/numPropagation.jl")
+
 using LinearAlgebra
 using Plots
 
@@ -100,6 +101,7 @@ end
 
 
 function propagateSamplesCtr(unoscillatedSample, responseMatrices, params, solarModel, bin_edges, raw_backgrounds)
+    # display(params)  ### DEBUGGING TO FIND OUT WHERE THINGS FAILED ###
     mixingPars = oscPars(params.dm2_21, asin(sqrt(params.sin2_th12)), asin(sqrt(params.sin2_th13)))
 
     bin_centers = (bin_edges[1:end-1] + bin_edges[2:end]) / 2.0
@@ -114,9 +116,10 @@ function propagateSamplesCtr(unoscillatedSample, responseMatrices, params, solar
 
     # call the appropriate function for getting the earth propagation matrix
     if earthUncertainty
-        oscProbs_1e = get_1e(bin_centers_calc, mixingPars, params.earth_norm, earth_paths)
+        lookup = params.earth_norm .* earth_lookup
+        oscProbs_1e = osc_prob_earth_num_fast(bin_centers_calc, mixingPars, lookup, earth_paths)
     else
-        oscProbs_1e = get_1e(bin_centers_calc, mixingPars, earth_paths)
+         oscProbs_1e = osc_prob_earth_num_fast(bin_centers_calc, mixingPars, earth_lookup, earth_paths)
     end
 
     # Treat backgrounds accordingly
@@ -143,16 +146,55 @@ function propagateSamplesCtr(unoscillatedSample, responseMatrices, params, solar
     BG_ES = reduce(+, backgrounds.ES)
     BG_CC = reduce(+, backgrounds.CC)
 
-    oscProbs_nue_8B_night = block_average(get_probs(bin_centers_calc, oscProbs_1e, mixingPars, solarModel.avgNeBoron)) 
-    oscProbs_nue_hep_night = block_average(get_probs(bin_centers_calc, oscProbs_1e, mixingPars, solarModel.avgNeHep))
+    # bins = range(5, 25, length=length(backgrounds.CC[1]))
 
-    # oscProbs_nuother_8B_night = 1 .- oscProbs_nue_8B_night
-    # oscProbs_nuother_hep_night = 1 .- oscProbs_nue_hep_night
+    # Plot the stacked bar chart with the two contributions.
+    # bar(bins,
+    # backgrounds.CC[1],
+    # label = "Gammas",
+    # title = "Stacked Bar Chart of CC Backgrounds",
+    # xlabel = "Bins",
+    # ylabel = "Counts")
+
+    # Add the neutrons counts on top of the gammas counts with stacking enabled.
+    # bar!(bins,
+    #     backgrounds.CC[2],
+    #     label = "Neutrons",
+    #     bar_position = :stack)
+
+    # display(current())  # Display the current figure
+
+    # sleep(20)
+
+    oscprobs_boron_large = osc_prob_night(bin_centers_calc, oscProbs_1e, mixingPars, solarModel.avgNeBoron)
+    oscprobs_hep_large = osc_prob_night(bin_centers_calc, oscProbs_1e, mixingPars, solarModel.avgNeHep)
+
+    # myP = heatmap(oscprobs_boron_large,
+    # xlabel = "Column Index",
+    # ylabel = "Row Index",
+    # title = "Oscprobs",
+    # color = :viridis)
+    # display(myP)
+    # sleep(5)
+
+    oscProbs_nue_8B_night = block_average(oscprobs_boron_large, (3, 2)) 
+    oscProbs_nue_hep_night = block_average(oscprobs_hep_large, (3, 2))
+
+    # myP2 = heatmap(oscProbs_nue_8B_night,
+    # xlabel = "Column Index",
+    # ylabel = "Row Index",
+    # title = "Oscprobs",
+    # color = :viridis)
+    # display(myP2)
+    # sleep(200)
+
+    oscProbs_nuother_8B_night = 1 .- oscProbs_nue_8B_night
+    oscProbs_nuother_hep_night = 1 .- oscProbs_nue_hep_night
 
     # Apply weights
-    # oscillated_sample_ES_nue_day = unoscillatedSample.ES_nue_8B .* oscProbs_nue_8B_day .* params.integrated_8B_flux .+ unoscillatedSample.ES_nue_hep .* oscProbs_nue_hep_day .* params.integrated_8B_flux * 2e-4 #ESTIMATE OF HEP FLUX
-    # oscillated_sample_ES_nuother_day = unoscillatedSample.ES_nuother_8B .* oscProbs_nuother_8B_day  .* params.integrated_8B_flux .+ unoscillatedSample.ES_nuother_hep .* oscProbs_nuother_hep_day .* params.integrated_8B_flux * 2e-4 #ESTIMATE OF HEP FLUX
-    oscillated_sample_CC_day = unoscillatedSample.CC_8B .* oscProbs_nue_8B_day .* params.integrated_8B_flux .+ unoscillatedSample.CC_hep .* oscProbs_nue_hep_day .* params.integrated_8B_flux * 2e-4 #ESTIMATE OF HEP FLUX
+    # oscillated_sample_ES_nue_day = unoscillatedSample.ES_nue_8B .* oscProbs_nue_8B_day .* params.integrated_8B_flux .+ unoscillatedSample.ES_nue_hep .* oscProbs_nue_hep_day .* params.integrated_HEP_flux
+    # oscillated_sample_ES_nuother_day = unoscillatedSample.ES_nuother_8B .* oscProbs_nuother_8B_day  .* params.integrated_8B_flux .+ unoscillatedSample.ES_nuother_hep .* oscProbs_nuother_hep_day .* params.integrated_HEP_flux
+    oscillated_sample_CC_day = unoscillatedSample.CC_8B .* oscProbs_nue_8B_day .* params.integrated_8B_flux .+ unoscillatedSample.CC_hep .* oscProbs_nue_hep_day .* params.integrated_HEP_flux
     
     # oscillated_sample_ES_nue_night = (unoscillatedSample.ES_nue_8B' .* (params.integrated_8B_flux' .* oscProbs_nue_8B_night .* exposure_weights)) .+
     #                                  (unoscillatedSample.ES_nue_hep' .* (2e-4 .* params.integrated_8B_flux' .* oscProbs_nue_hep_night .* exposure_weights)) # ESTIMATE OF HEP FLUX
@@ -161,7 +203,7 @@ function propagateSamplesCtr(unoscillatedSample, responseMatrices, params, solar
     #                                      (unoscillatedSample.ES_nuother_hep' .* (2e-4 .* params.integrated_8B_flux' .* oscProbs_nuother_hep_night .* exposure_weights)) # ESTIMATE OF HEP FLUX
 
     oscillated_sample_CC_night = (unoscillatedSample.CC_8B' .* (params.integrated_8B_flux' .* oscProbs_nue_8B_night .* exposure_weights)) .+
-                                 (unoscillatedSample.CC_hep' .* (2e-4 .* params.integrated_8B_flux' .* oscProbs_nue_hep_night .* exposure_weights)) # ESTIMATE OF HEP FLUX
+                                 (unoscillatedSample.CC_hep' .* (params.integrated_HEP_flux .* oscProbs_nue_hep_night .* exposure_weights)) # ESTIMATE OF HEP FLUX
 
     # Apply detector responses and split event rates 50/50 between day and night samples
     # eventRate_ES_nue_day = 0.5 .* (responseMatrices.ES.nue' * oscillated_sample_ES_nue_day)
@@ -174,24 +216,28 @@ function propagateSamplesCtr(unoscillatedSample, responseMatrices, params, solar
     #println("Shape of BG_CC: ", size(BG_CC))
     #sleep(10)
 
-    eventRate_CC_day = 0.5 .* (responseMatrices.CC' * oscillated_sample_CC_day  .+ BG_CC )
+    eventRate_CC_day = 0.5 .* ((responseMatrices.CC' * oscillated_sample_CC_day) .* CC_eff  .+ BG_CC )
 
     # eventRate_ES_nue_night = vcat([0.5 .* (row' * responseMatrices.ES.nue) for row in eachrow(oscillated_sample_ES_nue_night)]...)
     # eventRate_ES_nuother_night = vcat([0.5 .* (row' * responseMatrices.ES.nuother) for row in eachrow(oscillated_sample_ES_nuother_night)]...)
-    eventRate_CC_night = vcat([0.5 .* (row' * responseMatrices.CC .+ (BG_CC' ./ cosz_bins.bin_number) ) for row in eachrow(oscillated_sample_CC_night)]...)
+    eventRate_CC_night = vcat([0.5 .* ((row' * responseMatrices.CC) .* CC_eff' ) for row in eachrow(oscillated_sample_CC_night)]...) .+ 0.5 .* (BG_CC' .* exposure_weights) 
 
     eventRate_ES_nue_day = eventRate_CC_day
     eventRate_ES_nuother_day = eventRate_CC_day
 
-    eventRate_ES_nue_night = eventRate_CC_night
-    eventRate_ES_nuother_night = eventRate_CC_night
+    ### eventRate_ES_nue_night = eventRate_CC_night
+    ### eventRate_ES_nuother_night = eventRate_CC_night
+    eventRate_ES_nue_night = eventRate_CC_day
+    eventRate_ES_nuother_night = eventRate_CC_day
 
     # myPlot = heatmap(eventRate_CC_night[:, 1:end], colormap=:viridis, aspect_ratio=:equal, size=(1500,1500))
     # display(myPlot)
     # sleep(30)
 
-    return eventRate_ES_nue_day, eventRate_ES_nuother_day, eventRate_CC_day, eventRate_ES_nue_night, eventRate_ES_nuother_night, eventRate_CC_night
+    return eventRate_ES_nue_day, eventRate_ES_nuother_day, eventRate_CC_day, eventRate_ES_nue_night, eventRate_ES_nuother_night, eventRate_CC_night, BG_ES, BG_CC
 end
+
+
 
 
 function propagateSamplesUncertainty(unoscillatedSample, responseMatrices, params, solarModel, bin_edges, BG_CC, probMatrix)

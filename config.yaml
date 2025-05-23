@@ -1,21 +1,30 @@
 ###############################
 ##### Output and run type #####
 
-# If not commented, will search for an MCMC chain by this name and continue it
-prevFile: "outputs/CC_only_sergioReco_10MeVthreshold_RC_4%flux_woPREMsys_BG"
-# outFile:  "outputs/CC_only_sergioReco_woBG_11MeV_SKlike_RC_4%flux_premTEST:0.001%"    # Files are nominally saved in the outputs folder as jld2 or csv files with the appropriate suffixes
-outFile:  "outputs/CC_only_sergioReco_10MeVthreshold_RC_4%flux_woPREMsys_BG"
-LLH: false    # Log Likelihood scan or MCMC fit
+# If prevFile is not commented, the fitter will search for prevFile and continue the MCMC chain
+# from where it left off. ====> This field is compulsory when calculating derived quantities! <====
+# prevFile: "outputs/CC-only__sergioReco__10MeV__0BG__4%8B-sys__2%BG-sys__12%Earth-sys__dm21-4.5"
+outFile: "outputs/test_llhScan"
+
+# Will you run in "LLH" (Log likelihood scan), "MCMC" (Markov Chain Monte-Carlo fit), or "derived" (calculate derived quantities from an existing fit) mode?
+RunMode: "LLH"  
+
+# GET LLH SCANS WORKING!!!!
+
 Asimov: true    # Data fit or Asimov fit?
 fastFit: true    # Accelerate calculations by evaluating parameters at bin centers instead of averaging and evaluating oscprob at the average solar density
+# FIX FASTFIT!!!
 
 
-##########################
-##### Asimov details #####
+##############################
+##### Asimov true values #####
+
+# the total HEP flux can be thought as HEP discovery
 
 true_sin2_th12: 0.307
 true_sin2_th13: 0.0224
-true_dm2_21: 6e-5 # PDG: 7.53e-5,  SNO: 5.113e-5
+true_dm2_21: 7.5e-5 # PDG: 7.53e-5,  SNO: 5.113e-5
+true_integrated_HEP_flux: 8250.0 # b16_agss09
 
 
 ###############################
@@ -24,51 +33,68 @@ true_dm2_21: 6e-5 # PDG: 7.53e-5,  SNO: 5.113e-5
 ##### Priors on mixing parameters
 
 prior_sin2_th12: Uniform(0.23, 0.5) 
-prior_sin2_th13: Truncated(Normal(0.022, 0.0007), 0.005, 0.035)
-prior_dm2_21: Uniform(2.5e-5, 2.5e-4)
+prior_sin2_th13: Truncated(Normal(0.022, 0.0007), 0.005, 0.035) # REACTOR CONSTRAINT: Truncated(Normal(0.022, 0.0007), 0.005, 0.035)
+prior_dm2_21: Uniform(2e-5, 3e-4)
 
 ##### Priors on systematic parameters
 
-#prior_8B_flux: Uniform(1e5, 2e7)
-#prior_8B_flux: Truncated(Normal(2.314e6, 0.054e6), 0.1, 1e7)
-#prior_8B_flux: Truncated(Normal(5.46e6, 0.66e6), 0.1, 1e7) #True uncertainty
-prior_8B_flux: Truncated(Normal(5.46e6, 2.18e5), 1.5e6, 1e7) #4% uncertainty
+# THERE ARE SEVERAL REASONABLE SETUPS HERE:
+# leave the flux free:
+# prior_8B_flux: Uniform(1e5, 2e7) # Free flux
+
+# have the flux uncertainty equal to the Borexino constraint (~12%)
+# prior_8B_flux: Truncated(Normal(5.46e6, 0.66e6), 0.1, 1e7) # 'True' uncertainty
+
+# have the flux uncertainty smaller than current constraints to simulate the constraint -->
+# --> we would get via an ES (flavour sensitive) measurement
+prior_8B_flux: Truncated(Normal(5.46e6, 0.218e6), 1.5e6, 1e7) #4% uncertainty
+
+# the total HEP flux can be thought as HEP discovery
+
+prior_HEP_flux: Uniform(0, 2e4) # Assume at most 2-3 orders of magnitude smaller than 8B flux
 
 
 ###########################
 ##### MCMC parameters #####
 
-nChains: 5
-nSteps: 40000 # Number of post-stabilisation steps
+nChains: 10
+nSteps: 75000 # Number of post-stabilisation steps
 
-# Set  to zero for no adaptive stepsize tuning
-maxTuningAttempts: 30
-nTuning: 2500
+maxTuningAttempts: 30 # Set  to zero for no adaptive stepsize tuning
+nTuning: 2500 # Number of tuning steps on each cycle
 
 # Turn on and off different uncertainties (turning off parameters makes the fit faster)
-earth_potential_uncertainties: true
+earth_potential_uncertainties: true 
 
 
 ##########################
 ##### LLH parameters #####
 
-llh_bins: 50
+llh_bins: 200
 
 
 #################################
-##### MC and fit properties #####
+##### MC and fit properties #####40
 
 CC_flux_normalisation: 4 # * 100 kTon years 
 ES_flux_normalisation: 1 # * 100 kTon years 
 
 ES_background_normalisations: [0.0]
-CC_background_normalisations: [16.28e7, 15.56e6] # [4.07e5, 3.89e4]
+
+# CC BACKGROUNDS: AT THE MOMENT, WE EXPECT:
+# 8.81e+05  neutrons per kTon year
+# 4.717e+05   gammas per kTon year
+# CURRENT NORMALISATION OF CC FLUX IS AT 400 kTon year
+# ==> CC backgrounds: [3.524e8, 1.887e8]
+
+CC_background_normalisations: [3.524e8, 1.887e8]
 
 ES_background_systematics: [0.0]
-CC_background_systematics: [0.02, 0.02] # Fractional
+CC_background_systematics: [0.02, 0.02] # Fractional Currently at 2%
 
 nBins_Etrue: 30
-range_Etrue: [3, 25]
+
+range_Etrue: [5, 25]
 
 nBins_Ereco_CC: 40
 
@@ -88,12 +114,13 @@ nBins_cosz: 30
 
 # Prior covariance matrix and default values for nuisance parameters
 # Must be a jld2 file with a 'covariance' matrix object and a 'true' vector object
-earth_normalisation_prior_file: "inputs/earth_uncertainty_cov_0.001.jld2"
+earth_normalisation_prior_file: "inputs/earth_uncertainty_cov.jld2"
 
 # Optional: covariance matrix for proposal function (covariance matrix from a posterior) to help with stepsizes
 # Must be a jld2 file with a 'posterior_cov' matrix object
-# Comment out if not desired
-proposal_matrix: "outputs/posterior_covariance.jld2"
+
+### Comment out if not desired ###
+# proposal_matrix: "outputs/posterior_covariance.jld2"
 
 # Matter potential and oscillation files
 solar_model_file: "inputs/AGSS09_high_z.jld2"
@@ -105,9 +132,12 @@ solar_exposure_file: "inputs/solarExposure.csv"
 # Detector response files
 reconstruction_sample_CC: "inputs/sergio_CC_response.csv"
 # reconstruction_sample_CC: "inputs/Enu_Ereco_CC_smeared.csv"
-
 reconstruction_sample_ES_nue: "inputs/Enu_Ereco_ES_nue.csv"
 reconstruction_sample_ES_nuother: "inputs/Enu_Ereco_ES_nuother.csv"
+
+# Efficiency files
+ES_efficiency_file: "inputs/eff_CC_sergio.csv"
+CC_efficiency_file: "inputs/eff_CC_sergio.csv"
 
 # Background files
 CC_background_files: ["inputs/neutron_bg_CC_sergio.csv", "inputs/gamma_bg_CC_sergio.csv"]

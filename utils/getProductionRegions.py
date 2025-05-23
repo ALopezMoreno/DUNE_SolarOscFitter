@@ -17,6 +17,9 @@ prodFractionBoron = model.fraction("8B")
 prodFractionHep = model.fraction("hep")
 n_e = model.density()
 
+print(model.fluxes)
+
+exit()
 # Save data to a JLD2-compatible HDF5 file
 with h5py.File('inputs/AGSS09_high_z.jld2', 'w') as f:
     f.create_dataset('radii', data=radii)

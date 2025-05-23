@@ -25,6 +25,8 @@ struct Segment
     finish::Float64
     nodes::Vector{Float64}
     values::Vector{Float64}
+    length::Float64
+    avgRho::Float64
 end
 
 struct Path
@@ -252,8 +254,37 @@ function make_potential_for_integrand(cosz, earth_potential_function, n=3)
             error("No matching layer found for segment ", i, " with candidate jumps: ", string(candidate), "\nLayer candidates:\n", layer_candidates)
         end
 
-        push!(segments, Segment(seg_index, a, b, nodes, values))
+        push!(segments, Segment(seg_index, a, b, nodes, values, b - a, mean(values)))
     end
 
     return Path(jumps, segments)
+end
+
+function get_avg_densities(path_list)
+    tmp = []
+    for path in path_list
+        for seg in path.segments
+            layer_info = [seg.index, seg.avgRho]
+            push!(tmp, layer_info)
+        end
+    end
+
+    data_tuples = [(item[1], item[2]) for item in tmp]
+
+    # Sort the vector of tuples based on the 'idx' (the first element of the tuple)
+    sorted_data = sort(data_tuples, by=first)
+
+    # Extract the 'idx' and 'density' values from the sorted tuples
+    indices = Int.([item[1] for item in sorted_data])
+    densities = [item[2] for item in sorted_data]
+
+    # Find the unique indices and the start/end points of their occurrences
+    unique_indices = sort(unique(indices))
+    
+    starts = [findfirst(isequal(idx), indices) for idx in unique_indices]
+    ends = [findlast(isequal(idx), indices) for idx in unique_indices]
+
+    # Calculate the average density for each unique index and structure the output
+    average_densities = [sum(densities[starts[idx]:ends[idx]]) / (ends[idx] - starts[idx] + 1) for idx in unique_indices]
+    return average_densities
 end
