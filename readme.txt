@@ -1,5 +1,8 @@
-Oscillation calculator and fitter for dune low energy purposes
+Oscillation calculator and fitter for solar neutrino oscillations at DUNE
 
-Usage: julia -t nProcesses src/readConfig.jl path_to_config.yaml
+Usage: julia -t nProcesses src/readConfig.jl path_to_config.yaml (will default to ./config.yaml)
 
-NOTE: At the moment, the background is hardcoded in the propagation step to a normalisation of 2e8 events. This can be changed to adjust for the desired background level
+Display outputs:
+
+   MCMC: python3 utils/plotOutput.py --options (see --help) outFileName(same string as used in config.yaml; no suffixes)
+   LLH:  python3 utils/plotLLH.py --options (see --help) outFileName(same string as used in config.yaml; no suffixes)
