@@ -122,6 +122,69 @@ function load_earth_normalisation_prior(jld2_file::String)
     end
 end
 
+function save_settings_to_file(filename::String)
+    # Open the file for writing
+    open(filename, "w") do file
+        # Write header
+        write(file, "=== Configuration Settings ===\n\n")
+
+        # General settings
+        write(file, "----- General -----\n")
+        write(file, "Fast mode: $fast\n")
+        write(file, "Earth uncertainty enabled: $earthUncertainty\n\n")
+
+        # Solar and Earth models
+        write(file, "----- Solar & Earth Models -----\n")
+        write(file, "Solar model file: $solarModelFile\n")
+        write(file, "Flux model file: $flux_file_path\n")
+        write(file, "Earth model file: $earthModelFile\n")
+        write(file, "Earth uncertainty file: $earthUncertaintyFile\n\n")
+
+        # Binning
+        write(file, "----- Binning -----\n")
+        write(file, "Etrue bins: $(Etrue_bins)\n")
+        write(file, "Ereco bins (ES): $(Ereco_bins_ES)\n")
+        write(file, "Ereco bins (CC): $(Ereco_bins_CC)\n")
+        write(file, "Energy thresholds (ES, CC): $E_threshold\n")
+        write(file, "cos(z) bins: $cosz_bins\n\n")
+
+        # MCMC parameters
+        write(file, "----- MCMC -----\n")
+        write(file, "Steps: $mcmcSteps\n")
+        write(file, "Chains: $mcmcChains\n")
+        write(file, "Tuning steps: $tuningSteps\n")
+        write(file, "Max tuning attempts: $maxTuningAttempts\n\n")
+
+        # Priors
+        write(file, "----- Priors -----\n")
+        write(file, "Prior sin²θ₁₂: $(prior_sin2_th12)\n")
+        write(file, "Prior sin²θ₁₃: $(prior_sin2_th13)\n")
+        write(file, "Prior Δm²₂₁: $(prior_dm2_21)\n")
+        write(file, "Prior ⁸B flux: $(prior_8B_flux)\n")
+        write(file, "Prior HEP flux: $(prior_HEP_flux)\n\n")
+
+        # True values (Asimov)
+        write(file, "----- True Values (Asimov) -----\n")
+        write(file, "True sin²θ₁₂: $sin2_th12_true\n")
+        write(file, "True sin²θ₁₃: $sin2_th13_true\n")
+        write(file, "True Δm²₂₁: $dm2_21_true\n")
+        write(file, "True ⁸B flux: $integrated_8B_flux_true\n")
+        write(file, "True HEP flux: $integrated_HEP_flux_true\n\n")
+
+        # Background and efficiency files
+        write(file, "----- Backgrounds & Efficiencies -----\n")
+        write(file, "ES background files: $ES_filepaths_BG\n")
+        write(file, "CC background files: $CC_filepaths_BG\n")
+        write(file, "ES efficiency file: $ES_efficiency_filepath\n")
+        write(file, "CC efficiency file: $CC_efficiency_filepath\n")
+        write(file, "ES background norms: $ES_bg_norms\n")
+        write(file, "CC background norms: $CC_bg_norms\n")
+        write(file, "ES background systematics: $ES_bg_sys\n")
+        write(file, "CC background systematics: $CC_bg_sys\n")
+    end
+end
+
+
 # Main script logic
 function main()
     # Check if a command-line argument is provided
@@ -164,6 +227,10 @@ function main()
     global other_filepath = config["reconstruction_sample_ES_nuother"]
     global CC_filepath = config["reconstruction_sample_CC"]
 
+    # Efficiency files
+    global ES_efficiency_filepath = config["ES_efficiency_file"]
+    global CC_efficiency_filepath = config["CC_efficiency_file"]
+
     # MC normalisation
     global ES_normalisation = config["ES_flux_normalisation"]
     global CC_normalisation = config["CC_flux_normalisation"]
@@ -199,6 +266,7 @@ function main()
     global prior_sin2_th13 = string_to_distribution(config["prior_sin2_th13"])
     global prior_dm2_21 = string_to_distribution(config["prior_dm2_21"])
     global prior_8B_flux = string_to_distribution(config["prior_8B_flux"])
+    global prior_HEP_flux = string_to_distribution(config["prior_HEP_flux"])
     load_earth_normalisation_prior(config["earth_normalisation_prior_file"])
 
     # LLH parameters
@@ -209,6 +277,7 @@ function main()
     global sin2_th13_true = config["true_sin2_th13"]
     global dm2_21_true = config["true_dm2_21"]
     global integrated_8B_flux_true = mean(prior_8B_flux)
+    global integrated_HEP_flux_true = config["true_integrated_HEP_flux"]
 
     # Fast mode?
     global fast = config["fastFit"]
@@ -219,31 +288,45 @@ function main()
     # Previous file?
     global prevFile = haskey(config, "prevFile") ? config["prevFile"] : nothing
 
-    # Determine which script to call based on LLH
-    script_to_run = config["LLH"] ? "llhScan.jl" : "mcmc.jl"
+    allowed_modes = ["LLH", "MCMC", "derived"]
+    run_mode = config["RunMode"]
+
+    if run_mode ∉ allowed_modes
+        error("Invalid RunMode: '$run_mode'. Must be one of: $(join(allowed_modes, ", "))")
+    end
+    
+    # Determine which script to run based on RunMode
+    script_to_run = Dict(
+        "LLH" => "llhScan.jl",
+        "MCMC" => "mcmc.jl",
+        "derived" => "derive_variables_from_chain.jl"
+    )[run_mode]
 
     script_path = joinpath(@__DIR__, script_to_run)  # Reference script in the same directory
 
     # include the corresponding script
     include(script_path)
+
+    @logmsg Output ("$(outFile)_configSettings.txt")
+    save_settings_to_file("$(outFile)_configSettings.txt")
 end
 
 
 
 # --- Begin Memory Tracking & Main Execution ---
+# 
+# @printf("Starting memory tracking...\n")
+# mem_usages, times, stop_tracking = track_memory(0.1)
 
-@printf("Starting memory tracking...\n")
-mem_usages, times, stop_tracking = track_memory(0.1)
-
-@printf("Executing main()...\n")
+# @printf("Executing main()...\n")
 main()   # Execution of the main function
 
-@printf("Stopping memory tracking...\n")
+# @printf("Stopping memory tracking...\n")
 # Stop the memory tracker and wait for the task to finish.
-stop_tracking()
+# stop_tracking()
 
 # --- Plot Memory Usage Over Time ---
-
+#=
 @printf("Plotting memory usage over time...\n")
 usage_plot = plot(times, mem_usages, xlabel="Time (s)", ylabel="Memory (MB)", 
                   title="Memory Usage During Execution", legend=false)
@@ -272,6 +355,7 @@ labels = map(string, collect(keys(object_sizes)))
 sizes = collect(values(object_sizes))
 
 @printf("Plotting memory breakdown by global object...\n")
+
 breakdown_plot = bar(labels, sizes,
                       xlabel="Global Object", ylabel="Memory (MB)", 
                       title="Memory Breakdown by Global Object", legend=false,
@@ -282,6 +366,7 @@ display(breakdown_plot)
 @printf("Memory profiling complete. See 'memory_usage.png' and 'memory_object_breakdown.png' for results.\n")
 
 
+=#
 
 # Execution of the main function
 # main()
