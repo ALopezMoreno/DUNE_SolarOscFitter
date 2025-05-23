@@ -55,9 +55,13 @@ priors = Dict{Symbol,Any}(
   :sin2_th13 => prior_sin2_th13,
   :dm2_21 => prior_dm2_21,
 
+  # HEP discovery
+  :integrated_HEP_flux => prior_HEP_flux,
+
   # systematic parameters
   :integrated_8B_flux => prior_8B_flux
 )
+
 
 # Conditionally add nuisance parameters
 if earthUncertainty
@@ -78,7 +82,6 @@ end
 
 # Use splatting to pass the priors to distprod
 prior = distprod(; priors...)
-
 
 # Define Bayesian model
 if fast
@@ -136,8 +139,8 @@ println(" ")
 
 
 # Run MCMC in batches to not overwhelm the RAM
-# Setting a batch size of 15K steps, count tuning as the zeroth batch
-batchSteps = 10_000
+# Setting a batch size of 10K steps, count tuning as the zeroth batch
+batchSteps = 1_000
 nBatches = ceil(Int, mcmcSteps / batchSteps)
 
 currentBatch = 0
@@ -160,9 +163,9 @@ while currentBatch <= nBatches
   # Declare global scope for trans-loop variables
   global currentBatch, chain_state
 
-  chain_state = runMCMCbatch(currentBatch, chain_state)
+  chain_state = runMCMCbatch(currentBatch, chain_state, priors)
 
   GC.gc()
-  
+
   currentBatch += 1
 end

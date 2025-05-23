@@ -113,14 +113,12 @@ likelihood_all_samples_avg = let nObserved = ereco_data_mergedES,
         # THIS SHOULD GO OUTSIDE EVENTUALLY
         # Find the first index where energy is greater than Emin.ES
         index_ES = findfirst(x -> x > Emin.ES, energies)
+        index_CC = findfirst(x -> x > Emin.CC, Ereco_bins_CC_extended.bins)
 
         # Check if the index was found
         if isnothing(index_ES)
             error("No energies greater than Emin found for ES.")
         end
-
-        # Assuming index_CC should be the same as index_ES
-        index_CC = index_ES
 
         # Check if indices were found
         if isnothing(index_ES)
@@ -148,7 +146,6 @@ likelihood_all_samples_ctr = let nObserved = ereco_data_mergedES,
     MC_no_osc = unoscillatedSample,
     BG = backgrounds,
     f = propagateSamplesCtr
-    Emin = E_threshold
 
     logfuncdensity(function (parameters)
         function poissonLogLikelihood(nExpected::Vector{Float64}, nMeasured::Vector{Float64})::Float64
@@ -264,31 +261,10 @@ likelihood_all_samples_ctr = let nObserved = ereco_data_mergedES,
         end
 
         # Propagate MC
-        expectedRate_ES_nue_day, expectedRate_ES_nuother_day, expectedRate_CC_day, expectedRate_ES_nue_night, expectedRate_ES_nuother_night, expectedRate_CC_night = f(MC_no_osc, Mreco, parameters, SSM, energies, backgrounds)
+        expectedRate_ES_nue_day, expectedRate_ES_nuother_day, expectedRate_CC_day, expectedRate_ES_nue_night, expectedRate_ES_nuother_night, expectedRate_CC_night, BG_ES_tot, BG_CC_tot = f(MC_no_osc, Mreco, parameters, SSM, energies, backgrounds)
         
         expectedRate_ES_day = expectedRate_ES_nue_day .+ expectedRate_ES_nuother_day
-        expectedRate_ES_night = expectedRate_ES_nue_night .+ expectedRate_ES_nuother_night
-
-        # THIS SHOULD GO OUTSIDE EVENTUALLY
-        # Find the first index where energy is greater than Emin.ES
-        index_ES = findfirst(x -> x > Emin.ES, energies)
-
-        # Check if the index was found
-        if isnothing(index_ES)
-            error("No energies greater than Emin found for ES.")
-        end
-
-        # Assuming index_CC should be the same as index_ES
-        index_CC = index_ES
-
-        # Check if indices were found
-        if isnothing(index_ES)
-            error("No energies greater than Emin found for ES.")
-        end
-
-        if isnothing(index_CC)
-            error("No energies greater than Emin found for CC.")
-        end
+        ### expectedRate_ES_night = expectedRate_ES_nue_night .+ expectedRate_ES_nuother_night
 
         # loglh_ES_day = poissonLogLikelihood(expectedRate_ES_day[index_ES:end], nObserved.ES_day[index_ES:end])
         loglh_CC_day = poissonLogLikelihood(expectedRate_CC_day[index_CC:end], nObserved.CC_day[index_CC:end])
@@ -304,7 +280,8 @@ likelihood_all_samples_ctr = let nObserved = ereco_data_mergedES,
         for (row, obs_row) in zip(eachrow(expectedRate_CC_night), eachrow(nObserved.CC_night))])
 
         # loglh = loglh_ES_day + loglh_CC_day + loglh_ES_night + loglh_CC_night
-        loglh = loglh_CC_night + loglh_CC_day
+        loglh = loglh_CC_day + loglh_CC_night
+
 
         return loglh
     end)

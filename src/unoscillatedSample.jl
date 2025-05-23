@@ -111,7 +111,7 @@ end
 
 # Integrate over energy bins to get binned event rates
 bin_edges, energies_GeV = calculate_bins(Etrue_bins)
-global bin_edges_calc, energies_calc = calculate_bins((max=Etrue_bins.max, min=Etrue_bins.min, bin_number=Etrue_bins.bin_number*3))
+global bin_edges_calc, energies_calc = calculate_bins((max=Etrue_bins.max, min=Etrue_bins.min, bin_number=Etrue_bins.bin_number*2)) # CHANGE!!
 
 unoscillated_ES_nue_sample_8B = integrate_over_bins(unoscillatedRate_ES_nue_8B, bin_edges) * detector_ne * detection_time * ES_normalisation
 unoscillated_ES_nuother_sample_8B = integrate_over_bins(unoscillatedRate_ES_nuother_8B, bin_edges) * detector_ne * detection_time * ES_normalisation

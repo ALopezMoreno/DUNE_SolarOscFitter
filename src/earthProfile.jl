@@ -35,5 +35,5 @@ earth_model = load_earth_model(earthModelFile)
 global earth = create_interpolated_model(earth_model)
 
 # we set the angles for the paths before and after re-binning
-global cosz_calc = collect(range(cosz_bins.min, stop=cosz_bins.max, length=cosz_bins.bin_number * 5))
+global cosz_calc = collect(range(cosz_bins.min, stop=cosz_bins.max, length=cosz_bins.bin_number * 3))
 global cosz = collect(range(cosz_bins.min, stop=cosz_bins.max, length=cosz_bins.bin_number))
