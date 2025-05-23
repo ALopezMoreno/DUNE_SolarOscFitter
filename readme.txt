@@ -4,5 +4,5 @@ Usage: julia -t nProcesses src/readConfig.jl path_to_config.yaml
 
 Display outputs:
 
-   MCMC: python3 utils/plotOutput.py --options outFileName(same string as used in config.yaml; no suffixes)
-   LLH:  python3 utils/plotLLH.py --options outFileNmae(same string as used in config.yaml; no suffixes)
+   MCMC: python3 utils/plotOutput.py --options (see --help) outFileName(same string as used in config.yaml; no suffixes)
+   LLH:  python3 utils/plotLLH.py --options (see --help) outFileName(same string as used in config.yaml; no suffixes)
