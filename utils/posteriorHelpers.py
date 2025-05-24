@@ -20,26 +20,32 @@ def convert_mcmc_to_jld2(bin_file, info_file, out_jld2):
         return 0
 
 
-def load_posterior(mcmc_chains, parameters, burnin=30_000, test=None):
-
+def load_posterior(mcmc_chains, parameters, burnin=20_000, test=None):
+    valid_chains = []
     for mcmc_chain in mcmc_chains:
-        if not os.path.exists(mcmc_chain+".jld2"):
+        if not os.path.exists(mcmc_chain + ".jld2"):
             print(f"The file '{mcmc_chain}.jld2' does not exist. Looking for binaries")
             
-            if not os.path.exists(mcmc_chain+"_mcmc.bin"):
+            if not os.path.exists(mcmc_chain + "_mcmc.bin"):
                 print(f"Error: The mcmc file '{mcmc_chain}_mcmc.bin' does not exist.")
                 continue
 
-            if not os.path.exists(mcmc_chain+"_info.txt"):
+            if not os.path.exists(mcmc_chain + "_info.txt"):
                 print(f"Error: The info file '{mcmc_chain}_info.txt' does not exist.")  
                 continue
             
-            convert_mcmc_to_jld2(mcmc_chain+"_mcmc.bin", mcmc_chain+"_info.txt", mcmc_chain+".jld2")
+            convert_mcmc_to_jld2(mcmc_chain + "_mcmc.bin", mcmc_chain + "_info.txt", mcmc_chain + ".jld2")
+        
+        valid_chains.append(mcmc_chain)
+    
+    if not valid_chains:
+        raise ValueError("No valid MCMC chains found")
 
+    # Handle test parameters if specified
     if test is not None:
-        with h5py.File(mcmc_chains[0]+".jld2", 'r') as f:
+        with h5py.File(valid_chains[0] + ".jld2", 'r') as f:
             for v in test:
-                if v[0] in f:
+                if v[0] in f and v[0] not in parameters:
                     parameters.append(v[0])
 
     # Initialize dictionary to store concatenated data
@@ -48,29 +54,23 @@ def load_posterior(mcmc_chains, parameters, burnin=30_000, test=None):
     results['weights'] = [] # Always get weights 
     results['stepno'] = []  # Always track step numbers
     
-    # Iterate over each MCMC chain file
-    for mcmc_chain in mcmc_chains:
-        with h5py.File(mcmc_chain+".jld2", 'r') as f:
+    # Iterate over each valid MCMC chain file
+    for mcmc_chain in valid_chains:
+        with h5py.File(mcmc_chain + ".jld2", 'r') as f:
             # Detect all parameter names if requested
             if parameters == "all":
-                skip_keys = {'stepno', 'chainid'}
+                skip_keys = {'stepno', 'chainid', 'weights'}
                 parameters = [key for key in f.keys() if key not in skip_keys]
-                # parameters.append('weights')  # Ensure weights are always included
-                for param in parameters:
-                    results[param] = []
-
+                results.update({param: [] for param in parameters})
             
-            else:
-                parameters.append('weights')
-
             # Get step numbers and chain IDs first to create burnin mask
             stepno = np.array(f['stepno'][()])
             chains = np.array(f['chainid'][()])
             
-            # Create burnin mask ## and bad chains mask
-            mask = (stepno > burnin)   & (~np.isin(chains, [17]))
+            # Create burnin mask (excluding chain 17 as in your original code)
+            mask = (stepno > burnin) & (~np.isin(chains, [17]))
             
-            # Store chain IDs (after burnin)
+            # Store chain IDs and step numbers (after burnin)
             results['chains'].append(chains[mask])
             results['stepno'].append(stepno[mask])
             
@@ -78,20 +78,29 @@ def load_posterior(mcmc_chains, parameters, burnin=30_000, test=None):
             for param in parameters:
                 if param in f:
                     data = np.array(f[param][()])
+                    # Ensure we're working with 1D arrays
+                    if data.ndim > 1:
+                        data = data.squeeze()
                     results[param].append(data[mask])
                 else:
-                    raise ValueError(f"Parameter '{param}' not found in MCMC chain file")    
-
-
+                    raise ValueError(f"Parameter '{param}' not found in MCMC chain file")
+            
+            # Handle weights separately if they exist
+            if 'weights' in f:
+                weights = np.array(f['weights'][()])
+                results['weights'].append(weights[mask])
+    
     # Concatenate all data for each parameter
     for key in results:
         if results[key]:  # Only concatenate if there's data
             results[key] = np.concatenate(results[key])
+        else:
+            results[key] = np.array([])  # Ensure empty arrays for missing data
 
     chain_indexes = np.unique(results['chains'])
-    # print(f"Parameters loaded: {results}")
     print(f"Unique chain IDs: {chain_indexes}")
     print("Number of effective steps in posterior:", np.sum(results['weights']))
+    
     return results
 
 
