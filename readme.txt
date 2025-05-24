@@ -5,6 +5,7 @@ Julia dependencies:
 -YAML
 -Distributions
 -JLD2
+-HDF5
 -PDMats
 -Plots
 -StatsBase
@@ -19,14 +20,15 @@ Julia dependencies:
 -DataStructures
 -ArraysOfArrays
 -StructArrays
+-ElasticArrays
 
 Install via:
 
 using Pkg
 Pkg.add([
-    "YAML", "Distributions", "JLD2", "PDMats", "Plots", "StatsBase", "BAT", "DensityInterface",
+    "YAML", "Distributions", "JLD2", "HDF5", "PDMats", "Plots", "StatsBase", "BAT", "DensityInterface",
     "IntervalSets", "CSV", "DataFrames", "StaticArrays", "Interpolations", "QuadGK",
-    "DataStructures", "ArraysOfArrays", "StructArrays"
+    "DataStructures", "ArraysOfArrays", "StructArrays", "ElasticArrays"
 ])
 
 Python dependencies:
