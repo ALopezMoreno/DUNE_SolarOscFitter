@@ -50,10 +50,12 @@ Note:
 include("../src/oscCalc.jl")
 include("../src/oscillations/osc.jl")
 
+using .Osc: oscPars, osc_prob_night
+
 if fast
-  using .NumOsc.Fast
+  using .Osc.NumOsc.Fast: osc_prob_earth
 else
-  using .NumOsc.Slow
+  using .Osc.NumOsc.Slow: osc_prob_earth
 end
 
 using LinearAlgebra
