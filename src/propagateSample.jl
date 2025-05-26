@@ -48,7 +48,13 @@ Note:
 
 
 include("../src/oscCalc.jl")
-include("../src/oscillations/numPropagation.jl")
+include("../src/oscillations/osc.jl")
+
+if fast
+  using .NumOsc.Fast
+else
+  using .NumOsc.Slow
+end
 
 using LinearAlgebra
 using Plots
@@ -117,9 +123,9 @@ function propagateSamplesCtr(unoscillatedSample, responseMatrices, params, solar
     # call the appropriate function for getting the earth propagation matrix
     if earthUncertainty
         lookup = params.earth_norm .* earth_lookup
-        oscProbs_1e = osc_prob_earth_num_fast(bin_centers_calc, mixingPars, lookup, earth_paths)
+        oscProbs_1e = osc_prob_earth(bin_centers_calc, mixingPars, lookup, earth_paths)
     else
-         oscProbs_1e = osc_prob_earth_num_fast(bin_centers_calc, mixingPars, earth_lookup, earth_paths)
+         oscProbs_1e = osc_prob_earth(bin_centers_calc, mixingPars, earth_lookup, earth_paths)
     end
 
     # Treat backgrounds accordingly
