@@ -61,6 +61,7 @@ likelihood_all_samples_avg = let nObserved = ereco_data_mergedES,
     Emin = E_threshold
 
     logfuncdensity(function (parameters)
+        @warn("using avg")
         function poissonLogLikelihood(nExpected::Vector{Float64}, nMeasured::Vector{Float64})::Float64
             """
             Calculate the Poisson log likelihood given expected and measured counts.
@@ -148,6 +149,7 @@ likelihood_all_samples_ctr = let nObserved = ereco_data_mergedES,
     f = propagateSamplesCtr
 
     logfuncdensity(function (parameters)
+
         function poissonLogLikelihood(nExpected::Vector{Float64}, nMeasured::Vector{Float64})::Float64
             """
             Calculate the Poisson log likelihood given expected and measured counts.
@@ -190,6 +192,11 @@ likelihood_all_samples_ctr = let nObserved = ereco_data_mergedES,
                     end
                 end
             end
+
+            if llh < 0
+                throw(ArgumentError("Seems like we got the sign wrong!"))
+            end
+                
             return -llh
         end
 
@@ -267,6 +274,29 @@ likelihood_all_samples_ctr = let nObserved = ereco_data_mergedES,
         ### expectedRate_ES_night = expectedRate_ES_nue_night .+ expectedRate_ES_nuother_night
 
         # loglh_ES_day = poissonLogLikelihood(expectedRate_ES_day[index_ES:end], nObserved.ES_day[index_ES:end])
+
+        ## CHECK FOR NEGATIVE VALUES
+        function print_negatives_1d(arr, parameters)
+            @inbounds for i in eachindex(arr)
+                x = arr[i]
+                x < 0 && @warn ("Index $i: $x")
+                x < 0 && @warn ("Parameter values:")
+                x < 0 && @show (parameters)
+            end
+        end
+
+        function print_negatives_2d(arr, parameters)
+            @inbounds for j in axes(arr, 2), i in axes(arr, 1)
+                x = arr[i, j]
+                x < 0 && @warn ("Position ($i, $j): $x")
+                x < 0 && @warn ("Parameter values:")
+                x < 0 && @show (parameters)
+            end
+        end
+
+        print_negatives_1d(expectedRate_CC_day, parameters)
+        print_negatives_2d(expectedRate_CC_night, parameters)
+
         loglh_CC_day = poissonLogLikelihood(expectedRate_CC_day[index_CC:end], nObserved.CC_day[index_CC:end])
 
         #loglh_ES_night = sum([poissonLogLikelihood(row[index_ES:end], obs_row[index_ES:end])
