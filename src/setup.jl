@@ -16,8 +16,9 @@ include("../src/objects.jl")
 # Load solar production region and flux shapes
 include("../src/solarModel.jl")
 
-# Load earth model
+# Load earth model and neutrino paths
 include("../src/earthProfile.jl")
+include("../src/oscillations/makePaths.jl")
 
 # Load exposure to cosz in the earth
 include("../src/exposure.jl")
@@ -68,7 +69,6 @@ end
 # create tuple
 true_params = (; true_parameters...)
 
-include("../src/oscillations/makePaths.jl")
 
 # Generate neutrino paths through the earth
 global earth_paths = [make_potential_for_integrand(z, earth) for z in cosz_calc]
