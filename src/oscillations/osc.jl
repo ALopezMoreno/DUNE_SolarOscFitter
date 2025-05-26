@@ -1,10 +1,12 @@
+module Osc
+
 using LinearAlgebra
 using DataStructures
 using StaticArrays
 using Distributions
 using ArraysOfArrays, StructArrays
 
-include("makePaths.jl")
+# include("makePaths.jl") ### USED FOR DEBUGGING
 
 ################################################################################
 # Struct Definitions
@@ -25,9 +27,8 @@ oscPars(Δm²₂₁, θ₁₂, θ₁₃; Δm²₃₁=2.5e-3, m₀=1e-9, θ₂₃
     oscPars(Δm²₂₁, θ₁₂, θ₁₃, Δm²₃₁, m₀, θ₂₃, δCP)
 
 ################################################################################
-# Calculation of the oscillation probability
+# Common functions in the calculation of the oscillation probability
 ################################################################################
-
 
 function get_PMNS(params)
     T = typeof(params.θ₂₃)
@@ -44,208 +45,11 @@ function get_matrices(params)
     return U, H
 end
 
-@inline function osc_kernel(U::SMatrix{3,3,ComplexF64}, H::SVector{3,Float64}, e::Float64, l::Float64)
-    phase_factors = exp.(2.5338653580781976im * (l / e) .* H) # returns SVector
-    # Avoid creating Diagonal(phase_factors): broadcast instead
-    tmp = U .* phase_factors'  # broadcasting phase_factors onto columns
-    return tmp * adjoint(U)    # U'
-end
-
-function osc_kernel_barger(U::AbstractMatrix{<:Number}, P::AbstractVector, H::AbstractVector, e::Real, l::Real)
-    phase_factors = exp.(2.5338653580781976 * 1im * (l / e) .* H)
-    p = U * sum(P[i] * phase_factors[i] for i in eachindex(P)) * U'
-end
-
 function LMA_angle(energy, mixingPars, N_e)
     th12 = mixingPars.θ₁₂
     beta = (2 .* sqrt(2) .* 5.4489e-5 .* cos(mixingPars.θ₁₃)^2 .* N_e .* energy) ./ mixingPars.Δm²₂₁
     matterAngle = (cos(2 * th12) .- beta) ./ sqrt.((cos(2 * th12) .- beta) .^ 2 .+ sin(2 * th12)^2)
     return 0.5 .* acos.(matterAngle)
-end
-
-function get_eigen_barger(U, H_vac, H, e, rho)
-    m²₁ = H_vac[1, 1]
-    Δm²₂₁ = -H_vac[2, 2]
-    Δm²₃₁ = -H_vac[3, 3]
-    dVac = [m²₁, Δm²₂₁, Δm²₃₁]
-
-    dmVacVac = MMatrix{3,3}(H_vac)
-    for i in 1:3
-        for j in 1:3
-            dmVacVac[i, j] = dVac[i] - dVac[j]
-        end
-    end
-
-    fac = -e * rho
-
-    # Get eigenvalues from Barger's Formula
-
-    α = fac + Δm²₂₁ + Δm²₃₁
-    β = Δm²₂₁ * Δm²₃₁ + fac * (Δm²₂₁ * (1 - abs2(U[1, 2])) + Δm²₃₁ * (1 - abs2(U[1, 3])))
-    γ = fac * Δm²₂₁ * Δm²₃₁ * abs2(U[1, 1])
-
-    # α = fac + dmVacVac[1, 2] + dmVacVac[1, 3]
-    # β = dmVacVac[1, 2] * dmVacVac[1, 3] + fac * (dmVacVac[1, 2] * (1 - real(U[1, 2])^2 - imag(U[1, 2])^2) + Δm²₃₁ * (1 - real(U[1, 3])^2 - imag(U[1, 3])^2))
-    # γ = fac * dmVacVac[1, 2] * dmVacVac[1, 3] * (real(U[1, 1])^2 + imag(U[1, 1])^2)
-
-    brac = sqrt(α^2 - 3 * β)
-
-    arg = (2 * α^3 - 9 * α * β + 27 * γ) / (2 * brac^3)
-
-    θ⁰ = acos.(clamp(arg, -1.0, 1.0))
-    θ⁺ = θ⁰ + 2π
-    θ⁻ = θ⁰ - 2π
-
-    λ₁ = -(2 / 3) * brac * cos(θ⁰ / 3) + m²₁ - α / 3
-    λ₂ = -(2 / 3) * brac * cos(θ⁻ / 3) + m²₁ - α / 3
-    λ₃ = -(2 / 3) * brac * cos(θ⁺ / 3) + m²₁ - α / 3
-
-    # WE'RE WELL BELOW THE EIGENVALUE CROSSING SO WE DON'T NEED TO WORRY ABOUT ORDERING
-    # Get eigenvector matrix from Lagrange's formula
-
-    H₁ = H - Diagonal(fill(λ₁, 3))
-    H₂ = H - Diagonal(fill(λ₂, 3))
-    H₃ = H - Diagonal(fill(λ₃, 3))
-
-    P₁ = (H₂ * H₃) / ((λ₁ - λ₂) * (λ₁ - λ₃))
-    P₂ = (H₃ * H₁) / ((λ₂ - λ₁) * (λ₂ - λ₃))
-    P₃ = (H₁ * H₂) / ((λ₃ - λ₁) * (λ₃ - λ₂))
-
-    return [P₁, P₂, P₃], [λ₁, λ₂, λ₃]
-end
-
-function get_eigen_num(H::Hermitian{ComplexF64,SMatrix{3,3,ComplexF64,9}})
-    tmp = eigen(H)
-end
-
-function get_H_barger(U, H_vac, e, rho, anti::Bool=false)
-    H = MMatrix{3,3}(H_vac)
-
-    if anti
-        fac = -rho * e
-    else
-        fac = +rho * e
-    end
-
-    v = U[1, :]
-    H += fac * v * v'
-
-    H = Hermitian(SMatrix(H))
-
-    tmpMat, tempVec = get_eigen_barger(U, H_vac, H, e, rho) # --- test speed wrt num ---
-    return tmpMat, tempVec
-end
-
-
-function get_H_num(H_vac, e, rho, anti::Bool=false)
-    H = MMatrix{3,3}(H_vac)
-
-    if anti
-        H[1, 1] -= rho * e
-        for i in 1:3
-            H[i, i] += rho * e
-        end
-    else
-        H[1, 1] += rho * e
-        for i in 1:3
-            H[i, i] -= rho * e
-        end
-    end
-
-    H = Hermitian(SMatrix(H))
-    tmp = get_eigen_num(H) # --- test speed wrt barger ---
-    tmp.vectors, tmp.values
-end
-
-function osc_reduce_barger(Mix, matter_matrices, path, e, anti::Bool)
-    X = mapreduce((p, (m, n)) -> osc_kernel_barger(Mix, m, n, e, p), *, path, reverse(matter_matrices))
-    A = abs2.(Mix' * X)
-    return A
-end
-
-function osc_reduce_num(Mix_dagger::SMatrix{3,3,ComplexF64}, matter_matrices, path, e::Float64, anti::Bool)
-    @inbounds begin
-        first_p, first_mn = path[1], matter_matrices[end]
-        X = osc_kernel(first_mn[1], first_mn[2], e, first_p)  # 3x3 SMatrix
-        for i in 2:length(path)
-            p = path[i]
-            m, n = matter_matrices[end - i + 1]
-            X = X * osc_kernel(m, n, e, p)  # SMatrix * SMatrix
-        end
-        A = abs2.(Mix_dagger * X)
-    end
-    return A
-end
-
-function matter_osc_per_e_barger(U, H_eff, e, rho_Array, l_Array, anti)
-    matter_matrices = map(rho_vec -> (get_H_barger.(Ref(U), Ref(H_eff), e, rho_vec, anti)), rho_Array)
-    stack(map((path, matter) -> (osc_reduce_barger(U, matter, path, e, anti)), l_Array, matter_matrices))
-end
-
-function matter_osc_per_e_num(U, H_eff, e, rho_Array, l_Array, anti)
-    matter_matrices = map(rho_vec -> (get_H_num.(Ref(H_eff), e, rho_vec, anti)), rho_Array)
-    stack(map((path, matter) -> (osc_reduce_num(U, matter, path, e, anti)), l_Array, matter_matrices))
-end
-
-function matter_osc_per_e_barger_fast(U, H_eff, e, index_array, l_Array, anti)
-
-    lookup_matrices = map(rho_vec -> (get_H_barger.(Ref(U), Ref(H_eff), e, rho_vec, anti)), earth_lookup)
-    matter_matrices = map(indices -> lookup_matrices[indices], index_array)
-
-    stack(map((path, matter) -> (osc_reduce_barger(U, matter, path, e, anti)), l_Array, matter_matrices))
-end
-
-function matter_osc_per_e_num_fast(lookup_density, Mix_dagger, H_eff, e, index_array, l_Array, anti)
-
-    lookup_matrices = map(rho_vec -> get_H_num.(Ref(H_eff), e, rho_vec, anti), lookup_density)
-    matter_matrices = map(indices -> lookup_matrices[indices], index_array)
-
-    stack(map((path, matter) -> osc_reduce_num(Mix_dagger, matter, path, e, anti), l_Array, matter_matrices))
-end
-
-
-function osc_prob_earth_barger(E::AbstractVector{<:Real}, paths, params::NamedTuple; anti=false)
-    U, H = get_matrices(params)
-    # We work on the mass basis
-
-    rho_Array = [[s.avgRho for s in path.segments] for path in paths]
-    l_Array = [[s.length for s in path.segments] for path in paths]
-
-    p1e = stack(map(e -> matter_osc_per_e_barger(U, H, e, rho_Array, l_Array, anti), E))[1, 1, :, :]
-end
-
-function osc_prob_earth_num(E::AbstractVector{<:Real}, paths, params::NamedTuple; anti=false)
-    U, H = get_matrices(params)
-    Uc = anti ? conj.(U) : U
-    H_eff = Uc * Diagonal{Complex{eltype(H)}}(H) * adjoint(Uc)
-
-    rho_Array = [[s.avgRho for s in path.segments] for path in paths]
-    l_Array = [[s.length for s in path.segments] for path in paths]
-
-    p1e = stack(map(e -> matter_osc_per_e_num(U, H_eff, e, rho_Array, l_Array, anti), E))[1, 1, :, :]
-end
-
-function osc_prob_earth_barger_fast(E::AbstractVector{<:Real}, paths, params::NamedTuple; anti=false)
-    U, H = get_matrices(params)
-    # We work on the mass basis
-
-    index_array = [[s.index for s in path.segments] for path in paths]
-    l_Array = [[s.length for s in path.segments] for path in paths]
-
-    p1e = stack(map(e -> matter_osc_per_e_barger_fast(U, H, e, index_array, l_Array, anti), E))[1, 1, :, :]
-end
-
-function osc_prob_earth_num_fast(E::AbstractVector{<:Real}, params::oscPars, lookup_density, paths; anti=false)
-    U, H = get_matrices(params)
-    Udag = adjoint(U)
-    Uc = anti ? conj.(U) : U
-    H_eff = Uc * Diagonal{Complex{eltype(H)}}(H) * adjoint(Uc)
-
-    # We reverse the indices here to avoid reversing in the computation of the amplitude
-    index_array = [reverse([s.index for s in path.segments]) for path in paths]
-    l_Array = [reverse([s.length for s in path.segments]) for path in paths]
-
-    p1e = stack(map(e -> matter_osc_per_e_num_fast(lookup_density, Udag, H_eff, e, index_array, l_Array, anti), E))[1, 1, :, :]
 end
 
 
@@ -257,6 +61,227 @@ function osc_prob_night(E::Vector{Float64}, matrix_p_1e::Matrix{Float64}, mixing
 
     return probs
 end
+
+################################################################################
+# Barger propagation
+################################################################################
+
+module BargerOsc
+
+    @inline function osc_kernel(U::AbstractMatrix{<:Number}, P::AbstractVector, H::AbstractVector, e::Real, l::Real)
+        phase_factors = exp.(2.5338653580781976 * 1im * (l / e) .* H)
+        p = U * sum(P[i] * phase_factors[i] for i in eachindex(P)) * U'
+    end
+
+    function get_eigen(U, H_vac, H, e, rho)
+        m²₁ = H_vac[1, 1]
+        Δm²₂₁ = -H_vac[2, 2]
+        Δm²₃₁ = -H_vac[3, 3]
+        dVac = [m²₁, Δm²₂₁, Δm²₃₁]
+
+        dmVacVac = MMatrix{3,3}(H_vac)
+        for i in 1:3
+            for j in 1:3
+                dmVacVac[i, j] = dVac[i] - dVac[j]
+            end
+        end
+
+        fac = -e * rho
+
+        # Get eigenvalues from Barger's Formula
+
+        α = fac + Δm²₂₁ + Δm²₃₁
+        β = Δm²₂₁ * Δm²₃₁ + fac * (Δm²₂₁ * (1 - abs2(U[1, 2])) + Δm²₃₁ * (1 - abs2(U[1, 3])))
+        γ = fac * Δm²₂₁ * Δm²₃₁ * abs2(U[1, 1])
+
+        brac = sqrt(α^2 - 3 * β)
+
+        arg = (2 * α^3 - 9 * α * β + 27 * γ) / (2 * brac^3)
+
+        θ⁰ = acos.(clamp(arg, -1.0, 1.0))
+        θ⁺ = θ⁰ + 2π
+        θ⁻ = θ⁰ - 2π
+
+        λ₁ = -(2 / 3) * brac * cos(θ⁰ / 3) + m²₁ - α / 3
+        λ₂ = -(2 / 3) * brac * cos(θ⁻ / 3) + m²₁ - α / 3
+        λ₃ = -(2 / 3) * brac * cos(θ⁺ / 3) + m²₁ - α / 3
+
+        # WE'RE WELL BELOW THE EIGENVALUE CROSSING SO WE DON'T NEED TO WORRY ABOUT ORDERING THE EIGENVALUES. FIX OTHERWISE
+        # Get eigenvector matrix from Lagrange's formula
+
+        H₁ = H - Diagonal(fill(λ₁, 3))
+        H₂ = H - Diagonal(fill(λ₂, 3))
+        H₃ = H - Diagonal(fill(λ₃, 3))
+
+        P₁ = (H₂ * H₃) / ((λ₁ - λ₂) * (λ₁ - λ₃))
+        P₂ = (H₃ * H₁) / ((λ₂ - λ₁) * (λ₂ - λ₃))
+        P₃ = (H₁ * H₂) / ((λ₃ - λ₁) * (λ₃ - λ₂))
+
+        return [P₁, P₂, P₃], [λ₁, λ₂, λ₃]
+    end
+
+
+    function get_H(U, H_vac, e, rho, anti::Bool=false)
+        H = MMatrix{3,3}(H_vac)
+
+        if anti
+            fac = -rho * e
+        else
+            fac = +rho * e
+        end
+
+        v = U[1, :]
+        H += fac * v * v'
+
+        H = Hermitian(SMatrix(H))
+
+        tmpMat, tempVec = get_eigen(U, H_vac, H, e, rho) # --- test speed wrt num ---
+        return tmpMat, tempVec
+    end
+
+
+    function osc_reduce(Mix, matter_matrices, path, e, anti::Bool)
+        X = mapreduce((p, (m, n)) -> osc_kernel(Mix, m, n, e, p), *, path, reverse(matter_matrices))
+        A = abs2.(Mix' * X)
+        return A
+    end
+
+    module Slow
+
+        function matter_osc_per_e(U, H_eff, e, rho_Array, l_Array, anti)
+            matter_matrices = map(rho_vec -> (get_H.(Ref(U), Ref(H_eff), e, rho_vec, anti)), rho_Array)
+            stack(map((path, matter) -> (osc_reduce(U, matter, path, e, anti)), l_Array, matter_matrices))
+        end
+
+        function osc_prob_earth(E::AbstractVector{<:Real}, paths, params::NamedTuple; anti=false)
+            U, H = get_matrices(params)
+            # We work on the mass basis
+
+            rho_Array = [[s.avgRho for s in path.segments] for path in paths]
+            l_Array = [[s.length for s in path.segments] for path in paths]
+
+            p1e = stack(map(e -> matter_osc_per_e(U, H, e, rho_Array, l_Array, anti), E))[1, 1, :, :]
+        end
+
+    end
+
+    module Fast
+
+        function matter_osc_per_e(U, H_eff, e, index_array, l_Array, anti)
+            lookup_matrices = map(rho_vec -> (get_H.(Ref(U), Ref(H_eff), e, rho_vec, anti)), earth_lookup)
+            matter_matrices = map(indices -> lookup_matrices[indices], index_array)
+
+            stack(map((path, matter) -> (osc_reduce(U, matter, path, e, anti)), l_Array, matter_matrices))
+        end
+
+        function osc_prob_earth(E::AbstractVector{<:Real}, paths, params::NamedTuple; anti=false)
+            U, H = get_matrices(params)
+            # We work on the mass basis
+
+            index_array = [[s.index for s in path.segments] for path in paths]
+            l_Array = [[s.length for s in path.segments] for path in paths]
+
+            p1e = stack(map(e -> matter_osc_per_e(U, H, e, index_array, l_Array, anti), E))[1, 1, :, :]
+        end
+
+    end
+end
+
+module NumOsc
+
+    @inline function osc_kernel(U::SMatrix{3,3,ComplexF64}, H::SVector{3,Float64}, e::Float64, l::Float64)
+        phase_factors = exp.(2.5338653580781976im * (l / e) .* H) # returns SVector
+        # Avoid creating Diagonal(phase_factors): broadcast instead
+        tmp = U .* phase_factors'  # broadcasting phase_factors onto columns
+        return tmp * adjoint(U)    # U'
+    end
+
+    @inline function get_eigen(H::Hermitian{ComplexF64,SMatrix{3,3,ComplexF64,9}})
+        tmp = eigen(H)
+    end
+
+    function get_H(H_vac, e, rho, anti::Bool=false)
+        H = MMatrix{3,3}(H_vac)
+
+        if anti
+            H[1, 1] -= rho * e
+            for i in 1:3
+                H[i, i] += rho * e
+            end
+        else
+            H[1, 1] += rho * e
+            for i in 1:3
+                H[i, i] -= rho * e
+            end
+        end
+
+        H = Hermitian(SMatrix(H))
+        tmp = get_eigen(H)
+        tmp.vectors, tmp.values
+    end
+
+    function osc_reduce(Mix_dagger::SMatrix{3,3,ComplexF64}, matter_matrices, path, e::Float64, anti::Bool)
+        @inbounds begin
+            first_p, first_mn = path[1], matter_matrices[end]
+            X = osc_kernel(first_mn[1], first_mn[2], e, first_p)  # 3x3 SMatrix
+            for i in 2:length(path)
+                p = path[i]
+                m, n = matter_matrices[end - i + 1]
+                X = X * osc_kernel(m, n, e, p)  # SMatrix * SMatrix
+            end
+            A = abs2.(Mix_dagger * X)
+        end
+        return A
+    end
+
+    module Slow
+
+        function matter_osc_per_e(U, H_eff, e, rho_Array, l_Array, anti)
+            matter_matrices = map(rho_vec -> (get_H.(Ref(H_eff), e, rho_vec, anti)), rho_Array)
+            stack(map((path, matter) -> (osc_reduce(U, matter, path, e, anti)), l_Array, matter_matrices))
+        end
+
+        function osc_prob_earth(E::AbstractVector{<:Real}, paths, params::NamedTuple; anti=false)
+            U, H = get_matrices(params)
+            Uc = anti ? conj.(U) : U
+            H_eff = Uc * Diagonal{Complex{eltype(H)}}(H) * adjoint(Uc)
+
+            rho_Array = [[s.avgRho for s in path.segments] for path in paths]
+            l_Array = [[s.length for s in path.segments] for path in paths]
+
+            p1e = stack(map(e -> matter_osc_per_e(U, H_eff, e, rho_Array, l_Array, anti), E))[1, 1, :, :]
+        end
+
+    end
+
+    module Fast
+
+        function matter_osc_per_e(lookup_density, Mix_dagger, H_eff, e, index_array, l_Array, anti)
+
+            lookup_matrices = map(rho_vec -> get_H_num.(Ref(H_eff), e, rho_vec, anti), lookup_density)
+            matter_matrices = map(indices -> lookup_matrices[indices], index_array)
+
+            stack(map((path, matter) -> osc_reduce(Mix_dagger, matter, path, e, anti), l_Array, matter_matrices))
+        end
+
+        function osc_prob_earth(E::AbstractVector{<:Real}, params::oscPars, lookup_density, paths; anti=false)
+            U, H = get_matrices(params)
+            Udag = adjoint(U)
+            Uc = anti ? conj.(U) : U
+            H_eff = Uc * Diagonal{Complex{eltype(H)}}(H) * adjoint(Uc)
+
+            # We reverse the indices here to avoid reversing in the computation of the amplitude
+            index_array = [reverse([s.index for s in path.segments]) for path in paths]
+            l_Array = [reverse([s.length for s in path.segments]) for path in paths]
+
+            p1e = stack(map(e -> matter_osc_per_e(lookup_density, Udag, H_eff, e, index_array, l_Array, anti), E))[1, 1, :, :]
+        end
+
+    end
+end
+
+end
+
 
 #####################
 ###### TESTING ######
