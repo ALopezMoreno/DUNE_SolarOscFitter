@@ -1,16 +1,27 @@
+################################################################################
+################################################################################
+#
+# Neutrino Oscillation Calculations
+#
+# Oscillation framework adapted from Newthrino by Philipp Eller (special thanks
+# for his support and openess when sharing his code):
+#
+# (add_github_repo_when_public)
+#
+# Barger solution and modifications to calculate the solar night-time propagation
+# added by Andres Lopez Moreno
+#
+#################################################################################
+#################################################################################
+
 module Osc
 
 using LinearAlgebra
-using DataStructures
 using StaticArrays
-using Distributions
-using ArraysOfArrays, StructArrays
 
-# include("makePaths.jl") ### USED FOR DEBUGGING
-
-################################################################################
+#################################################################################
 # Struct Definitions
-################################################################################
+#################################################################################
 
 struct oscPars
     Δm²₂₁::Float64
@@ -26,9 +37,10 @@ end
 oscPars(Δm²₂₁, θ₁₂, θ₁₃; Δm²₃₁=2.5e-3, m₀=1e-9, θ₂₃=asin(sqrt(0.5)), δCP=-1.611) = 
     oscPars(Δm²₂₁, θ₁₂, θ₁₃, Δm²₃₁, m₀, θ₂₃, δCP)
 
-################################################################################
+
+#################################################################################
 # Common functions in the calculation of the oscillation probability
-################################################################################
+#################################################################################
 
 function get_PMNS(params)
     T = typeof(params.θ₂₃)
@@ -67,6 +79,7 @@ end
 ################################################################################
 
 module BargerOsc
+    using LinearAlgebra, StaticArrays
 
     @inline function osc_kernel(U::AbstractMatrix{<:Number}, P::AbstractVector, H::AbstractVector, e::Real, l::Real)
         phase_factors = exp.(2.5338653580781976 * 1im * (l / e) .* H)
@@ -147,6 +160,9 @@ module BargerOsc
     end
 
     module Slow
+        using LinearAlgebra
+        using ...Osc: oscPars, get_matrices
+        using ..BargerOsc: get_H, osc_reduce
 
         function matter_osc_per_e(U, H_eff, e, rho_Array, l_Array, anti)
             matter_matrices = map(rho_vec -> (get_H.(Ref(U), Ref(H_eff), e, rho_vec, anti)), rho_Array)
@@ -166,6 +182,9 @@ module BargerOsc
     end
 
     module Fast
+        using LinearAlgebra
+        using ...Osc: oscPars, get_matrices
+        using ..BargerOsc: get_H, osc_reduce
 
         function matter_osc_per_e(U, H_eff, e, index_array, l_Array, anti)
             lookup_matrices = map(rho_vec -> (get_H.(Ref(U), Ref(H_eff), e, rho_vec, anti)), earth_lookup)
@@ -187,7 +206,13 @@ module BargerOsc
     end
 end
 
+
+################################################################################
+# Numerical propagation
+################################################################################
+
 module NumOsc
+    using LinearAlgebra, StaticArrays
 
     @inline function osc_kernel(U::SMatrix{3,3,ComplexF64}, H::SVector{3,Float64}, e::Float64, l::Float64)
         phase_factors = exp.(2.5338653580781976im * (l / e) .* H) # returns SVector
@@ -235,6 +260,9 @@ module NumOsc
     end
 
     module Slow
+        using LinearAlgebra
+        using ...Osc: oscPars, get_matrices
+        using ..NumOsc: get_H, osc_reduce
 
         function matter_osc_per_e(U, H_eff, e, rho_Array, l_Array, anti)
             matter_matrices = map(rho_vec -> (get_H.(Ref(H_eff), e, rho_vec, anti)), rho_Array)
@@ -255,10 +283,13 @@ module NumOsc
     end
 
     module Fast
+        using LinearAlgebra
+        using ...Osc: oscPars, get_matrices
+        using ..NumOsc: get_H, osc_reduce
 
         function matter_osc_per_e(lookup_density, Mix_dagger, H_eff, e, index_array, l_Array, anti)
 
-            lookup_matrices = map(rho_vec -> get_H_num.(Ref(H_eff), e, rho_vec, anti), lookup_density)
+            lookup_matrices = map(rho_vec -> get_H.(Ref(H_eff), e, rho_vec, anti), lookup_density)
             matter_matrices = map(indices -> lookup_matrices[indices], index_array)
 
             stack(map((path, matter) -> osc_reduce(Mix_dagger, matter, path, e, anti), l_Array, matter_matrices))
