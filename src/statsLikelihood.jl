@@ -267,6 +267,16 @@ likelihood_all_samples_ctr = let nObserved = ereco_data_mergedES,
             return -llh
         end
 
+        # Ensure that the earth normalisation parametrs are within bounds [0, 2]
+        if haskey(parameters, :earth_normalisation)
+            earth_norms = dict[:earth_normalisation]
+            out_of_bounds = filter(x -> x < 0 || x > 2, values)
+            if !isempty(out_of_bounds)
+                @warn ("Earth normalisation trying to leave bounds")
+                return -Inf
+            end
+        end
+
         # Propagate MC
         expectedRate_ES_nue_day, expectedRate_ES_nuother_day, expectedRate_CC_day, expectedRate_ES_nue_night, expectedRate_ES_nuother_night, expectedRate_CC_night, BG_ES_tot, BG_CC_tot = f(MC_no_osc, Mreco, parameters, SSM, energies, backgrounds)
         
@@ -296,6 +306,8 @@ likelihood_all_samples_ctr = let nObserved = ereco_data_mergedES,
 
         print_negatives_1d(expectedRate_CC_day, parameters)
         print_negatives_2d(expectedRate_CC_night, parameters)
+
+
 
         loglh_CC_day = poissonLogLikelihood(expectedRate_CC_day[index_CC:end], nObserved.CC_day[index_CC:end])
 
