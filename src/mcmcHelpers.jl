@@ -255,7 +255,7 @@ function runMCMCbatch(currentBatch, args...)
       if isnothing(prevFile)
           @logmsg MCMC "No previous MCMC file indicated. Starting chain from zero"
           # First batch: Run the tuning phase (~500 steps) for stability
-          samples = bat_sample(posterior, MCMCSampling(mcalg=proposal_algorithm,
+          samples = bat_sample(transformed_posterior, MCMCSampling(mcalg=proposal_algorithm,
                               nsteps=2_500,
                               nchains=mcmcChains,
                               init=init,
@@ -287,7 +287,7 @@ function runMCMCbatch(currentBatch, args...)
       starting_step = chain_state.end_step
       # Regular batch: Run with batchSteps steps and skip burnin
       elapsed_time = @elapsed begin
-          samples = bat_sample(posterior, MCMCSampling(mcalg=proposal_algorithm,
+          samples = bat_sample(transformed_posterior, MCMCSampling(mcalg=proposal_algorithm,
                                                       nsteps=batchSteps,
                                                       nchains=mcmcChains,
                                                       init=ContinueChains(chain_state),
@@ -316,7 +316,7 @@ function runMCMCbatch(currentBatch, args...)
       remainder = mcmcSteps % batchSteps
       lastBatchSteps = (remainder == 0) ? batchSteps : remainder
     
-      samples = bat_sample(posterior, MCMCSampling(mcalg=proposal_algorithm,
+      samples = bat_sample(transformed_posterior, MCMCSampling(mcalg=proposal_algorithm,
                           nsteps=lastBatchSteps,
                           nchains=mcmcChains,
                           init=ContinueChains(chain_state),
