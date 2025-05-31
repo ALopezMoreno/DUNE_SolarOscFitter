@@ -268,9 +268,9 @@ likelihood_all_samples_ctr = let nObserved = ereco_data_mergedES,
         end
 
         # Ensure that the earth normalisation parametrs are within bounds [0, 2]
-        if haskey(parameters, :earth_normalisation)
-            earth_norms = dict[:earth_normalisation]
-            out_of_bounds = filter(x -> x < 0 || x > 2, values)
+        if haskey(parameters, :earth_norm)
+            earth_norms = parameters[:earth_norm]
+            out_of_bounds = filter(x -> x < 0 || x > 2, earth_norms)
             if !isempty(out_of_bounds)
                 @warn ("Earth normalisation trying to leave bounds")
                 return -Inf
