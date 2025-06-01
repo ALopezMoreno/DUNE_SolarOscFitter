@@ -25,7 +25,6 @@ include("../src/exposure.jl")
 
 # Load unoscillated MC
 include("../src/unoscillatedSample.jl")
-include("../src/propagateSample.jl")
 include("../src/response.jl")
 include("../src/backgrounds.jl")
 include("../src/efficiency.jl")
@@ -76,17 +75,15 @@ global earth_paths = [make_potential_for_integrand(z, earth) for z in cosz_calc]
 # Get average layer densities for fast calculations
 global earth_lookup = get_avg_densities(earth_paths)
 
-###################### TEST ######################
-# include("../src/oscillations/numPropagation.jl")
-##################################################
-
 ##################################
 ######## CREATE FAKE DATA ########
 ##################################
 backgrounds = (ES=ES_bg, CC=CC_bg)
 
 # Propagate Asimov point to generate Asimov event rates
-measuredRate_ES_nue_day, measuredRate_ES_nuother_day, measuredRate_CC_day, measuredRate_ES_nue_night, measuredRate_ES_nuother_night, measuredRate_CC_night, BG_ES_tot_true, BG_CC_tot_true = propagateSamplesCtr(unoscillatedSample, responseMatrices, true_params, solarModel, bin_edges, backgrounds)
+
+include("../src/propagateSample.jl")
+measuredRate_ES_nue_day, measuredRate_ES_nuother_day, measuredRate_CC_day, measuredRate_ES_nue_night, measuredRate_ES_nuother_night, measuredRate_CC_night, BG_ES_tot_true, BG_CC_tot_true = propagateSamples(unoscillatedSample, responseMatrices, true_params, solarModel, bin_edges, backgrounds)
 
 # Find the first index where energy is greater than Emin
 global index_ES = findfirst(x -> x > E_threshold.ES, Ereco_bins_ES_extended.bins)
