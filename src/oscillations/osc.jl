@@ -20,7 +20,7 @@ using LinearAlgebra
 using StaticArrays
 
 #################################################################################
-# Struct Definitions
+# Struct and const Definitions
 #################################################################################
 
 struct oscPars
@@ -37,6 +37,9 @@ end
 oscPars(Δm²₂₁, θ₁₂, θ₁₃; Δm²₃₁=2.5e-3, m₀=1e-9, θ₂₃=asin(sqrt(0.5)), δCP=-1.611) = 
     oscPars(Δm²₂₁, θ₁₂, θ₁₃, Δm²₃₁, m₀, θ₂₃, δCP)
 
+
+# Fermi constant in units of Ne/Na
+const G_f = 5.4489e-5
 
 #################################################################################
 # Common functions in the calculation of the oscillation probability
@@ -63,7 +66,7 @@ function mswProb(energy, mixingPars, n_e)
     s2th13 = sin(mixingPars.θ₁₃)^2
     @inbounds begin
         c2th12 = cos.(2 .* mixingPars.θ₁₂)
-        Acc = 2 .* sqrt(2) .* n_e .* G_f .* E_true .* (1 .- s2th13)  
+        Acc = 2 .* sqrt(2) .* n_e .* G_f .* energy .* (1 .- s2th13)  
         beta = Acc ./ mixingPars.Δm²₂₁ 
         # Calculate the modified cosine of twice the angle theta_12 in matter
         c2th12m = (c2th12 .- beta) ./ sqrt.((c2th12 .- beta).^2 .+ (1 .- c2th12.^2))
@@ -83,9 +86,9 @@ function LMA_angle(energy, mixingPars, N_e)
 end
 
 
-function osc_prob_day(E_true::Float64, params, solarModel; process="8B")
+function osc_prob_day(energy::Float64, params, solarModel; process="8B")
     # Calculate the neutrino oscillation probabilities integrating over the production region
-    enuOscProb, _ = mswProb(E_true, params, solarModel.n_e)
+    enuOscProb, _ = mswProb(energy, params, solarModel.n_e)
 
     # Select the appropriate production fraction based on the process
     prodFraction = process == "8B" ? solarModel.prodFractionBoron :
@@ -102,48 +105,64 @@ function osc_prob_day(E_true::Float64, params, solarModel; process="8B")
 end
 
 
-function osc_prob_day_fast(E_true::Float64, params, solarModel; process="8B")
+function osc_prob_day_fast(energy::Float64, params, solarModel; process="8B")
     # Calculate the neutrino oscillation probabilities averaging over the production region
     n_e = process == "8B" ? solarModel.avgNeBoron :
           process == "hep" ? solarModel.avgNeHep :
           error("Invalid process specified. Please use '8B' or 'hep'.")
 
-    enuOscProb = mswProb(params, E_true, n_e)
+    enuOscProb = mswProb(params, energy, n_e)
 
     return enuOscProb
 end
-
 
 # Use relationship between P_1e and P_day from Ioannisian, Yu, Smirnov and Wyler:
 # P_night = P_day + DeltaP where
 # DeltaP = c_13^2*cos(2th12_sol)*(P_1e - P_0) and
 # P_0 = c12^2cos^2th12
-# TO CHECK: IS THE AVERAGE OF THE SUM THE SUM OF AVERAGES?
 
-function osc_prob_both(E::Vector{Float64}, matrix_p_1e::Matrix{Float64}, mixingPars, solarModel; process="8B")
+function osc_prob_both_slow(E::Vector{Float64}, matrix_p_1e::Matrix{Float64}, mixingPars, solarModel; process="8B")
     # Get daytime probability at each n_e over the production region
-    prob_day, cos2θ₁₂_sol = mswProb(E, mixingPars, solarModel.n_e)
+    results = mswProb.(E, Ref(mixingPars), solarModel.n_e')
+    n_energies = length(E)
+    n_densities = length(solarModel.n_e)
+    
+    prob_day = Matrix{Float64}(undef, n_energies, n_densities)
+    cos2θ₁₂_sol = Matrix{Float64}(undef, n_energies, n_densities)
+    
+    @inbounds for i in 1:n_energies, j in 1:n_densities
+        prob_day[i, j] = results[i, j][1]
+        cos2θ₁₂_sol[i, j] = results[i, j][2]
+    end
 
     # Select the appropriate production fraction based on the process
     prodFraction = process == "8B" ? solarModel.prodFractionBoron :
                    process == "hep" ? solarModel.prodFractionHep :
                    error("Invalid process specified. Please use '8B' or 'hep'.")
 
-    P_0 = cos(mixingPars.θ₁₂)^2 *  cos(mixingPars.θ₁₃)^2
+    # Precompute constants
+    cos2_θ₁₃ = cos(mixingPars.θ₁₃)^2
+    P_0 = cos(mixingPars.θ₁₂)^2 * cos2_θ₁₃
+    n_paths = size(matrix_p_1e, 1)
+    
+    # Pre-allocate for the final integrated night probabilities (same shape as matrix_p_1e)
+    prob_night_integrated = zeros(Float64, n_paths, n_energies)
 
-    ΔP = cos(mixingPars.θ₁₃)^2 * cos2θ₁₂_sol .* (matrix_p_1e - P_0)
+    @inbounds for i in 1:n_densities
+        prob_day_i = @view prob_day[:, i]
+        cos2θ₁₂_sol_i = @view cos2θ₁₂_sol[:, i]
+        ΔP_i = cos2_θ₁₃ .* cos2θ₁₂_sol_i' .* (matrix_p_1e .- P_0)
+        prob_night_full_i = prob_day_i' .+ ΔP_i
+        prob_night_integrated .+= prodFraction[i] .* prob_night_full_i
+    end
 
-    prob_night = prob_day .+ ΔP
-
-    # integrate over production region
-    weighted_sum_day = sum(prodFraction .* prob_day)
-    weighted_sum_night = sum(prodFraction .* prob_night)
+    weighted_sum_day = prob_day * prodFraction
     total_weight = sum(prodFraction)
 
-    prob_day_integated = weighted_sum_day / total_weight
-    prob_night_integrated = weighted_sum_night / total_weight
+    prob_day_integrated = weighted_sum_day ./ total_weight
+    prob_night_integrated ./= total_weight 
 
-    return prob_day_integated, prob_night_integrated
+    return prob_day_integrated, prob_night_integrated
 end
 
 
@@ -154,11 +173,19 @@ function osc_prob_both_fast(E::Vector{Float64}, matrix_p_1e::Matrix{Float64}, mi
           error("Invalid process specified. Please use '8B' or 'hep'.")
 
     # Get daytime probability at average n_e
-    prob_day, cos2θ₁₂_sol = mswProb(E, mixingPars, solarModel.n_e)
+    prob_day, cos2θ₁₂_sol = mswProb(E, mixingPars, n_e)
 
-    P_0 = cos(mixingPars.θ₁₂)^2 *  cos(mixingPars.θ₁₃)^2
-    ΔP = cos(mixingPars.θ₁₃)^2 * cos2θ₁₂_sol .* (matrix_p_1e - P_0)
-    prob_night = prob_day .+ ΔP
+    # Precompute constants
+    cos2_θ₁₃ = cos(mixingPars.θ₁₃)^2
+    P_0 = cos(mixingPars.θ₁₂)^2 * cos2_θ₁₃
+    
+    # Use transpose for efficient broadcasting (avoids reshape allocation)
+    # This creates a view, not a copy
+    cos2θ₁₂_sol_t = cos2θ₁₂_sol'
+    prob_day_t = prob_day'
+    
+    # Fused broadcasting operation
+    @inbounds prob_night = prob_day_t .+ cos2_θ₁₃ .* cos2θ₁₂_sol_t .* (matrix_p_1e .- P_0)
 
     return prob_day, prob_night
 end
@@ -180,10 +207,11 @@ end
 module BargerOsc
     using LinearAlgebra, StaticArrays
 
-    @inline function osc_kernel(U::AbstractMatrix{<:Number}, P::AbstractVector, H::AbstractVector, e::Real, l::Real)
+    @inline function osc_kernel2(U::AbstractMatrix{<:Number}, P::AbstractVector, H::AbstractVector, e::Real, l::Real)
         phase_factors = exp.(2.5338653580781976 * 1im * (l / e) .* H)
         p = U * sum(P[i] * phase_factors[i] for i in eachindex(P)) * U'
     end
+
 
     function get_eigen(U, H_vac, H, e, rho)
         m²₁ = H_vac[1, 1]
@@ -268,7 +296,7 @@ module BargerOsc
             stack(map((path, matter) -> (osc_reduce(U, matter, path, e, anti)), l_Array, matter_matrices))
         end
 
-        function osc_prob_earth(E::AbstractVector{<:Real}, paths, params::NamedTuple; anti=false)
+        function osc_prob_earth(E::AbstractVector{<:Real}, params::oscPars, paths; anti=false)
             U, H = get_matrices(params)
             # We work on the mass basis
 
@@ -292,7 +320,7 @@ module BargerOsc
             stack(map((path, matter) -> (osc_reduce(U, matter, path, e, anti)), l_Array, matter_matrices))
         end
 
-        function osc_prob_earth(E::AbstractVector{<:Real}, lookup_density, paths, params::NamedTuple; anti=false)
+        function osc_prob_earth(E::AbstractVector{<:Real}, params::oscPars, lookup_density, paths; anti=false)
             U, H = get_matrices(params)
             # We work on the mass basis
 
@@ -314,10 +342,9 @@ module NumOsc
     using LinearAlgebra, StaticArrays
 
     @inline function osc_kernel(U::SMatrix{3,3,ComplexF64}, H::SVector{3,Float64}, e::Float64, l::Float64)
-        phase_factors = exp.(2.5338653580781976im * (l / e) .* H) # returns SVector
-        # Avoid creating Diagonal(phase_factors): broadcast instead
-        tmp = U .* phase_factors'  # broadcasting phase_factors onto columns
-        return tmp * adjoint(U)    # U'
+        phase_factors = exp.(2.5338653580781976im * (l / e) .* H) 
+        tmp = U .* phase_factors'  
+        return tmp * adjoint(U)
     end
 
     @inline function get_eigen(H::Hermitian{ComplexF64,SMatrix{3,3,ComplexF64,9}})
@@ -363,20 +390,21 @@ module NumOsc
         using ...Osc: oscPars, get_matrices
         using ..NumOsc: get_H, osc_reduce
 
-        function matter_osc_per_e(U, H_eff, e, rho_Array, l_Array, anti)
+        function matter_osc_per_e(Mix_dagger, H_eff, e, rho_Array, l_Array, anti)
             matter_matrices = map(rho_vec -> (get_H.(Ref(H_eff), e, rho_vec, anti)), rho_Array)
-            stack(map((path, matter) -> (osc_reduce(U, matter, path, e, anti)), l_Array, matter_matrices))
+            stack(map((path, matter) -> (osc_reduce(Mix_dagger, matter, path, e, anti)), l_Array, matter_matrices))
         end
 
-        function osc_prob_earth(E::AbstractVector{<:Real}, params::NamedTuple, paths; anti=false)
+        function osc_prob_earth(E::AbstractVector{<:Real}, params::oscPars, paths; anti=false)
             U, H = get_matrices(params)
+            Udag = adjoint(U)
             Uc = anti ? conj.(U) : U
             H_eff = Uc * Diagonal{Complex{eltype(H)}}(H) * adjoint(Uc)
 
-            rho_Array = [[s.avgRho for s in path.segments] for path in paths]
-            l_Array = [[s.length for s in path.segments] for path in paths]
+            rho_Array = [reverse([s.avgRho for s in path.segments]) for path in paths]
+            l_Array = [reverse([s.length for s in path.segments]) for path in paths]
 
-            p1e = stack(map(e -> matter_osc_per_e(U, H_eff, e, rho_Array, l_Array, anti), E))[1, 1, :, :]
+            p1e = stack(map(e -> matter_osc_per_e(Udag, H_eff, e, rho_Array, l_Array, anti), E))[1, 1, :, :]
         end
 
     end
@@ -394,7 +422,7 @@ module NumOsc
             stack(map((path, matter) -> osc_reduce(Mix_dagger, matter, path, e, anti), l_Array, matter_matrices))
         end
 
-        function osc_prob_earth(E::AbstractVector{<:Real}, params::NamedTuple, lookup_density, paths; anti=false)
+        function osc_prob_earth(E::AbstractVector{<:Real}, params::oscPars, lookup_density, paths; anti=false)
             U, H = get_matrices(params)
             Udag = adjoint(U)
             Uc = anti ? conj.(U) : U
@@ -410,9 +438,12 @@ module NumOsc
     end
 end
 
+
 end
 
 
+#=
+####################################################
 #####################
 ###### TESTING ######
 #####################
@@ -423,6 +454,7 @@ using Measures
 using ColorTypes
 using ColorSchemes
 using LaTeXStrings
+using .Osc: oscPars, osc_prob_night
 
 theme(:dracula)
 scalefontsizes(2)
@@ -457,13 +489,12 @@ mixingPars_dict = (
     m₀=1e-9 # Example value
 )
 
-
 mixingPars = oscPars(mixingPars_dict.Δm²₂₁, asin(sqrt(mixingPars_dict.sin2_th12)), asin(sqrt(mixingPars_dict.sin2_th13)))
 
-#=
+
 energies = collect(range(3, stop=20, length=300)) * 1e-3
 
-
+#=
 num_runs = 100
 
 elapsed_times = zeros(num_runs)
@@ -571,19 +602,48 @@ display(p1)
 
 =#
 # -----------------------------------------------------------------------------#
+using .Osc: osc_prob_both_fast
+using .Osc.NumOsc: Fast
 
-using Osc.NumOsc: Fast.osc_prob_earth
-using Osc.NumOsc: Slow.osc_prob_earth
-
-using Osc: osc_prob_both
+using Profile, ProfileSVG
+num_runs = 1
 
 p_1e_fast = Fast.osc_prob_earth(energies, mixingPars, earth_lookup, earth_paths, anti=false)[:, :, 1, 1] # Get the 1e element only
-p_1e_slow = Slow.osc_prob_earth(energies, mixingPars_dict, earth_paths, anti=false)[:, :, 1, 1] # Get the 1e element only
+prob_day, prob_num_fast_fast = osc_prob_both_fast(energies, p_1e_fast, mixingPars, solarModel, process="8B")
 
-prob_num_fast = osc_prob_night(energies, p_1e_num, mixingPars, solarModel.avgNeBoron)
-prob_num_slow = osc_prob_night(energies, p_1e_bar, mixingPars, solarModel.avgNeBoron)
+println(" beginning runs ")
+ProfileSVG.@profview for i in 1:num_runs
+    p_1e_fast = Fast.osc_prob_earth(energies, mixingPars, earth_lookup, earth_paths, anti=false)[:, :, 1, 1] # Get the 1e element only
+    prob_day, prob_num_fast_fast = osc_prob_both_fast(energies, p_1e_fast, mixingPars, solarModel, process="8B")
+end
 
-n_paths = size(p_1e_bar, 1)
+using BenchmarkTools
+
+result1 = @benchmark Fast.osc_prob_earth(energies, mixingPars, earth_lookup, earth_paths, anti=false)[:, :, 1, 1] # Get the 1e element only
+result2 = @benchmark osc_prob_both_fast(energies, p_1e_fast, mixingPars, solarModel, process="8B")
+
+# Extract specific timing information:
+println("Fast version:")
+println("  Minimum time: $(minimum(result1.times) / 1e6) ms")
+println("  Median time: $(median(result1.times) / 1e6) ms") 
+println("  Mean time: $(mean(result1.times) / 1e6) ms")
+println("  Maximum time: $(maximum(result1.times) / 1e6) ms")
+println("  Memory allocated: $(result1.memory) bytes")
+println("  Allocations: $(result1.allocs)")
+
+println("Solar propagation:")
+println("  Minimum time: $(minimum(result2.times) / 1e6) ms")
+println("  Median time: $(median(result2.times) / 1e6) ms") 
+println("  Mean time: $(mean(result2.times) / 1e6) ms")
+println("  Maximum time: $(maximum(result2.times) / 1e6) ms")
+println("  Memory allocated: $(result2.memory) bytes")
+println("  Allocations: $(result2.allocs)")
+
+println("Plotting profile data")
+ProfileSVG.save("profile_large_v2.svg"; width=2000, height=1000)
+println("saved data")
+
+n_paths = size(p_1e_fast, 1)
 y_coords = range(-1, stop=0, length=n_paths)
 
 
@@ -659,11 +719,11 @@ parulas = ColorScheme([RGB(0.2422, 0.1504, 0.6603),
 p2 = heatmap(
     energies,
     y_coords,
-    prob_num_,
+    prob_num_fast_slow-prob_num_fast_fast,
     xlabel=L"E_{\nu} \, (\mathrm{GeV})",
     ylabel=L"\cos(z)",
-    title=L"Diff fast/slow earth propagation",
-    # colormap=cgrad(parulas),
+    title="Diff fast/slow earth propagation",
+    #colormap=cgrad(parulas),
     colormap=:berlin,
     size=(1200, 900),
     margin=10mm,
@@ -673,4 +733,5 @@ p2 = heatmap(
 # Display the plot
 display(p2)
 sleep(100)
-
+####################################################################
+=#
