@@ -38,7 +38,7 @@ using StaticArrays
 #####################################################################
                                                                     #
 # Fermi constant                                                    #
-const G_f = 5.4489e-5                                               #
+const G_f = 5.4489e-5                                        #
 # For now, we keep the remaining mass splitting constant and in NO  #
 const m32 = 2.43e-3                                                 #
 # Electron mass in GeV/c^2                                          #
