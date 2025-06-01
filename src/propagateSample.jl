@@ -206,7 +206,10 @@ function propagateSamples(unoscillatedSample, responseMatrices, params, solarMod
     oscProbs_nue_8B_night = block_average(oscProbs_nue_8B_night_large, (3, 2)) 
     oscProbs_nue_hep_night = block_average(oscProbs_nue_hep_night_large, (3, 2))
 
-    display(oscProbs_nue_8B_day_large)
+    oscProbs_nuother_8B_night = 1 .- oscProbs_nue_8B_night
+    oscProbs_nuother_hep_night = 1 .- oscProbs_nue_hep_night
+
+    # display(oscProbs_nue_8B_day_large)
 
     # myP2 = heatmap([oscProbs_nue_8B_night_large],
     # xlabel = "Column Index",
@@ -215,9 +218,6 @@ function propagateSamples(unoscillatedSample, responseMatrices, params, solarMod
     # color = :viridis)
     # display(myP2)
     # sleep(200)
-
-    oscProbs_nuother_8B_night = 1 .- oscProbs_nue_8B_night
-    oscProbs_nuother_hep_night = 1 .- oscProbs_nue_hep_night
 
     # Apply weights
     # oscillated_sample_ES_nue_day = unoscillatedSample.ES_nue_8B .* oscProbs_nue_8B_day .* params.integrated_8B_flux .+ unoscillatedSample.ES_nue_hep .* oscProbs_nue_hep_day .* params.integrated_HEP_flux
