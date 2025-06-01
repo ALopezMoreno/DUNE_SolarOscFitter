@@ -48,11 +48,20 @@ Note:
 
 
 include("../src/oscCalc.jl")
-include("../src/oscillations/numPropagation.jl")
+include("../src/oscillations/osc.jl")
+
+using .Osc: oscPars, osc_prob_both_fast, osc_prob_both_slow
+
+if fast
+  using .Osc.NumOsc.Fast: osc_prob_earth
+else
+  using .Osc.NumOsc.Slow: osc_prob_earth
+end
 
 using LinearAlgebra
 using Plots
 
+# for matrices
 function block_average(mat::AbstractMatrix, block_dims::Tuple{Int,Int}=(5, 3))
   block_rows, block_cols = block_dims
   n_rows, n_cols = size(mat)
@@ -79,47 +88,52 @@ function block_average(mat::AbstractMatrix, block_dims::Tuple{Int,Int}=(5, 3))
   return result
 end
 
+# for vectors
+function block_average(vec::AbstractVector, block_size::Int=5)
+    n = length(vec)
+    
+    # Ensure that vector length is a multiple of block size
+    if n % block_size != 0
+        error("Vector length must be a multiple of block size: got length $(n) for blocks of size $(block_size)")
+    end
+    
+    out_n = n ÷ block_size
+    result = Array{eltype(vec)}(undef, out_n)
+    
+    for i in 1:out_n
+        range = ((i - 1) * block_size + 1):(i * block_size)
+        block = view(vec, range)
+        result[i] = sum(block) / block_size
+    end
+    
+    return result
+end
 
-# DEPRECATED !!!!
-function propagateSamplesAvg(unoscillatedSample, responseMatrices, params, solarModel, bin_edges, BG_CC)
-    oscProbs_nue_8B = averageProbOverBins(bin_edges::Vector{Float64}, params, solarModel, process="8B") 
-    oscProbs_nue_hep = averageProbOverBins(bin_edges::Vector{Float64}, params, solarModel, process="hep")
-
-    oscProbs_nuother_8B = 1 .- oscProbs_nue_8B
-    oscProbs_nuother_hep = 1 .- oscProbs_nue_hep
-
-    oscillated_sample_ES_nue = unoscillatedSample.ES_nue_8B .* oscProbs_nue_8B .* params.integrated_8B_flux .+ unoscillatedSample.ES_nue_hep .* oscProbs_nue_hep .* params.integrated_8B_flux * 2e-4 #ESTIMATE OF HEP FLUX
-    oscillated_sample_ES_nuother = unoscillatedSample.ES_nuother_8B .* oscProbs_nuother_8B  .* params.integrated_8B_flux .+ unoscillatedSample.ES_nuother_hep .* oscProbs_nuother_hep .* params.integrated_8B_flux * 2e-4 #ESTIMATE OF HEP FLUX
-    oscillated_sample_CC = unoscillatedSample.CC_8B .* oscProbs_nue_8B .* params.integrated_8B_flux .+ unoscillatedSample.CC_hep .* oscProbs_nue_hep .* params.integrated_8B_flux * 2e-4 #ESTIMATE OF HEP FLUX
-
-    eventRate_ES_nue = responseMatrices.ES.nue' * oscillated_sample_ES_nue
-    eventRate_ES_nuother = responseMatrices.ES.nuother' * oscillated_sample_ES_nuother
-    eventRate_CC = responseMatrices.CC' * oscillated_sample_CC + 9e2 * BG_CC
-
-    return eventRate_ES_nue, eventRate_ES_nuother, eventRate_CC
+# wrapper
+function block_average(arr::AbstractArray, block_dims...)
+    if ndims(arr) == 1
+        return block_average(arr, block_dims...)
+    elseif ndims(arr) == 2
+        return block_average(arr, block_dims...)
+    else
+        error("Unsupported array dimension: $(ndims(arr)). Only 1D and 2D arrays are supported.")
+    end
 end
 
 
-function propagateSamplesCtr(unoscillatedSample, responseMatrices, params, solarModel, bin_edges, raw_backgrounds)
+function propagateSamples(unoscillatedSample, responseMatrices, params, solarModel, bin_edges, raw_backgrounds)
     # display(params)  ### DEBUGGING TO FIND OUT WHERE THINGS FAILED ###
     mixingPars = oscPars(params.dm2_21, asin(sqrt(params.sin2_th12)), asin(sqrt(params.sin2_th13)))
 
     bin_centers = (bin_edges[1:end-1] + bin_edges[2:end]) / 2.0
     bin_centers_calc = (bin_edges_calc[1:end-1] + bin_edges_calc[2:end]) / 2.0
 
-    # get oscillation probabilities
-    oscProbs_nue_8B_day = centralProbOverBins(bin_centers::Vector{Float64}, params, solarModel, process="8B")
-    oscProbs_nue_hep_day = centralProbOverBins(bin_centers::Vector{Float64}, params, solarModel, process="hep") 
-
-    oscProbs_nuother_8B_day = 1 .- oscProbs_nue_8B_day
-    oscProbs_nuother_hep_day = 1 .- oscProbs_nue_hep_day
-
     # call the appropriate function for getting the earth propagation matrix
     if earthUncertainty
         lookup = params.earth_norm .* earth_lookup
-        oscProbs_1e = osc_prob_earth_num_fast(bin_centers_calc, mixingPars, lookup, earth_paths)
+        oscProbs_1e = osc_prob_earth(bin_centers_calc, mixingPars, lookup, earth_paths)
     else
-         oscProbs_1e = osc_prob_earth_num_fast(bin_centers_calc, mixingPars, earth_lookup, earth_paths)
+         oscProbs_1e = osc_prob_earth(bin_centers_calc, mixingPars, earth_lookup, earth_paths)
     end
 
     # Treat backgrounds accordingly
@@ -165,9 +179,15 @@ function propagateSamplesCtr(unoscillatedSample, responseMatrices, params, solar
     # display(current())  # Display the current figure
 
     # sleep(20)
-
-    oscprobs_boron_large = osc_prob_night(bin_centers_calc, oscProbs_1e, mixingPars, solarModel.avgNeBoron)
-    oscprobs_hep_large = osc_prob_night(bin_centers_calc, oscProbs_1e, mixingPars, solarModel.avgNeHep)
+    
+    # get oscillation probabilities  
+    if fast
+      oscProbs_nue_8B_day_large, oscProbs_nue_8B_night_large = osc_prob_both_fast(bin_centers_calc, oscProbs_1e, mixingPars, solarModel, process="8B")
+      oscProbs_nue_hep_day_large, oscProbs_nue_hep_night_large = osc_prob_both_fast(bin_centers_calc, oscProbs_1e, mixingPars, solarModel, process="hep")
+    else
+      oscProbs_nue_8B_day_large, oscProbs_nue_8B_night_large = osc_prob_both_slow(bin_centers_calc, oscProbs_1e, mixingPars, solarModel, process="8B")
+      oscProbs_nue_hep_day_large, oscProbs_nue_hep_night_large = osc_prob_both_slow(bin_centers_calc, oscProbs_1e, mixingPars, solarModel, process="hep")
+    end
 
     # myP = heatmap(oscprobs_boron_large,
     # xlabel = "Column Index",
@@ -177,19 +197,27 @@ function propagateSamplesCtr(unoscillatedSample, responseMatrices, params, solar
     # display(myP)
     # sleep(5)
 
-    oscProbs_nue_8B_night = block_average(oscprobs_boron_large, (3, 2)) 
-    oscProbs_nue_hep_night = block_average(oscprobs_hep_large, (3, 2))
+    oscProbs_nue_8B_day = block_average(oscProbs_nue_8B_day_large, 2)
+    oscProbs_nue_hep_day = block_average(oscProbs_nue_hep_day_large, 2)
 
-    # myP2 = heatmap(oscProbs_nue_8B_night,
+    oscProbs_nuother_8B_day = 1 .- oscProbs_nue_8B_day
+    oscProbs_nuother_hep_day = 1 .- oscProbs_nue_hep_day
+
+    oscProbs_nue_8B_night = block_average(oscProbs_nue_8B_night_large, (3, 2)) 
+    oscProbs_nue_hep_night = block_average(oscProbs_nue_hep_night_large, (3, 2))
+
+    oscProbs_nuother_8B_night = 1 .- oscProbs_nue_8B_night
+    oscProbs_nuother_hep_night = 1 .- oscProbs_nue_hep_night
+
+    # display(oscProbs_nue_8B_day_large)
+
+    # myP2 = heatmap([oscProbs_nue_8B_night_large],
     # xlabel = "Column Index",
     # ylabel = "Row Index",
     # title = "Oscprobs",
     # color = :viridis)
     # display(myP2)
     # sleep(200)
-
-    oscProbs_nuother_8B_night = 1 .- oscProbs_nue_8B_night
-    oscProbs_nuother_hep_night = 1 .- oscProbs_nue_hep_night
 
     # Apply weights
     # oscillated_sample_ES_nue_day = unoscillatedSample.ES_nue_8B .* oscProbs_nue_8B_day .* params.integrated_8B_flux .+ unoscillatedSample.ES_nue_hep .* oscProbs_nue_hep_day .* params.integrated_HEP_flux

@@ -57,7 +57,7 @@ likelihood_all_samples_avg = let nObserved = ereco_data_mergedES,
     SSM = solarModel,
     MC_no_osc = unoscillatedSample,
     BG = backgrounds,
-    f = propagateSamplesAvg
+    f = propagateSamples
     Emin = E_threshold
 
     logfuncdensity(function (parameters)
@@ -146,7 +146,7 @@ likelihood_all_samples_ctr = let nObserved = ereco_data_mergedES,
     SSM = solarModel,
     MC_no_osc = unoscillatedSample,
     BG = backgrounds,
-    f = propagateSamplesCtr
+    f = propagateSamples
 
     logfuncdensity(function (parameters)
 
