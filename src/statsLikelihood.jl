@@ -51,96 +51,7 @@ using Random, LinearAlgebra, Statistics, Distributions, StatsBase
 using BAT, DensityInterface, IntervalSets
 
 
-likelihood_all_samples_avg = let nObserved = ereco_data_mergedES,
-    energies = bin_edges,
-    Mreco = responseMatrices,
-    SSM = solarModel,
-    MC_no_osc = unoscillatedSample,
-    BG = backgrounds,
-    f = propagateSamples
-    Emin = E_threshold
-
-    logfuncdensity(function (parameters)
-        @warn("using avg")
-        function poissonLogLikelihood(nExpected::Vector{Float64}, nMeasured::Vector{Float64})::Float64
-            """
-            Calculate the Poisson log likelihood given expected and measured counts.
-
-            # Arguments
-            - `nExpected::Vector{Float64}`: A vector of expected counts.
-            - `nMeasured::Vector{Float64}`: A vector of measured counts.
-
-            # Returns
-            - `Float64`: The calculated log-likelihood.
-
-            # Errors
-            - Throws an error if any input is negative or if the vectors have different lengths.
-            """
-            if !all(x -> x >= 0, nExpected) || !all(x -> x >= 0, nMeasured)
-                throw(ArgumentError("Inputs must be non-negative"))
-            end
-            if length(nExpected) != length(nMeasured)
-                throw(ArgumentError("Inputs must have the same length"))
-            end
-
-            llh = 0.0
-            @inbounds for i in eachindex(nExpected)
-                e = nExpected[i]
-                m = nMeasured[i]
-                if m > 0
-                    if e > 0
-                        llh += (e - m + m * log(m / e)) 
-                    elseif e == 0
-                        e = 0.5
-                        llh += (e - m + m * log(m / e)) 
-                    end
-
-                else
-                    if e == 0
-                        llh += 0
-                    else
-                        m = 0.5
-                        llh += (e - m + m * log(m / e)) 
-                    end
-                end
-            end
-            return -llh
-        end
-
-        # Propagate MC
-        expectedRate_ES_nue, expectedRate_ES_nuother, expectedRate_CC = f(MC_no_osc, Mreco, parameters, SSM, energies, backgrounds.CC)
-        expectedRate_ES = expectedRate_ES_nue .+ expectedRate_ES_nuother
-
-        # THIS SHOULD GO OUTSIDE EVENTUALLY
-        # Find the first index where energy is greater than Emin.ES
-        index_ES = findfirst(x -> x > Emin.ES, energies)
-        index_CC = findfirst(x -> x > Emin.CC, Ereco_bins_CC_extended.bins)
-
-        # Check if the index was found
-        if isnothing(index_ES)
-            error("No energies greater than Emin found for ES.")
-        end
-
-        # Check if indices were found
-        if isnothing(index_ES)
-            error("No energies greater than Emin found for ES.")
-        end
-
-        if isnothing(index_CC)
-            error("No energies greater than Emin found for CC.")
-        end
-
-        loglh_ES = poissonLogLikelihood(expectedRate_ES[index_ES:end], nObserved.ES[index_ES:end])
-        loglh_CC = poissonLogLikelihood(expectedRate_CC[index_CC:end], nObserved.CC[index_CC:end])
-
-        loglh = loglh_ES + loglh_CC
-
-        return loglh
-    end)
-end
-
-
-likelihood_all_samples_ctr = let nObserved = ereco_data_mergedES,
+likelihood_all_samples = let nObserved = ereco_data,
     energies = bin_edges,
     Mreco = responseMatrices,
     SSM = solarModel,
@@ -149,6 +60,8 @@ likelihood_all_samples_ctr = let nObserved = ereco_data_mergedES,
     f = propagateSamples
 
     logfuncdensity(function (parameters)
+        # first initialise llh to zero
+        loglh = 0.
 
         function poissonLogLikelihood(nExpected::Vector{Float64}, nMeasured::Vector{Float64})::Float64
             """
@@ -268,24 +181,28 @@ likelihood_all_samples_ctr = let nObserved = ereco_data_mergedES,
         end
 
         # Ensure that the earth normalisation parametrs are within bounds [0, 2]
-        if haskey(parameters, :earth_norm)
-            earth_norms = parameters[:earth_norm]
+        earth_norm_keys = filter(k -> startswith(String(k), "earth_norm"), keys(parameters))
+
+        # Only proceed if there is at least one such parameter
+        if !isempty(earth_norm_keys)
+            # Gather all values into a vector
+            earth_norms = [parameters[k] for k in earth_norm_keys]
+            # Find out-of-bounds values
             out_of_bounds = filter(x -> x < 0 || x > 2, earth_norms)
             if !isempty(out_of_bounds)
-                @warn ("Earth normalisation trying to leave bounds")
+                @warn "Earth normalisation trying to leave bounds"
                 return -Inf
             end
         end
 
         # Propagate MC
-        expectedRate_ES_nue_day, expectedRate_ES_nuother_day, expectedRate_CC_day, expectedRate_ES_nue_night, expectedRate_ES_nuother_night, expectedRate_CC_night, BG_ES_tot, BG_CC_tot = f(MC_no_osc, Mreco, parameters, SSM, energies, backgrounds)
+        expectedRate_ES_day, expectedRate_CC_day, expectedRate_ES_night, expectedRate_CC_night, BG_ES_tot, BG_CC_tot = f(MC_no_osc, Mreco, parameters, SSM, energies, backgrounds)
         
-        expectedRate_ES_day = expectedRate_ES_nue_day .+ expectedRate_ES_nuother_day
-        ### expectedRate_ES_night = expectedRate_ES_nue_night .+ expectedRate_ES_nuother_night
 
         # loglh_ES_day = poissonLogLikelihood(expectedRate_ES_day[index_ES:end], nObserved.ES_day[index_ES:end])
 
         ## CHECK FOR NEGATIVE VALUES
+        ## WE WILL HAVE TO REMOVE THIS EVENTUALLY
         function print_negatives_1d(arr, parameters)
             @inbounds for i in eachindex(arr)
                 x = arr[i]
@@ -308,23 +225,25 @@ likelihood_all_samples_ctr = let nObserved = ereco_data_mergedES,
         print_negatives_2d(expectedRate_CC_night, parameters)
 
 
+        if ES_mode
+            loglh_ES_day = poissonLogLikelihood(expectedRate_ES_day[index_ES:end], nObserved.ES_day[index_ES:end])
+            loglh_ES_night = sum([poissonLogLikelihood(row[index_ES:end], obs_row[index_ES:end])
+            for (row, obs_row) in zip(eachrow(expectedRate_ES_night), eachrow(nObserved.ES_night))])
 
-        loglh_CC_day = poissonLogLikelihood(expectedRate_CC_day[index_CC:end], nObserved.CC_day[index_CC:end])
+            loglh += loglh_ES_day + loglh_ES_night
+        end
 
-        #loglh_ES_night = sum([poissonLogLikelihood(row[index_ES:end], obs_row[index_ES:end])
-        #for (row, obs_row) in zip(eachrow(expectedRate_ES_night), eachrow(nObserved.ES_night))])
+        if CC_mode
+            loglh_CC_day = poissonLogLikelihood(expectedRate_CC_day[index_CC:end], nObserved.CC_day[index_CC:end])
+            loglh_CC_night = sum([poissonLogLikelihood(row[index_CC:end], obs_row[index_CC:end])
+            for (row, obs_row) in zip(eachrow(expectedRate_CC_night), eachrow(nObserved.CC_night))])
+
+            loglh = loglh_CC_day + loglh_CC_night
+        end
 
         # EXAMPLE FOR BARLOW BEESTON
         # loglh_CC_night = sum([systematicLogLikelihood(row[index_CC:end], obs_row[index_CC:end], sys_row[index_CC:end])
         # for (row, obs_row, sys_row) in zip(eachrow(expectedRate_CC_night), eachrow(nObserved.CC_night), eachrow(uncertainty_ratio_matrix_CC_night))])
-
-        loglh_CC_night = sum([poissonLogLikelihood(row[index_CC:end], obs_row[index_CC:end])
-        for (row, obs_row) in zip(eachrow(expectedRate_CC_night), eachrow(nObserved.CC_night))])
-
-        # loglh = loglh_ES_day + loglh_CC_day + loglh_ES_night + loglh_CC_night
-        loglh = loglh_CC_day + loglh_CC_night
-
-
         return loglh
     end)
 end

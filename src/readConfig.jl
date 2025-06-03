@@ -127,7 +127,8 @@ function save_settings_to_file(filename::String)
         # General settings
         write(file, "----- General -----\n")
         write(file, "Fast mode: $fast\n")
-        write(file, "Earth uncertainty enabled: $earthUncertainty\n\n")
+        write(file, "Earth uncertainty enabled: $earthUncertainty\n")
+        write(file, "Single channel mode: $singleChannel\n\n")
 
         # Solar and Earth models
         write(file, "----- Solar & Earth Models -----\n")
@@ -277,6 +278,22 @@ function main()
 
     # Fast mode?
     global fast = config["fastFit"]
+
+    # Single channel fit?
+    global single_channel = get(config, "singleChannel", false)
+    global CC_mode, ES_mode
+    if single_channel == false
+        CC_mode = true
+        ES_mode = true
+    elseif single_channel == "CC"
+        CC_mode = true
+        ES_mode = false
+    elseif single_channel == "ES"
+        CC_mode = false
+        ES_mode = true
+    else
+        error("Invalid value for singleChannel: $single_channel. Expected false, \"CC\", or \"ES\".")
+    end
 
     # Uncertainties?
     global earthUncertainty = config["earth_potential_uncertainties"]
