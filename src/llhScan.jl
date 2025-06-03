@@ -69,11 +69,7 @@ for i in 1:length(vals_12)
         temp_parameters[:sin2_th13] = vals_13[j]
         temp_params = (; temp_parameters...)
         # Call the function with the current values and store the result
-        if fast
-            llh_sin2th12_sin2th13[i, j] = logdensityof(likelihood_all_samples_ctr, temp_params)
-        else
-            llh_sin2th12_sin2th13[i, j] = logdensityof(likelihood_all_samples_avg, temp_params)
-        end
+        llh_sin2th12_sin2th13[i, j] = logdensityof(likelihood_all_samples, temp_params)
     end
     if i % 5 == 0
         @logmsg MCMC "Completed $i rows out of $(length(vals_12))"
@@ -112,11 +108,7 @@ for i in 1:length(vals_12)
         temp_params = (; temp_parameters...)
 
         # Call the function with the current values and store the result
-        if fast
-            llh_sin2th12_dm2_21[i, j] = logdensityof(likelihood_all_samples_ctr, temp_params)
-        else
-            llh_sin2th12_dm2_21[i, j] = logdensityof(likelihood_all_samples_avg, temp_params)
-        end
+        llh_sin2th12_dm2_21[i, j] = logdensityof(likelihood_all_samples_ctr, temp_params)
     end
     if i % 5 == 0
         @logmsg MCMC ("Completed $i rows out of $(length(vals_12))")
@@ -155,11 +147,7 @@ for i in 1:length(vals_13)
         temp_params = (; temp_parameters...)
 
         # Call the function with the current values and store the result
-        if fast
-            llh_sin2th13_dm2_21[i, j] = logdensityof(likelihood_all_samples_ctr, temp_params)
-        else
-            llh_sin2th13_dm2_21[i, j] = logdensityof(likelihood_all_samples_avg, temp_params)
-        end        
+        llh_sin2th13_dm2_21[i, j] = logdensityof(likelihood_all_samples, temp_params)     
     end
     if i % 5 == 0
         @logmsg MCMC ("Completed $i rows out of $(length(vals_13))")
