@@ -65,8 +65,14 @@ priors = Dict{Symbol,Any}(
 
 # Conditionally add nuisance parameters
 if earthUncertainty
-  priors[:earth_norm] = earth_normalisation_prior
-  param_bounds = Dict(:earth_norm => (0.0, 2.0)) # We want these to be fixed between 0 and 2
+  # FOR NOW, SET THE INPUTS AS A SERIRES OF INDEPENDENT VARIABLES: TRANSFORM THE MVNORMAL INTO AN ARRAY OF 1DNORMALS
+  means = mean(earth_normalisation_prior)
+  covmat = cov(earth_normalisation_prior)
+  n = length(means)
+  for i in 1:n
+    priors[Symbol("earth_norm_$i")] = Truncated(Normal(means[i], sqrt(covmat[i, i])), 0.0, 2.0)
+  end
+  # param_bounds = Dict(:earth_norm => (0.0, 2.0)) # We want these to be fixed between 0 and 2
 end
 
 if !isempty(ES_bg_norms_pars)
@@ -85,21 +91,16 @@ end
 prior = distprod(; priors...)
 
 # Check if explicit param bounds have been given:
-param_names = collect(keys(prior))
+# param_names = collect(keys(prior))
 # Create aligned bounds vector
-bounds = [haskey(param_bounds, name) ? param_bounds[name] : (-Inf, Inf) for name in param_names]
+# bounds = [haskey(param_bounds, name) ? param_bounds[name] : (-Inf, Inf) for name in param_names]
 
 # Define Bayesian model
-if fast
-  posterior = PosteriorMeasure(likelihood_all_samples_ctr, prior)
-else # THIS HAS TO DISAPPEAR. WE NO DOING NO AVG!
-  posterior = PosteriorMeasure(likelihood_all_samples_avg, prior)
-end
+posterior = PosteriorMeasure(likelihood_all_samples, prior)
 
 # Apply parameter bounds
-bounded_domain = BoundedDomain(bounds)
-transformed_posterior = TransformedDensity(bounded_domain, posterior)
-
+#bounded_domain = BoundedDomain(bounds)
+#transformed_posterior = TransformedDensity(bounded_domain, posterior)
 
 # Set chain parameters
 init = MCMCChainPoolInit(
