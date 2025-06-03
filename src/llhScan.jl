@@ -108,7 +108,7 @@ for i in 1:length(vals_12)
         temp_params = (; temp_parameters...)
 
         # Call the function with the current values and store the result
-        llh_sin2th12_dm2_21[i, j] = logdensityof(likelihood_all_samples_ctr, temp_params)
+        llh_sin2th12_dm2_21[i, j] = logdensityof(likelihood_all_samples, temp_params)
     end
     if i % 5 == 0
         @logmsg MCMC ("Completed $i rows out of $(length(vals_12))")
