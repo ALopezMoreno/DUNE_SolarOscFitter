@@ -11,11 +11,11 @@ include("../src/objects.jl")
 
 # Remind user of singleChannel settings:
 println(" ")
-if single_channel == false
+if singleChannel == false
     @logmsg Setup ("Fitting ES and CC channels.\n")
-elseif single_channel == "ES"
+elseif singleChannel == "ES"
     @logmsg Setup ("Fitting ES channel only. CC event rates will appear as zero.\n")
-elseif single_channel == "CC"
+elseif singleChannel == "CC"
     @logmsg Setup ("Fitting CC channel only. ES event rates will appear as zero.\n")
 end
 
@@ -126,22 +126,24 @@ CC_denominator = CC_Dtot + CC_Ntot
 
 if ES_denominator == 0
     asymm_ES = 0
+    eff_asymm_ES = 0
 else
     asymm_ES = 2 * (ES_Dtot - ES_Ntot) / ES_denominator
+    eff_asymm_ES = 2 * (ES_Dtot - ES_Ntot) / (ES_denominator + 2 * ES_bg_aboveThreshold)
 end
 
 if CC_denominator == 0
     asymm_CC = 0
+    eff_asymm_CC = 0
 else
     asymm_CC = 2 * (CC_Dtot - CC_Ntot) / CC_denominator
+    eff_asymm_CC = 2 * (CC_Dtot - CC_Ntot) / (CC_denominator + 2 * CC_bg_aboveThreshold)
 end
 
 # save Asimov asymmetries
 true_parameters[:ES_asymmetry] = asymm_ES
 true_parameters[:CC_asymmetry] = asymm_CC
 
-eff_asymm_ES = 2 * (ES_Dtot - ES_Ntot) / (ES_denominator + 2 * ES_bg_aboveThreshold)
-eff_asymm_CC = 2 * (CC_Dtot - CC_Ntot) / (CC_denominator + 2 * CC_bg_aboveThreshold)
 
 # Group for feeding to likelihood
 ereco_data = (
@@ -155,8 +157,8 @@ ereco_data = (
 ES_night_summed = sum(ereco_data.ES_night, dims=1)
 CC_night_summed = sum(ereco_data.CC_night, dims=1)
 
-CC_combined = ereco_data.CC_day .+ vec(CC_night_summed)
 ES_combined = ereco_data.ES_day .+ vec(ES_night_summed)
+CC_combined = ereco_data.CC_day .+ vec(CC_night_summed)
 
 @logmsg Setup ("Total number of ES data above threshold: ", sum(ES_combined[index_ES:end]))
 @logmsg Setup ("Total number of CC data above threshold: ", sum(CC_combined[index_CC:end]))

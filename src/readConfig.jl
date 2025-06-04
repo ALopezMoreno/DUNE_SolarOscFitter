@@ -280,19 +280,19 @@ function main()
     global fast = config["fastFit"]
 
     # Single channel fit?
-    global single_channel = get(config, "singleChannel", false)
+    global singleChannel = get(config, "singleChannel", false)
     global CC_mode, ES_mode
-    if single_channel == false
+    if singleChannel == false
         CC_mode = true
         ES_mode = true
-    elseif single_channel == "CC"
+    elseif singleChannel == "CC"
         CC_mode = true
         ES_mode = false
-    elseif single_channel == "ES"
+    elseif singleChannel == "ES"
         CC_mode = false
         ES_mode = true
     else
-        error("Invalid value for singleChannel: $single_channel. Expected false, \"CC\", or \"ES\".")
+        error("Invalid value for singleChannel: $singleChannel. Expected false, \"CC\", or \"ES\".")
     end
 
     # Uncertainties?
