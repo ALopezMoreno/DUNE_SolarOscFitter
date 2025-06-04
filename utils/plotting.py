@@ -277,7 +277,7 @@ def fade_color_to_white(color, alpha):
     return faded_color.tolist()
 
 
-def plot_corner(variables, data_dict, externalContours=False, colorlist=['b', 'purple', 'red'], linecolors=['red', 'white', 'blue'], fill=True, bins2D=50):
+def plot_corner(variables, data_dict, externalContours=False, colorlist=['b', 'purple', 'red'], linecolors=['red', 'white', 'blue'], fill=True, bins2D=60):
     """
     Create a corner plot of 2D histograms for the given variables.
 
@@ -330,7 +330,7 @@ def plot_corner(variables, data_dict, externalContours=False, colorlist=['b', 'p
                 else: color='gray'
 
                 # Plot histogram with constant range
-                n, bins, patches = axes[i, j].hist(data[i], bins=75, range=(global_min[i], global_max[i]), color=color, alpha=0.0, density=False, weights=weights)
+                n, bins, patches = axes[i, j].hist(data[i], bins=100, range=(global_min[i], global_max[i]), color=color, alpha=0.0, density=False, weights=weights)
 
                 # Calculate empirical percentiles for 1, 2, and 3 sigma levels
                 sorted_data = np.sort(data[i])
@@ -389,11 +389,11 @@ def plot_corner(variables, data_dict, externalContours=False, colorlist=['b', 'p
                 if fill:
                     sns.histplot(x=data[j], y=data[i], ax=axes[i, j], bins=bins2D, cmap=create_sequential_colormap('white', color), weights=weights, alpha=0.5, fill=False)
                 else:
-                    hist = sns.histplot(x=data[j], y=data[i], ax=axes[i, j], bins=bins2D, cmap=cmasher.tropical_r, edgecolor='face', weights=weights, alpha=1, fill=True)
+                    hist = sns.histplot(x=data[j], y=data[i], ax=axes[i, j], bins=bins2D, cmap=cmasher.guppy_r, edgecolor='face', weights=weights, alpha=1, fill=True)
                     hist.collections[0].set_norm(colors.LogNorm(vmin=1))
 
 
-                x_grid, y_grid, density, levels, x_HPD, y_HPD = get_contours(data[j], data[i], weights, bins2D, smooth=0.75)
+                x_grid, y_grid, density, levels, x_HPD, y_HPD = get_contours(data[j], data[i], weights, bins2D, smooth=0.2)
                 # Add custom colour transitions for levels
                 original_color = colors.to_rgb(color)  # (0.2549, 0.4118, 0.8824)
 
