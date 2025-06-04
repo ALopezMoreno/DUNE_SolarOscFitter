@@ -141,7 +141,6 @@ separate top-level variable, along with:
 """
 function batchesToJLD2(binFile::String, infoFile::String, outJLD2::String)
     param_data, weights, stepno, chainid = loadAllBatches(binFile, infoFile)
-
     
     jldopen(outJLD2, "w") do f
         for (name, values) in param_data

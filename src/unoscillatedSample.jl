@@ -50,7 +50,7 @@ using QuadGK
 include("../src/solarFlux.jl")
 include("../src/xsec.jl")
 
-detector_ne = 10 * 2.7e33 # 2.7e33 = 1kTons #  1 module = 10kT
+detector_ne = 10 * 2.7e32 # 2.7e32 = 1kTons #  1 module = 10kT
 detector_nAr40 = 10 * 1.45e31 # 1.45e31 = 1 kTons #  1 module = 10kT
 detection_time = 3600 * 24 * 365  * 10
 
