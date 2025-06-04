@@ -20,7 +20,7 @@ def convert_mcmc_to_jld2(bin_file, info_file, out_jld2):
         return 0
 
 
-def load_posterior(mcmc_chains, parameters, burnin=20_000, test=None):
+def load_posterior(mcmc_chains, parameters, burnin=100, test=None):
     valid_chains = []
     for mcmc_chain in mcmc_chains:
         if not os.path.exists(mcmc_chain + ".jld2"):
