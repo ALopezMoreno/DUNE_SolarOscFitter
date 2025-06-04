@@ -6,6 +6,17 @@ const MCMC = LogLevel(1)
 const Setup = LogLevel(2)
 const Output = LogLevel(3)
 
+# Define scientific notation printer
+function sci_notation(x; digits=4) 
+    if x == 0
+        return "0"
+    else
+        exponent = floor(Int, log10(abs(x)))  
+        mantissa = x / 10^exponent  
+        return "$(round(mantissa, digits=digits)) × 10^$exponent" 
+    end
+end  
+
 # Add string representations for both custom and built-in logging levels.
 function Base.show(io::IO, level::LogLevel)
     if level == Setup
