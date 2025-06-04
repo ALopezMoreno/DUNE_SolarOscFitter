@@ -164,7 +164,7 @@ p = Progress(n_total,
 
 for i in 1:n_total
     temp_pars = NamedTuple{Tuple(param_fields)}((param_data[field][i] for field in param_fields))
-    expectedRate_ES_nue_day, expectedRate_ES_nuother_day, expectedRate_CC_day, expectedRate_ES_nue_night, expectedRate_ES_nuother_night, expectedRate_CC_night, BG_ES_tot, BG_CC_tot = propagateSamplesCtr(unoscillatedSample, responseMatrices, temp_pars, solarModel, bin_edges, backgrounds)
+    expectedRate_ES_nue_day, expectedRate_ES_nuother_day, expectedRate_CC_day, expectedRate_ES_nue_night, expectedRate_ES_nuother_night, expectedRate_CC_night, BG_ES_tot, BG_CC_tot = propagateSamples(unoscillatedSample, responseMatrices, temp_pars, solarModel, bin_edges, backgrounds)
 
     #-- Get asymmetry --#
     BG_CC_expected = sum(BG_CC_tot[index_CC:end])

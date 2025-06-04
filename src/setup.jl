@@ -9,6 +9,16 @@ using Plots
 
 include("../src/objects.jl")
 
+# Remind user of singleChannel settings:
+println(" ")
+if singleChannel == false
+    @logmsg Setup ("Fitting ES and CC channels.\n")
+elseif singleChannel == "ES"
+    @logmsg Setup ("Fitting ES channel only. CC event rates will appear as zero.\n")
+elseif singleChannel == "CC"
+    @logmsg Setup ("Fitting CC channel only. ES event rates will appear as zero.\n")
+end
+
 #############################
 ######## LOAD INPUTS ########
 #############################
@@ -49,8 +59,11 @@ true_parameters = Dict{Symbol, Any}(
 
 # Conditionally add nuisance parameters
 if earthUncertainty
-    true_parameters[:earth_norm] = earth_normalisation_true
+    for (i, val) in enumerate(earth_normalisation_true)
+        true_parameters[Symbol("earth_norm_", i)] = val
+    end
 end
+
 
 if !isempty(ES_bg_norms_true)
     for (i, norm) in enumerate(ES_bg_norms_true)
@@ -83,7 +96,7 @@ backgrounds = (ES=ES_bg, CC=CC_bg)
 # Propagate Asimov point to generate Asimov event rates
 
 include("../src/propagateSample.jl")
-measuredRate_ES_nue_day, measuredRate_ES_nuother_day, measuredRate_CC_day, measuredRate_ES_nue_night, measuredRate_ES_nuother_night, measuredRate_CC_night, BG_ES_tot_true, BG_CC_tot_true = propagateSamples(unoscillatedSample, responseMatrices, true_params, solarModel, bin_edges, backgrounds)
+measuredRate_ES_day, measuredRate_CC_day, measuredRate_ES_night, measuredRate_CC_night, BG_ES_tot_true, BG_CC_tot_true = propagateSamples(unoscillatedSample, responseMatrices, true_params, solarModel, bin_edges, backgrounds)
 
 # Find the first index where energy is greater than Emin
 global index_ES = findfirst(x -> x > E_threshold.ES, Ereco_bins_ES_extended.bins)
@@ -105,11 +118,27 @@ ES_bg_aboveThreshold = sum(BG_ES_tot_true[index_ES:end])
 CC_Ntot = sum(@view measuredRate_CC_night[:, index_CC:end]) - 0.5 * CC_bg_aboveThreshold
 CC_Dtot = sum(measuredRate_CC_day[index_CC:end]) - 0.5 * CC_bg_aboveThreshold
 
-ES_Ntot = sum(@view measuredRate_ES_nue_night[:, index_ES:end]) + sum(@view measuredRate_ES_nuother_night[:, index_ES:end]) - 0.5 * ES_bg_aboveThreshold
-ES_Dtot = sum(measuredRate_ES_nue_day[index_ES:end]) + sum(measuredRate_ES_nuother_day[index_ES:end]) - 0.5 * ES_bg_aboveThreshold
+ES_Ntot = sum(@view measuredRate_ES_night[:, index_ES:end]) - 0.5 * ES_bg_aboveThreshold
+ES_Dtot = sum(measuredRate_ES_day[index_ES:end]) - 0.5 * ES_bg_aboveThreshold
 
-asymm_CC = 2 * (CC_Dtot - CC_Ntot) / (CC_Dtot + CC_Ntot)
-asymm_ES = 2 * (ES_Dtot - ES_Ntot) / (ES_Dtot + ES_Ntot)
+ES_denominator = ES_Dtot + ES_Ntot
+CC_denominator = CC_Dtot + CC_Ntot
+
+if ES_denominator == 0
+    asymm_ES = 0
+    eff_asymm_ES = 0
+else
+    asymm_ES = 2 * (ES_Dtot - ES_Ntot) / ES_denominator
+    eff_asymm_ES = 2 * (ES_Dtot - ES_Ntot) / (ES_denominator + 2 * ES_bg_aboveThreshold)
+end
+
+if CC_denominator == 0
+    asymm_CC = 0
+    eff_asymm_CC = 0
+else
+    asymm_CC = 2 * (CC_Dtot - CC_Ntot) / CC_denominator
+    eff_asymm_CC = 2 * (CC_Dtot - CC_Ntot) / (CC_denominator + 2 * CC_bg_aboveThreshold)
+end
 
 # save Asimov asymmetries
 true_parameters[:ES_asymmetry] = asymm_ES
@@ -118,29 +147,27 @@ true_parameters[:CC_asymmetry] = asymm_CC
 
 # Group for feeding to likelihood
 ereco_data = (
-    ES_nue_day=measuredRate_ES_nue_day,
-    ES_nuother_day=measuredRate_ES_nuother_day,
+    ES_day=measuredRate_ES_day,
     CC_day=measuredRate_CC_day,
     
-    ES_nue_night=measuredRate_ES_nue_night,
-    ES_nuother_night=measuredRate_ES_nuother_night,
+    ES_night=measuredRate_ES_night,
     CC_night=measuredRate_CC_night
     )
 
+ES_night_summed = sum(ereco_data.ES_night, dims=1)
+CC_night_summed = sum(ereco_data.CC_night, dims=1)
 
-ereco_data_mergedES = (
-    ES_day=measuredRate_ES_nue_day .+ measuredRate_ES_nuother_day,
-    CC_day=measuredRate_CC_day,
-    
-    ES_night=measuredRate_ES_nue_night .+ measuredRate_ES_nuother_night,
-    CC_night=measuredRate_CC_night
-    )
+ES_combined = ereco_data.ES_day .+ vec(ES_night_summed)
+CC_combined = ereco_data.CC_day .+ vec(CC_night_summed)
 
-# Sum over the second dimension of CC_night
-CC_night_summed = sum(ereco_data_mergedES.CC_night, dims=1)
+@logmsg Setup ("Total number of ES data above threshold: ", sum(ES_combined[index_ES:end]))
+@logmsg Setup ("Total number of CC data above threshold: ", sum(CC_combined[index_CC:end]))
+@logmsg Setup ("Data day-night asymmetry for ES channel: ", eff_asymm_ES)
+@logmsg Setup ("Data day-night asymmetry for CC channel: ", eff_asymm_CC)
+println(" ")
 
-# Add the summed CC_night to CC_day
-CC_combined = ereco_data_mergedES.CC_day .+ vec(CC_night_summed)
+# load likelihood
+include("../src/statsLikelihood.jl")
 
 
 ###################
@@ -286,18 +313,3 @@ exit()
 =#
 ###################
 ###################
-
-# Check if index_above_threshold is not nothing
-
-# Sum the elements from index_above_threshold to the end
-es_nue_data_above_threshold = 2 * sum(ereco_data.ES_nue_day[index_ES:end])
-es_nuother_data_above_threshold = 2 * sum(ereco_data.ES_nuother_day[index_ES:end])
-total_es_data_above_threshold = es_nue_data_above_threshold .+ es_nuother_data_above_threshold
-
-@logmsg Setup ("Total number of ES data above threshold: ", total_es_data_above_threshold)
-@logmsg Setup ("Number of ES nue data above threshold: ", es_nue_data_above_threshold)
-@logmsg Setup ("Number of ES nuother data above threshold: ", es_nuother_data_above_threshold)
-@logmsg Setup ("Total number of CC data above threshold: ", sum(CC_combined[index_CC:end]))
-
-# load likelihood
-include("../src/statsLikelihood.jl")

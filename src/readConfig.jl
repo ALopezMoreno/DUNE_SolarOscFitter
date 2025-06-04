@@ -1,10 +1,9 @@
 using YAML
-using Distributions
 using Printf
 using JLD2
 using PDMats
 using Plots
-
+using Distributions
 using Printf
 
 
@@ -40,8 +39,6 @@ function track_memory(interval::Float64=0.1)
     # Return the vectors and a closure to stop the tracker.
     return mem_usages, times, ()->(stop_tracker = true; wait(tracker_task))
 end
-
-
 
 
 include("../src/logger.jl")
@@ -109,10 +106,9 @@ function load_earth_normalisation_prior(jld2_file::String)
         central = data["true"]
         
         # Create a multivariate normal distribution as the prior distribution
-        global earth_normalisation_prior = MvNormal(central, covariance)
+        global earth_normalisation_prior = MvNormal(central, covariance) 
         # Set the global variable for central values
         global earth_normalisation_true = central
-        
         return earth_normalisation_prior
     catch e
         println("Error loading earth normalisation prior from file ", jld2_file, ": ", e)
@@ -131,7 +127,8 @@ function save_settings_to_file(filename::String)
         # General settings
         write(file, "----- General -----\n")
         write(file, "Fast mode: $fast\n")
-        write(file, "Earth uncertainty enabled: $earthUncertainty\n\n")
+        write(file, "Earth uncertainty enabled: $earthUncertainty\n")
+        write(file, "Single channel mode: $singleChannel\n\n")
 
         # Solar and Earth models
         write(file, "----- Solar & Earth Models -----\n")
@@ -281,6 +278,22 @@ function main()
 
     # Fast mode?
     global fast = config["fastFit"]
+
+    # Single channel fit?
+    global singleChannel = get(config, "singleChannel", false)
+    global CC_mode, ES_mode
+    if singleChannel == false
+        CC_mode = true
+        ES_mode = true
+    elseif singleChannel == "CC"
+        CC_mode = true
+        ES_mode = false
+    elseif singleChannel == "ES"
+        CC_mode = false
+        ES_mode = true
+    else
+        error("Invalid value for singleChannel: $singleChannel. Expected false, \"CC\", or \"ES\".")
+    end
 
     # Uncertainties?
     global earthUncertainty = config["earth_potential_uncertainties"]
