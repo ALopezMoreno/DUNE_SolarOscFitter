@@ -177,7 +177,7 @@ if full:
     # Save figs
     if output_name is None:
         print("saving output as images/corner_output_all.pdf")
-        fig.savefig('images/corner_output.pdf', dpi=300, format='pdf')
+        fig.savefig('images/corner_output_all.pdf', dpi=300, format='pdf')
     else:
         print("saving output as " + output_name + "_all.pdf")
         fig.savefig(output_name + '_all.pdf', dpi=300, format='pdf')
