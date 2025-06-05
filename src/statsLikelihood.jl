@@ -238,7 +238,7 @@ likelihood_all_samples = let nObserved = ereco_data,
             loglh_CC_night = sum([poissonLogLikelihood(row[index_CC:end], obs_row[index_CC:end])
             for (row, obs_row) in zip(eachrow(expectedRate_CC_night), eachrow(nObserved.CC_night))])
 
-            loglh = loglh_CC_day + loglh_CC_night
+            loglh += loglh_CC_day + loglh_CC_night
         end
 
         # EXAMPLE FOR BARLOW BEESTON
