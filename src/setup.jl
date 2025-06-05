@@ -160,10 +160,10 @@ CC_night_summed = sum(ereco_data.CC_night, dims=1)
 ES_combined = ereco_data.ES_day .+ vec(ES_night_summed)
 CC_combined = ereco_data.CC_day .+ vec(CC_night_summed)
 
-@logmsg Setup ("Total number of ES data above threshold: ", sum(ES_combined[index_ES:end]))
-@logmsg Setup ("Total number of CC data above threshold: ", sum(CC_combined[index_CC:end]))
-@logmsg Setup ("Data day-night asymmetry for ES channel: ", eff_asymm_ES)
-@logmsg Setup ("Data day-night asymmetry for CC channel: ", eff_asymm_CC)
+@logmsg Setup "Total number of ES data above threshold: $(sci_notation(sum(ES_combined[index_ES:end])))" 
+@logmsg Setup "Total number of CC data above threshold: $(sci_notation(sum(CC_combined[index_CC:end])))" 
+@logmsg Setup @sprintf("Data day-night asymmetry for ES channel: %.4f%%", eff_asymm_ES * 100)
+@logmsg Setup @sprintf("Data day-night asymmetry for CC channel: %.4f%%", eff_asymm_CC * 100)
 println(" ")
 
 # load likelihood
