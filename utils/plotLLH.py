@@ -58,7 +58,7 @@ im1 = axs[0].imshow(matrix1.T, cmap=plotting.parula_map, aspect='auto', origin='
 X = np.linspace(lim_th12[0], lim_th12[1], matrix1.shape[1])
 Y = np.linspace(lim_th13[0], lim_th13[1], matrix1.shape[0])
 XX, YY = np.meshgrid(X, Y)
-contours = axs[0].contour(XX, YY, matrix1.T, 
+contours = axs[0].contour(XX, YY, matrix1.T - np.max(matrix1), 
                          levels=[-9, -4, -1],
                          colors='white', 
                          linewidths=2, linestyles='-') 
@@ -85,7 +85,7 @@ im2 = axs[1].imshow(matrix2.T, cmap=plotting.parula_map, aspect='auto', origin='
 X = np.linspace(lim_th12[0], lim_th12[1], matrix2.shape[1])
 Y = np.linspace(lim_dm21[0]*10000, lim_dm21[1]*10000, matrix2.shape[0])
 XX, YY = np.meshgrid(X, Y)
-contours = axs[1].contour(XX, YY, matrix2.T, 
+contours = axs[1].contour(XX, YY, matrix2.T - np.max(matrix2), 
                          levels=[-9, -4, -1],
                          colors='white', 
                          linewidths=2.5, linestyles='-') 
@@ -113,7 +113,7 @@ im3 = axs[2].imshow(matrix3.T, cmap=plotting.parula_map, aspect='auto', origin='
 X = np.linspace(lim_th13[0], lim_th13[1], matrix3.shape[1])
 Y = np.linspace(lim_dm21[0]*10000, lim_dm21[1]*10000, matrix3.shape[0])
 XX, YY = np.meshgrid(X, Y)
-contours = axs[2].contour(XX, YY, matrix3.T,
+contours = axs[2].contour(XX, YY, matrix3.T - np.max(matrix3),
                          levels=[-9, -4, -1],
                          colors='white', 
                          linewidths=2, linestyles='-') 
