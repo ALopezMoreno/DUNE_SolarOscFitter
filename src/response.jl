@@ -1,9 +1,9 @@
 include("../src/histHelpers.jl")
 
 function create_response_matrix(data, bin_info_etrue, bin_info_ereco)
-    # Extract values from the named tuples
-    e_true = data.e_true
-    e_reco = data.e_reco
+    # Extract values from the named tuples and replace zeros
+    e_true = ifelse.(e_true .== 0, 1e-9, e_true)
+    e_reco = ifelse.(e_reco .== 0, 1e-9, e_reco)
 
     # Extract bin information for e_true
     bin_number_etrue = bin_info_etrue.bin_number
