@@ -168,12 +168,10 @@ function save_settings_to_file(filename::String)
         write(file, "True ⁸B flux: $integrated_8B_flux_true\n")
         write(file, "True HEP flux: $integrated_HEP_flux_true\n\n")
 
-        # Background and efficiency files
+        # Background files
         write(file, "----- Backgrounds & Efficiencies -----\n")
         write(file, "ES background files: $ES_filepaths_BG\n")
         write(file, "CC background files: $CC_filepaths_BG\n")
-        write(file, "ES efficiency file: $ES_efficiency_filepath\n")
-        write(file, "CC efficiency file: $CC_efficiency_filepath\n")
         write(file, "ES background norms: $ES_bg_norms\n")
         write(file, "CC background norms: $CC_bg_norms\n")
         write(file, "ES background systematics: $ES_bg_sys\n")
@@ -224,13 +222,9 @@ function main()
     global other_filepath = config["reconstruction_sample_ES_nuother"]
     global CC_filepath = config["reconstruction_sample_CC"]
 
-    # Efficiency files
-    global ES_efficiency_filepath = config["ES_efficiency_file"]
-    global CC_efficiency_filepath = config["CC_efficiency_file"]
-
     # MC normalisation
-    global ES_normalisation = config["ES_flux_normalisation"]
-    global CC_normalisation = config["CC_flux_normalisation"]
+    global ES_normalisation = config["ES_exposure"]
+    global CC_normalisation = config["CC_exposure"]
 
     # Background MC
     global ES_filepaths_BG = config["ES_background_files"]

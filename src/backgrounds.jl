@@ -5,29 +5,48 @@ include("../src/histHelpers.jl")
 df_ES_list = extract_dataframes(ES_filepaths_BG)
 df_CC_list = extract_dataframes(CC_filepaths_BG)
 
-# Get bin heights and central bin energies for the backgrounds
+
 ES_bg = []
-
-
 for df in df_ES_list
     if "weights" in names(df)
-        ES_temp, ES_temp_etrue = create_histogram(df.Ereco, Ereco_bins_ES_extended, weights = df.weights)
+        ES_temp, ES_temp_etrue = create_histogram(df.Ereco, Ereco_bins_ES_extended, weightsRaw=df.weights)
     else
         ES_temp, ES_temp_etrue = create_histogram(df.Ereco, Ereco_bins_ES_extended)
     end
-    push!(ES_bg, ES_temp)
+
+    if "rawWeights" in names(df)
+        ES_temp_eff, _ = create_histogram(df.Eraw[df.mask], Ereco_bins_ES_extended, weightsRaw=df.rawWeights[df.mask], normalise=false)
+        ES_temp_total, _ = create_histogram(df.Eraw, Ereco_bins_ES_extended, weightsRaw=df.rawWeights, normalise=false)
+    else
+        ES_temp_eff, _ = create_histogram(df.Eraw[df.mask], Ereco_bins_ES_extended, normalise=false)
+        ES_temp_total, _ = create_histogram(df.Eraw, Ereco_bins_ES_extended, normalise=false)
+    end
+
+    ES_eff_bg =  @. ifelse(ES_temp_total == 0, 0.0, ES_temp_eff / ES_temp_total)
+    push!(ES_bg, ES_temp .* detection_time .* ES_eff_bg)
 end
 
 
 CC_bg = []
 for df in df_CC_list
     if "weights" in names(df)
-        CC_temp, CC_temp_etrue = create_histogram(df.Ereco, Ereco_bins_CC_extended, weights = df.weights)
+        CC_temp, CC_temp_etrue = create_histogram(df.Ereco, Ereco_bins_CC_extended, weightsRaw=df.weights)
     else
         CC_temp, CC_temp_etrue = create_histogram(df.Ereco, Ereco_bins_CC_extended)
     end
-    push!(CC_bg, CC_temp)
+
+    if "rawWeights" in names(df)
+        CC_temp_eff, _ = create_histogram(df.Eraw[df.mask], Ereco_bins_CC_extended, weightsRaw=df.rawWeights[df.mask], normalise=false)
+        CC_temp_total, _ = create_histogram(df.Eraw, Ereco_bins_CC_extended, weightsRaw=df.rawWeights, normalise=false)
+    else
+        CC_temp_eff, _ = create_histogram(df.Eraw[df.mask], Ereco_bins_CC_extended, normalise=false)
+        CC_temp_total, _ = create_histogram(df.Eraw, Ereco_bins_CC_extended, normalise=false)
+    end
+
+    CC_eff_bg = @. ifelse(CC_temp_total == 0, 0.0, CC_temp_eff / CC_temp_total)
+    push!(CC_bg, CC_temp .* detection_time .* CC_eff_bg)
 end
+
 
 # Normalise accordingly and add systematic as nuisance parameters if needed
 global ES_bg_norms_true = []

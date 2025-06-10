@@ -191,16 +191,16 @@ function propagateSamples(unoscillatedSample, responseMatrices, params, solarMod
       oscillated_sample_ES_nue_night = (unoscillatedSample.ES_nue_8B' .* (params.integrated_8B_flux' .* oscProbs_nue_8B_night .* exposure_weights)) .+
                                        (unoscillatedSample.ES_nue_hep' .* (params.integrated_HEP_flux .* oscProbs_nue_hep_night .* exposure_weights))
 
-      eventRate_ES_nue_day = 0.5 .* ((responseMatrices.ES.nue' * oscillated_sample_ES_nue_day) .* ES_eff)  # 0.5 corresponds to the yearly daytime fraction (#CHECK!)
-      eventRate_ES_nue_night = vcat([0.5 .* ((row' * responseMatrices.ES.nue) .* ES_eff' ) for row in eachrow(oscillated_sample_ES_nue_night)]...)  # FACTOR OUT EFFICIENCIES!!
+      eventRate_ES_nue_day = 0.5 .* ((responseMatrices.ES.nue' * oscillated_sample_ES_nue_day) .* ES_nue_eff)  # 0.5 corresponds to the yearly daytime fraction (#CHECK!)
+      eventRate_ES_nue_night = vcat([0.5 .* ((row' * responseMatrices.ES.nue) .* ES_nue_eff' ) for row in eachrow(oscillated_sample_ES_nue_night)]...)  # FACTOR OUT EFFICIENCIES!!
 
 
       oscillated_sample_ES_nuother_day = unoscillatedSample.ES_nuother_8B .* oscProbs_nuother_8B_day  .* params.integrated_8B_flux .+ unoscillatedSample.ES_nuother_hep .* oscProbs_nuother_hep_day .* params.integrated_HEP_flux
       oscillated_sample_ES_nuother_night = (unoscillatedSample.ES_nuother_8B' .* (params.integrated_8B_flux' .* oscProbs_nuother_8B_night .* exposure_weights)) .+
                                            (unoscillatedSample.ES_nuother_hep' .* (params.integrated_HEP_flux .* oscProbs_nuother_hep_night .* exposure_weights))
 
-      eventRate_ES_nuother_day = 0.5 .* ((responseMatrices.ES.nuother' * oscillated_sample_ES_nuother_day) .* ES_eff)  # 0.5 corresponds to the yearly daytime fraction (#CHECK!)
-      eventRate_ES_nuother_night = vcat([0.5 .* ((row' * responseMatrices.ES.nuother) .* ES_eff' ) for row in eachrow(oscillated_sample_ES_nuother_night)]...)  # FACTOR OUT EFFICIENCIES!!
+      eventRate_ES_nuother_day = 0.5 .* ((responseMatrices.ES.nuother' * oscillated_sample_ES_nuother_day) .* ES_nuother_eff)  # 0.5 corresponds to the yearly daytime fraction (#CHECK!)
+      eventRate_ES_nuother_night = vcat([0.5 .* ((row' * responseMatrices.ES.nuother) .* ES_nuother_eff' ) for row in eachrow(oscillated_sample_ES_nuother_night)]...)  # FACTOR OUT EFFICIENCIES!!
 
       eventRate_ES_day = (eventRate_ES_nue_day .+ eventRate_ES_nuother_day) .+ 0.5 .* BG_ES
       eventRate_ES_night = (eventRate_ES_nue_night .+ eventRate_ES_nuother_night) .+ 0.5 .* (BG_ES' .* exposure_weights)
