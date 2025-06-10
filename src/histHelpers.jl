@@ -5,14 +5,16 @@ function extract_dataframes(filepaths::Vector{String})::Vector{DataFrame}
     return [CSV.File(fp) |> DataFrame for fp in filepaths]
 end
 
-function create_histogram(data, bin_info; weights=nothing, normalise=true)
+function create_histogram(dataRaw, bin_info; weightsRaw=nothing, normalise=true)
     # Extract values from the named tuple
     bin_number = bin_info.bin_number
     min_val = bin_info.min
     max_val = bin_info.max
 
+    # Clean empty values
+    data = filter(!ismissing, dataRaw)
+
     bins = get(bin_info, :bins, nothing)
-    weights = coalesce.(weights, 0)
     
     if bins === nothing
         # Create bins if 'bins' field is not present
@@ -26,7 +28,9 @@ function create_histogram(data, bin_info; weights=nothing, normalise=true)
     end
 
     # Check if optional weights are provided and have valid length
-    if weights !== nothing
+    if weightsRaw !== nothing
+        weights = filter(!ismissing, weightsRaw)
+        weights = coalesce.(weights, 0)
         if length(data) != length(weights)
             error("Weights vector length must match the length of data.")
         end

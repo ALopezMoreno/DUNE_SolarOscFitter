@@ -37,7 +37,6 @@ include("../src/exposure.jl")
 include("../src/unoscillatedSample.jl")
 include("../src/response.jl")
 include("../src/backgrounds.jl")
-include("../src/efficiency.jl")
 
 # Initialise parameters and set oservations to Asimov parameter values (PDG)
 true_parameters = Dict{Symbol, Any}(

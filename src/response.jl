@@ -2,8 +2,8 @@ include("../src/histHelpers.jl")
 
 function create_response_matrix(data, bin_info_etrue, bin_info_ereco)
     # Extract values from the named tuples and replace zeros
-    e_true = ifelse.(e_true .== 0, 1e-9, e_true)
-    e_reco = ifelse.(e_reco .== 0, 1e-9, e_reco)
+    e_true = ifelse.(data.e_true .== 0, 1e-9, data.e_true)
+    e_reco = ifelse.(data.e_reco .== 0, 1e-9, data.e_reco)
 
     # Extract bin information for e_true
     bin_number_etrue = bin_info_etrue.bin_number
@@ -56,9 +56,9 @@ end
 
 
 # Load simulations and create response matrices
-df2_nue = CSV.File(nue_filepath) |> DataFrame
-df2_other = CSV.File(other_filepath) |> DataFrame
-df2_CC = CSV.File(CC_filepath) |> DataFrame
+df_nue = CSV.File(nue_filepath) |> DataFrame
+df_nuother = CSV.File(other_filepath) |> DataFrame
+df_CC = CSV.File(CC_filepath) |> DataFrame
 
 # Extend ereco bins from -inf to +inf:
 bins_ES = collect(range(Ereco_bins_ES.min, stop=Ereco_bins_ES.max, length=Ereco_bins_ES.bin_number + 1))
@@ -73,10 +73,9 @@ bins_CC[end] = Inf
 global Ereco_bins_ES_extended = (bin_number=Ereco_bins_ES.bin_number, min=Ereco_bins_ES.min, max=Ereco_bins_ES.max, bins=bins_ES)
 global Ereco_bins_CC_extended = (bin_number=Ereco_bins_CC.bin_number, min=Ereco_bins_CC.min, max=Ereco_bins_CC.max, bins=bins_CC)
 
-
-nue_ES_sample = (e_true=df2_nue.Enu, e_reco=df2_nue.Ereco)
-other_ES_sample = (e_true=df2_other.Enu, e_reco=df2_other.Ereco)
-CC_sample = (e_true=df2_CC.Enu, e_reco=df2_CC.Ereco)
+nue_ES_sample = (e_true=df_nue.Etrue[df_nue.mask], e_reco=df_nue.Eraw[df_nue.mask])
+other_ES_sample = (e_true=df_nuother.Etrue[df_nuother.mask], e_reco=df_nuother.Eraw[df_nuother.mask])
+CC_sample = (e_true=df_CC.Etrue[df_CC.mask], e_reco=df_CC.Eraw[df_CC.mask])
 
 nue_ES_nue_response = create_response_matrix(nue_ES_sample, Etrue_bins, Ereco_bins_ES_extended)
 other_ES_response = create_response_matrix(other_ES_sample, Etrue_bins, Ereco_bins_ES_extended)
@@ -86,4 +85,14 @@ CC_response = create_response_matrix(CC_sample, Etrue_bins, Ereco_bins_CC_extend
 ES_response = (nue=nue_ES_nue_response, nuother=other_ES_response)
 responseMatrices = (ES=ES_response, CC=CC_response)
 
+ES_nue_selection, _ = create_histogram(df_nue.Eraw[df_nue.mask], Ereco_bins_ES_extended, normalise=false)
+ES_nuother_selection, _ = create_histogram(df_nuother.Eraw[df_nuother.mask], Ereco_bins_ES_extended, normalise=false)
+CC_selection, _ = create_histogram(df_CC.Eraw[df_CC.mask], Ereco_bins_CC_extended, normalise=false)
 
+ES_nue_total, ES_nue_bin_centers = create_histogram(df_nue.Eraw, Ereco_bins_ES_extended, normalise=false)
+ES_nuother_total, ES_nuother_bin_centers = create_histogram(df_nuother.Eraw, Ereco_bins_ES_extended, normalise=false)
+CC_total, CC_bin_centers = create_histogram(df_CC.Eraw, Ereco_bins_CC_extended, normalise=false)
+
+global ES_nue_eff = @. ifelse(ES_nue_total == 0, 0.0, ES_nue_selection / ES_nue_total)
+global ES_nuother_eff = @. ifelse(ES_nuother_total == 0, 0.0, ES_nuother_selection / ES_nuother_total)
+global CC_eff = @. ifelse(CC_total == 0, 0.0, CC_selection / CC_total)
