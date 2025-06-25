@@ -3,8 +3,8 @@
 
 # If prevFile is not commented, the fitter will search for prevFile and continue the MCMC chain
 # from where it left off. ====> This field is compulsory when calculating derived quantities! <====
-#prevFile: "cluster_output/CC-onlly__sergioReco_5MeV__water100cmBG__4%8B-sys__2%BG-sys__dm-7.5_17"
-outFile: "outputs/test_fit"
+#prevFile: "outputs/test_fit_CC_10MeV_-2BG_deltam4.5"
+outFile:  "outputs/test_fit"
 
 # Will you run in "LLH" (Log likelihood scan), "MCMC" (Markov Chain Monte-Carlo fit), or "derived" (calculate derived quantities from an existing fit) mode?
 RunMode: "MCMC"  
@@ -12,7 +12,7 @@ RunMode: "MCMC"
 Asimov: true    # Data fit or Asimov fit?
 fastFit: true   # Accelerate calculations by simplifying the earth model and averaging the solar density over the production region (recommended)
 
-singleChannel: ES  # Choose to run a single channel in the fit: false (both), CC, ES. False unless otherwise specified
+singleChannel: CC  # Choose to run a single channel in the fit: false (both), CC, ES. False unless otherwise specified
 
 ##############################
 ##### Asimov true values #####
@@ -55,11 +55,11 @@ prior_HEP_flux: Uniform(0, 2e4) # Assume at most 2-3 orders of magnitude smaller
 ###########################
 ##### MCMC parameters #####
 
-nChains: 2
-nSteps: 20000 # Number of post-stabilisation steps
+nChains: 10
+nSteps: 10000 # Number of post-stabilisation steps
 
 maxTuningAttempts: 30 # Set  to zero for no adaptive stepsize tuning
-nTuning: 2000 # Number of tuning steps on each cycle
+nTuning: 2500 # Number of tuning steps on each cycle
 
 # Turn on and off different uncertainties (turning off parameters makes the fit faster)
 earth_potential_uncertainties: true 
@@ -68,41 +68,41 @@ earth_potential_uncertainties: true
 ##########################
 ##### LLH parameters #####
 
-llh_bins: 200
+llh_bins: 15
 
 
 #################################
 ##### MC and fit properties #####40
 
-CC_flux_normalisation: 1 # * 100 kTon years 
-ES_flux_normalisation: 1 # * 100 kTon years 
+CC_exposure: 10 # in module years (10s of kTon years)
+ES_exposure: 10 # in module years (10s of kTon years)
 
-ES_background_normalisations: [40000]
+##### Background rates in Hz / module
 
-# CC BACKGROUNDS: AT THE MOMENT, WE EXPECT:
-# 8.81e+05  neutrons per kTon year
-# 4.717e+05   gammas per kTon year
-# CURRENT NORMALISATION OF CC FLUX IS AT 400 kTon year
-# ==> CC backgrounds: [3.524e8, 1.887e8]
+# Nominal values:
+# ? ES backgrounds
+# neutrons: 4.98 Hz/module 
+# gammas: 1.145 x neutrons = 5.70 Hz/module
 
-CC_background_normalisations: [0, 0] #[2220120, 1188810]  # Currently at 1e-3 * nominal
+ES_background_normalisations: [2] 
+CC_background_normalisations: [4.98, 5.70]
 
-ES_background_systematics: [0.02]
-CC_background_systematics: [0.02, 0.02] # Fractional Currently at 2%
+ES_background_systematics: [0.] # Fractional rate uncertainty
+CC_background_systematics: [0., 0.] # Fractional rate uncertainty
 
-nBins_Etrue: 40
+nBins_Etrue: 30
 
-range_Etrue: [5, 25]
-
-nBins_Ereco_CC: 40
+range_Etrue: [0.1, 20]
 
 nBins_Ereco_ES: 40
 
+nBins_Ereco_CC: 40
+
+range_Ereco_ES: [2, 20]
 range_Ereco_CC: [5, 25]
-range_Ereco_ES: [5, 25]
 
 Ereco_min_ES: 5
-Ereco_min_CC: 5
+Ereco_min_CC: 10
 
 nBins_cosz: 40
 
@@ -127,18 +127,13 @@ earth_model_file: "inputs/EARTH_MODEL_PREM_DENSE.dat"
 earth_uncertainty_file: "inputs/earth_uncertainty_4.5e-5.jld2"
 solar_exposure_file: "inputs/solarExposure.csv"
 
-# Detector response files
-reconstruction_sample_CC: "inputs/sergio_CC_response.csv"
-# reconstruction_sample_CC: "inputs/Enu_Ereco_CC_smeared.csv"
-reconstruction_sample_ES_nue: "inputs/Enu_Ereco_ES_nue.csv"
-reconstruction_sample_ES_nuother: "inputs/Enu_Ereco_ES_nuother.csv"
+# Detector response files ###### NOT UPDATED. AT THE MOMENT YOU ARE EXPECTED TO USE YOUR OWN!!!!
+reconstruction_sample_CC: "inputs/sergio_reco_CC_withMediumCuts.csv"
+reconstruction_sample_ES_nue: "inputs/ES_reconstruction_250kevts_flatdistrib_noCrossSection_GeV_june2025.csv"
+reconstruction_sample_ES_nuother: "inputs/ES_reconstruction_250kevts_flatdistrib_noCrossSection_GeV_june2025.csv"
 
-# Efficiency files
-ES_efficiency_file: "inputs/eff_CC_sergio.csv"
-CC_efficiency_file: "inputs/eff_CC_sergio.csv"
-
-# Background files
-CC_background_files: ["inputs/neutron_bg_CC_sergio.csv", "inputs/gamma_bg_CC_sergio.csv"]
-ES_background_files: ["inputs/Ereco_NGamma_1e6-1_evts.csv"]
+# Background files ###### NOT UPDATED. AT THE MOMENT YOU ARE EXPECTED TO USE YOUR OWN!!!!
+CC_background_files: ["inputs/neutron_bg_CC_sergio_withCuts.csv", "inputs/gamma_bg_CC_sergio_withCuts.csv"]
+ES_background_files: ["inputs/Ereco_NGamma_1e6-1_evts_GeV_june2025_v2.csv"]
 
 data_file: "data.txt"
