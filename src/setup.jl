@@ -156,8 +156,8 @@ ereco_data = (
 ES_night_summed = sum(ereco_data.ES_night, dims=1)
 CC_night_summed = sum(ereco_data.CC_night, dims=1)
 
-ES_combined = ereco_data.ES_day .+ vec(ES_night_summed)
-CC_combined = ereco_data.CC_day .+ vec(CC_night_summed)
+ES_combined = vec(ereco_data.ES_day) .+ vec(ES_night_summed)
+CC_combined = vec(ereco_data.CC_day) .+ vec(CC_night_summed)
 
 @logmsg Setup "Total number of ES data above threshold: $(sci_notation(sum(ES_combined[index_ES:end])))" 
 @logmsg Setup "Total number of CC data above threshold: $(sci_notation(sum(CC_combined[index_CC:end])))" 

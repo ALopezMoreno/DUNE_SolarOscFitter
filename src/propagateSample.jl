@@ -46,8 +46,6 @@ Note:
   formats and that the constants and models are appropriately defined.
 """
 
-
-include("../src/oscCalc.jl")
 include("../src/oscillations/osc.jl")
 
 using .Osc: oscPars, osc_prob_both_fast, osc_prob_both_slow
@@ -207,7 +205,7 @@ function propagateSamples(unoscillatedSample, responseMatrices, params, solarMod
 
     else
       eventRate_ES_day = fill(0., Ereco_bins_ES.bin_number)
-      eventRate_ES_night = fill(0., (Ereco_bins_ES.bin_number, cosz_bins.bin_number))
+      eventRate_ES_night = fill(0., (cosz_bins.bin_number, Ereco_bins_ES.bin_number))
     end
 
 
@@ -221,7 +219,7 @@ function propagateSamples(unoscillatedSample, responseMatrices, params, solarMod
 
     else
       eventRate_CC_day = fill(0., Ereco_bins_CC.bin_number)
-      eventRate_CC_night = fill(0., (Ereco_bins_CC.bin_number, cosz_bins.bin_number))
+      eventRate_CC_night = fill(0., (cosz_bins.bin_number, Ereco_bins_CC.bin_number))
     end
 
     
