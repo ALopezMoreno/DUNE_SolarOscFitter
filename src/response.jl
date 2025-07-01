@@ -53,8 +53,6 @@ function create_response_matrix(data, bin_info_etrue, bin_info_ereco)
     return contribution_matrix
 end
 
-
-
 # Load simulations and create response matrices
 df_nue = CSV.File(nue_filepath) |> DataFrame
 df_nuother = CSV.File(other_filepath) |> DataFrame
@@ -73,9 +71,9 @@ bins_CC[end] = Inf
 global Ereco_bins_ES_extended = (bin_number=Ereco_bins_ES.bin_number, min=Ereco_bins_ES.min, max=Ereco_bins_ES.max, bins=bins_ES)
 global Ereco_bins_CC_extended = (bin_number=Ereco_bins_CC.bin_number, min=Ereco_bins_CC.min, max=Ereco_bins_CC.max, bins=bins_CC)
 
-nue_ES_sample = (e_true=df_nue.Etrue[df_nue.mask], e_reco=df_nue.Eraw[df_nue.mask])
-other_ES_sample = (e_true=df_nuother.Etrue[df_nuother.mask], e_reco=df_nuother.Eraw[df_nuother.mask])
-CC_sample = (e_true=df_CC.Etrue[df_CC.mask], e_reco=df_CC.Eraw[df_CC.mask])
+nue_ES_sample = (e_true=df_nue.Etrue, e_reco=df_nue.Ereco)
+other_ES_sample = (e_true=df_nuother.Etrue, e_reco=df_nuother.Ereco)
+CC_sample = (e_true=df_CC.Etrue, e_reco=df_CC.Ereco)
 
 nue_ES_nue_response = create_response_matrix(nue_ES_sample, Etrue_bins, Ereco_bins_ES_extended)
 other_ES_response = create_response_matrix(other_ES_sample, Etrue_bins, Ereco_bins_ES_extended)
@@ -85,14 +83,107 @@ CC_response = create_response_matrix(CC_sample, Etrue_bins, Ereco_bins_CC_extend
 ES_response = (nue=nue_ES_nue_response, nuother=other_ES_response)
 responseMatrices = (ES=ES_response, CC=CC_response)
 
-ES_nue_selection, _ = create_histogram(df_nue.Eraw[df_nue.mask], Ereco_bins_ES_extended, normalise=false)
-ES_nuother_selection, _ = create_histogram(df_nuother.Eraw[df_nuother.mask], Ereco_bins_ES_extended, normalise=false)
-CC_selection, _ = create_histogram(df_CC.Eraw[df_CC.mask], Ereco_bins_CC_extended, normalise=false)
+# Helper function to safely get weights if they exist
+function get_weights(df, mask=nothing)
+    if hasproperty(df, :Weights)
+        return mask !== nothing ? df.Weights[mask] : df.Weights
+    else
+        return nothing
+    end
+end
 
-ES_nue_total, ES_nue_bin_centers = create_histogram(df_nue.Eraw, Ereco_bins_ES_extended, normalise=false)
-ES_nuother_total, ES_nuother_bin_centers = create_histogram(df_nuother.Eraw, Ereco_bins_ES_extended, normalise=false)
-CC_total, CC_bin_centers = create_histogram(df_CC.Eraw, Ereco_bins_CC_extended, normalise=false)
+# Get selection efficiencies
+ES_nue_selection, _ = create_histogram(
+    df_nue.Ereco[df_nue.mask], 
+    Ereco_bins_ES_extended, 
+    normalise=false, 
+    weights=get_weights(df_nue, df_nue.mask)
+)
 
-global ES_nue_eff = @. ifelse(ES_nue_total == 0, 0.0, ES_nue_selection / ES_nue_total)
-global ES_nuother_eff = @. ifelse(ES_nuother_total == 0, 0.0, ES_nuother_selection / ES_nuother_total)
-global CC_eff = @. ifelse(CC_total == 0, 0.0, CC_selection / CC_total)
+ES_nuother_selection, _ = create_histogram(
+    df_nuother.Ereco[df_nuother.mask], 
+    Ereco_bins_ES_extended,
+    normalise=false,
+    weights=get_weights(df_nuother, df_nuother.mask)
+)
+
+CC_selection, CC_selected_bin_centers = create_histogram(
+    df_CC.Ereco[df_CC.mask],
+    Ereco_bins_CC_extended,
+    normalise=false,
+    weights=get_weights(df_CC, df_CC.mask)
+)
+
+# For total histograms (no mask)
+ES_nue_total, ES_nue_bin_centers = create_histogram(
+    df_nue.Ereco,
+    Ereco_bins_ES_extended,
+    normalise=false,
+    weights=get_weights(df_nue)
+)
+
+ES_nuother_total, ES_nuother_bin_centers = create_histogram(
+    df_nuother.Ereco,
+    Ereco_bins_ES_extended,
+    normalise=false,
+    weights=get_weights(df_nuother)
+)
+
+CC_total, CC_bin_centers = create_histogram(
+    df_CC.Ereco,
+    Ereco_bins_CC_extended,
+    normalise=false,
+    weights=get_weights(df_CC)
+)
+
+global ES_nue_selection_eff = @. ifelse(ES_nue_total == 0, 0.0, ES_nue_selection / ES_nue_total)
+global ES_nuother_selection_eff = @. ifelse(ES_nuother_total == 0, 0.0, ES_nuother_selection / ES_nuother_total)
+global CC_selection_eff = @. ifelse(CC_total == 0, 0.0, CC_selection / CC_total)
+
+# get reco efficiencies from histFile
+#TO DO. FOR THE MOMENT ASSUME 90% FLAT FOR CC (ES ALREADY INCLUDED IN RECO FILES)
+
+global ES_nue_reco_eff = fill(1., Ereco_bins_ES.bin_number)
+global ES_nuother_reco_eff = fill(1., Ereco_bins_ES.bin_number)
+global CC_reco_eff = fill(0.9, Ereco_bins_CC.bin_number)
+
+# Total efficiency is the product of the two:
+global ES_nue_eff = ES_nue_selection_eff .* ES_nue_reco_eff
+global ES_nuother_eff = ES_nuother_selection_eff .* ES_nuother_reco_eff
+global CC_eff = CC_selection_eff .* CC_reco_eff
+
+#=
+myP = plot(CC_bin_centers.*1000, CC_eff, 
+    seriestype = :steppre,
+    linewidth = 2,
+    label = "CC Efficiency",
+    xlabel = "Recoil Energy (MeV)",
+    ylabel = "Efficiency",
+    title = "CC Selection Efficiency"
+)
+
+# --- Plot 2: Total vs. Selected Events (step histograms) ---
+plot_events = plot(CC_bin_centers.*1000, 
+    log10.(replace(CC_total, 0 => 1e-3)),  # Replace zeros for log scale
+    seriestype = :steppre, 
+    linewidth = 2,
+    label = "CC Total Events",
+    xlabel = "Recoil Energy (MeV)",
+    ylabel = "Counts (log scale)",
+    title = "CC Events: Total vs. Selected",
+    color = :blue,
+)
+
+plot!(plot_events, CC_selected_bin_centers.*1000, 
+    log10.(replace(CC_selection, 0 => 1e-3)),  # Replace zeros for log scale
+    seriestype = :steppre, 
+    linewidth = 2,
+    label = "CC Selected Events", ylims=[-2,6]
+)
+
+# --- Display both plots ---
+display(myP)  # Show efficiency plot
+sleep(1000)
+
+#display(plot_events)  # Show events plot
+=#
