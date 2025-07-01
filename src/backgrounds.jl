@@ -9,42 +9,34 @@ df_CC_list = extract_dataframes(CC_filepaths_BG)
 ES_bg = []
 for df in df_ES_list
     if "weights" in names(df)
-        ES_temp, ES_temp_etrue = create_histogram(df.Ereco, Ereco_bins_ES_extended, weightsRaw=df.weights)
+        ES_temp, ES_temp_etrue = create_histogram(df.Ereco, Ereco_bins_ES_extended, weights=df.weights, normalise=true)
+        ES_temp_selec, _ = create_histogram(df.Ereco[df.mask], Ereco_bins_ES_extended, weights=df.weights[df.mask], normalise=false)
+        ES_temp_total, _ = create_histogram(df.Eraw, Ereco_bins_ES_extended, weights=df.weights, normalise=false)
     else
-        ES_temp, ES_temp_etrue = create_histogram(df.Ereco, Ereco_bins_ES_extended)
+        ES_temp, ES_temp_etrue = create_histogram(df.Ereco, Ereco_bins_ES_extended, normalise=true)
+        ES_temp_selec, _ = create_histogram(df.Ereco[df.mask], Ereco_bins_ES_extended, normalise=false)
+        ES_temp_total, _ = create_histogram(df.Ereco, Ereco_bins_ES_extended, normalise=false)
     end
 
-    if "rawWeights" in names(df)
-        ES_temp_eff, _ = create_histogram(df.Eraw[df.mask], Ereco_bins_ES_extended, weightsRaw=df.rawWeights[df.mask], normalise=false)
-        ES_temp_total, _ = create_histogram(df.Eraw, Ereco_bins_ES_extended, weightsRaw=df.rawWeights, normalise=false)
-    else
-        ES_temp_eff, _ = create_histogram(df.Eraw[df.mask], Ereco_bins_ES_extended, normalise=false)
-        ES_temp_total, _ = create_histogram(df.Eraw, Ereco_bins_ES_extended, normalise=false)
-    end
-
-    ES_eff_bg =  @. ifelse(ES_temp_total == 0, 0.0, ES_temp_eff / ES_temp_total)
-    push!(ES_bg, ES_temp .* detection_time .* ES_eff_bg)
+    ES_eff_bg =  @. ifelse(ES_temp_total == 0, 0.0, ES_temp_selec / ES_temp_total)
+    push!(ES_bg, ES_temp .* detection_time .* ES_eff_bg .* ES_normalisation)
 end
 
 
 CC_bg = []
 for df in df_CC_list
     if "weights" in names(df)
-        CC_temp, CC_temp_etrue = create_histogram(df.Ereco, Ereco_bins_CC_extended, weightsRaw=df.weights)
+        CC_temp, CC_temp_etrue = create_histogram(df.Ereco, Ereco_bins_CC_extended, weights=df.weights, normalise=true)
+        CC_temp_selec, _ = create_histogram(df.Ereco[df.mask], Ereco_bins_CC_extended, weights=df.weights[df.mask], normalise=false)
+        CC_temp_total, _ = create_histogram(df.Ereco, Ereco_bins_CC_extended, weights=df.weights, normalise=false)
     else
-        CC_temp, CC_temp_etrue = create_histogram(df.Ereco, Ereco_bins_CC_extended)
+        CC_temp, CC_temp_etrue = create_histogram(df.Ereco, Ereco_bins_CC_extended, normalise=true)
+        CC_temp_selec, _ = create_histogram(df.Ereco[df.mask], Ereco_bins_CC_extended, normalise=false)
+        CC_temp_total, _ = create_histogram(df.Ereco, Ereco_bins_CC_extended, normalise=false)        
     end
 
-    if "rawWeights" in names(df)
-        CC_temp_eff, _ = create_histogram(df.Eraw[df.mask], Ereco_bins_CC_extended, weightsRaw=df.rawWeights[df.mask], normalise=false)
-        CC_temp_total, _ = create_histogram(df.Eraw, Ereco_bins_CC_extended, weightsRaw=df.rawWeights, normalise=false)
-    else
-        CC_temp_eff, _ = create_histogram(df.Eraw[df.mask], Ereco_bins_CC_extended, normalise=false)
-        CC_temp_total, _ = create_histogram(df.Eraw, Ereco_bins_CC_extended, normalise=false)
-    end
-
-    CC_eff_bg = @. ifelse(CC_temp_total == 0, 0.0, CC_temp_eff / CC_temp_total)
-    push!(CC_bg, CC_temp .* detection_time .* CC_eff_bg)
+    CC_eff_bg = @. ifelse(CC_temp_total == 0, 0.0, CC_temp_selec / CC_temp_total)
+    push!(CC_bg, CC_temp .* detection_time .* CC_eff_bg .* CC_normalisation)
 end
 
 

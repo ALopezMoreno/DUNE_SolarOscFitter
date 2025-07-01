@@ -6,7 +6,7 @@ function extract_dataframes(filepaths::Vector{String})::Vector{DataFrame}
 end
 
 
-function create_histogram(dataRaw, bin_info; weightsRaw=nothing, normalise=true)
+function create_histogram(dataRaw, bin_info; weights=nothing, normalise=true)
     # Extract values from the named tuple
     bin_number = bin_info.bin_number
     min_val = bin_info.min
@@ -29,14 +29,14 @@ function create_histogram(dataRaw, bin_info; weightsRaw=nothing, normalise=true)
     end
 
     # Check if optional weights are provided and have valid length
-    if weightsRaw !== nothing
-        weights = filter(!ismissing, weightsRaw)
-        weights = coalesce.(weights, 0)
-        if length(data) != length(weights)
+    if weights !== nothing
+        processed_weights = filter(!ismissing, weights)
+        processed_weights = coalesce.(processed_weights, 0)
+        if length(data) != length(processed_weights)
             error("Weights vector length must match the length of data.")
         end
         # Create histogram using weights
-        hist = fit(Histogram, data, Weights(weights), bins)
+        hist = fit(Histogram, data, Weights(processed_weights), bins)
     else
         # Create unweighted histogram
         hist = fit(Histogram, data, bins)
