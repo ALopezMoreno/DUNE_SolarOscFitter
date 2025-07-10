@@ -1,15 +1,34 @@
+#=
+setup.jl
+
+Main setup script for the Solar Oscillation Fitter.
+This file initializes the analysis environment, loads all necessary data,
+and prepares the fake data for fitting.
+
+Key functionality:
+- Loads solar model and Earth profile data
+- Sets up neutrino oscillation parameters
+- Generates Asimov (expected) event rates
+- Calculates day-night asymmetries
+- Prepares likelihood function
+
+Author: [Author name]
+=#
+
 ######################################
 ######## IMPORTS AND INCLUDES ########
 ######################################
 
-using JLD2
-using CSV
-using DataFrames
-using Plots
+# External packages for data handling and plotting
+using JLD2        # For saving/loading Julia data files
+using CSV         # For reading CSV files
+using DataFrames  # For data manipulation
+using Plots       # For plotting functionality
 
+# Include local modules and objects
 include("../src/objects.jl")
 
-# Remind user of singleChannel settings:
+# Display current channel configuration to user
 println(" ")
 if singleChannel == false
     @logmsg Setup ("Fitting ES and CC channels.\n")
@@ -24,36 +43,41 @@ end
 #############################
 
 # Load solar production region and flux shapes
+# This includes the solar model with neutrino production profiles
 include("../src/solarModel.jl")
 
 # Load earth model and neutrino paths
+# Earth density profile for matter effects during propagation
 include("../src/earthProfile.jl")
+# Generate neutrino paths through Earth for different zenith angles
 include("../src/oscillations/makePaths.jl")
 
-# Load exposure to cosz in the earth
+# Load exposure to cos(zenith) in the earth
+# Detector exposure as a function of zenith angle
 include("../src/exposure.jl")
 
-# Load unoscillated MC
-include("../src/unoscillatedSample.jl")
-include("../src/response.jl")
-include("../src/backgrounds.jl")
+# Load unoscillated Monte Carlo samples and detector response
+include("../src/unoscillatedSample.jl")  # MC truth samples before oscillations
+include("../src/response.jl")            # Detector response matrices
+include("../src/backgrounds.jl")         # Background event rates
 
-# Initialise parameters and set oservations to Asimov parameter values (PDG)
+# Initialize parameters and set observations to Asimov parameter values (PDG best-fit)
+# Asimov dataset uses the true parameter values to generate expected event rates
 true_parameters = Dict{Symbol, Any}(
-    # mixing parameters
-    :sin2_th12 => sin2_th12_true,
-    :sin2_th13 => sin2_th13_true,
-    :dm2_21   => dm2_21_true,
+    # Neutrino mixing parameters (PDG 2020 values)
+    :sin2_th12 => sin2_th12_true,  # Solar mixing angle
+    :sin2_th13 => sin2_th13_true,  # Reactor mixing angle  
+    :dm2_21   => dm2_21_true,      # Solar mass-squared difference
 
-    # HEP discovery
+    # High Energy Physics (HEP) neutrino flux discovery potential
     :integrated_HEP_flux => integrated_HEP_flux_true,
 
-    # systematic parameters
+    # Systematic parameters for solar flux normalization
     :integrated_8B_flux => integrated_8B_flux_true,
 
-    # dependent variables
-    :ES_asymmetry => 0,
-    :CC_asymmetry => 0
+    # Day-night asymmetry observables (calculated later)
+    :ES_asymmetry => 0,  # Elastic scattering asymmetry
+    :CC_asymmetry => 0   # Charged current asymmetry
 )
 
 # Conditionally add nuisance parameters
