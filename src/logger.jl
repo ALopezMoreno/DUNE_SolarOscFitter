@@ -1,12 +1,28 @@
+#=
+logger.jl
+
+Custom logging system for the Solar Oscillation Fitter with colored output
+and specialized log levels for different analysis stages.
+
+Features:
+- Custom log levels: MCMC, Setup, Output
+- Color-coded console output for better readability
+- Scientific notation formatting for numerical values
+- Integration with Julia's standard logging system
+
+Author: [Author name]
+=#
+
 using Printf
 using Logging
 
-# Define custom log levels - we keep built-in Info, Warn, Error but override Info output
-const MCMC = LogLevel(1)
-const Setup = LogLevel(2)
-const Output = LogLevel(3)
+# Define custom log levels for different analysis stages
+# We keep built-in Info, Warn, Error but override Info output behavior
+const MCMC = LogLevel(1)    # For MCMC sampling progress and diagnostics
+const Setup = LogLevel(2)   # For initialization and configuration messages  
+const Output = LogLevel(3)  # For final results and output generation
 
-# Define scientific notation printer
+# Utility function to format numbers in scientific notation
 function sci_notation(x; digits=4) 
     if x == 0
         return "0"
@@ -17,7 +33,7 @@ function sci_notation(x; digits=4)
     end
 end  
 
-# Add string representations for both custom and built-in logging levels.
+# Define string representations for both custom and built-in logging levels
 function Base.show(io::IO, level::LogLevel)
     if level == Setup
         print(io, "Setup")
@@ -26,7 +42,7 @@ function Base.show(io::IO, level::LogLevel)
     elseif level == Output
         print(io, "Output")
     elseif level == Logging.Info
-        print(io, "MCMC")
+        print(io, "MCMC")  # Map Info to MCMC for consistency
     elseif level == Logging.Warn
         print(io, "Warn")
     elseif level == Logging.Error

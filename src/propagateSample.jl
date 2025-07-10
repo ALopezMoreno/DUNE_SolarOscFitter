@@ -1,93 +1,73 @@
-"""
-This module provides functionality for propagating neutrino samples through a detector simulation, 
-calculating the oscillated event rates for different interaction channels. It utilizes pre-defined 
-oscillation probabilities and response matrices to transform unoscillated neutrino samples into 
-oscillated event rates.
+#=
+propagateSample.jl
 
-Dependencies:
-- Includes the `oscCalc.jl` module, which contains functions for calculating neutrino oscillation 
-  probabilities.
-- Assumes the existence of organization-specific data structures for handling neutrino samples and 
-  response matrices.
+Neutrino sample propagation and event rate calculation for the Solar Oscillation Fitter.
+This module takes unoscillated Monte Carlo samples and applies oscillation probabilities
+to calculate expected event rates in the detector for different channels and time periods.
 
-Functions:
-- `propagateSamplesAvg`: Computes the bin-average oscillated event rates for electron neutrinos and other 
-  neutrino flavors across different solar processes (e.g., 8B and hep). It applies the response matrices 
-  to the oscillated samples to obtain the event rates for elastic scattering (ES) and charged current (CC) 
-  interactions.
-- `propagateSamplesCtr`: Computes the oscillated event rates for electron neutrinos and other 
-  neutrino flavors across different solar processes (e.g., 8B and hep) at the bin centers. It applies the response matrices 
-  to the oscillated samples to obtain the event rates for elastic scattering (ES) and charged current (CC) 
-  interactions.
+Key Features:
+- Oscillation probability calculation for day and night periods
+- Earth matter effect propagation for nighttime neutrinos
+- Detector response matrix application
+- Background event handling with systematic uncertainties
+- Block averaging for energy binning
+- Support for both fast and slow calculation modes
 
-Parameters:
-- `unoscillatedSample`: A data structure containing unoscillated neutrino event samples for different 
-  processes and interaction channels.
-- `responseMatrices`: A data structure containing response matrices for ES and CC interactions, used to 
-  transform oscillated samples into event rates.
-- `oscParams`: Oscillation parameters used to calculate the oscillation probabilities.
-- `solarModel`: A model specifying solar neutrino fluxes, used in conjunction with oscillation parameters.
-- `bin_edges`: A vector of bin edges for averaging oscillation probabilities over energy bins.
-- `BG_CC`: Background event rate for charged current interactions, added to the calculated event rate.
+The main function propagateSamples() is the core of the likelihood calculation,
+converting theoretical predictions into observable event rates.
 
-Process:
-1. Calculates the average oscillation probabilities for electron neutrinos (`nue`) and other neutrino 
-   flavors (`nuother`) for specified solar processes.
-2. Computes the oscillated samples by applying the oscillation probabilities to the unoscillated samples.
-3. Transforms the oscillated samples into event rates using the response matrices, accounting for 
-   background contributions in the CC channel.
-
-Output:
-- Returns the event rates for ES interactions with electron neutrinos and other neutrino flavors, as well 
-  as the event rate for CC interactions.
-
-Note:
-- The function assumes that the input data structures are compatible with the organization's internal 
-  formats and that the constants and models are appropriately defined.
-"""
+Author: [Author name]
+=#
 
 include("../src/oscillations/osc.jl")
 
+# Import oscillation calculation functions
 using .Osc: oscPars, osc_prob_both_fast, osc_prob_both_slow
 
+# Choose fast or slow Earth propagation based on configuration
 if fast
   using .Osc.NumOsc.Fast: osc_prob_earth
 else
   using .Osc.NumOsc.Slow: osc_prob_earth
 end
 
-using LinearAlgebra
-using Plots
+using LinearAlgebra  # For matrix operations
+using Plots          # For debugging plots (optional)
 
-# for matrices
+# Block averaging utilities for energy binning
+# These functions reduce high-resolution calculations to analysis binning
+
+# Block averaging for 2D matrices (e.g., zenith vs energy oscillation probabilities)
 function block_average(mat::AbstractMatrix, block_dims::Tuple{Int,Int}=(5, 3))
-  block_rows, block_cols = block_dims
-  n_rows, n_cols = size(mat)
-  
-  # Ensure that matrix dimensions are multiples of block dimensions
-  if n_rows % block_rows != 0 || n_cols % block_cols != 0
-      error("Matrix dimensions must be multiples of block dimensions: got $(n_rows)x$(n_cols) for blocks of size $(block_rows)x$(block_cols)")
-  end
+    """Average matrix elements over rectangular blocks"""
+    block_rows, block_cols = block_dims
+    n_rows, n_cols = size(mat)
+    
+    # Ensure that matrix dimensions are multiples of block dimensions
+    if n_rows % block_rows != 0 || n_cols % block_cols != 0
+        error("Matrix dimensions must be multiples of block dimensions: got $(n_rows)x$(n_cols) for blocks of size $(block_rows)x$(block_cols)")
+    end
 
-  out_n = n_rows ÷ block_rows
-  out_m = n_cols ÷ block_cols
-  result = Array{eltype(mat)}(undef, out_n, out_m)
+    out_n = n_rows ÷ block_rows
+    out_m = n_cols ÷ block_cols
+    result = Array{eltype(mat)}(undef, out_n, out_m)
 
-  for i in 1:out_n
-      for j in 1:out_m
-          rows_range = ((i - 1) * block_rows + 1):(i * block_rows)
-          cols_range = ((j - 1) * block_cols + 1):(j * block_cols)
-          block = view(mat, rows_range, cols_range)
-          # Calculate average over the block
-          result[i, j] = sum(block) / (block_rows * block_cols)
-      end
-  end
+    for i in 1:out_n
+        for j in 1:out_m
+            rows_range = ((i - 1) * block_rows + 1):(i * block_rows)
+            cols_range = ((j - 1) * block_cols + 1):(j * block_cols)
+            block = view(mat, rows_range, cols_range)
+            # Calculate average over the block
+            result[i, j] = sum(block) / (block_rows * block_cols)
+        end
+    end
 
-  return result
+    return result
 end
 
-# for vectors
+# Block averaging for 1D vectors (e.g., energy-dependent oscillation probabilities)
 function block_average(vec::AbstractVector, block_size::Int=5)
+    """Average vector elements over consecutive blocks"""
     n = length(vec)
     
     # Ensure that vector length is a multiple of block size
@@ -107,8 +87,9 @@ function block_average(vec::AbstractVector, block_size::Int=5)
     return result
 end
 
-# wrapper
+# Generic wrapper function for block averaging
 function block_average(arr::AbstractArray, block_dims...)
+    """Dispatch to appropriate block averaging function based on array dimension"""
     if ndims(arr) == 1
         return block_average(arr, block_dims...)
     elseif ndims(arr) == 2
@@ -120,8 +101,27 @@ end
 
 
 function propagateSamples(unoscillatedSample, responseMatrices, params, solarModel, bin_edges, raw_backgrounds)
+    """
+    Main function to propagate unoscillated neutrino samples through oscillations
+    and detector response to calculate expected event rates.
+    
+    Arguments:
+    - unoscillatedSample: Unoscillated MC event rates by channel and process
+    - responseMatrices: Detector response matrices for energy reconstruction
+    - params: Oscillation and systematic parameters
+    - solarModel: Solar neutrino production model
+    - bin_edges: Energy bin edges for analysis
+    - raw_backgrounds: Background event samples
+    
+    Returns:
+    - Event rates for ES/CC channels in day/night periods
+    - Background totals for each channel
+    """
+    
+    # Convert oscillation parameters to internal format
     mixingPars = oscPars(params.dm2_21, asin(sqrt(params.sin2_th12)), asin(sqrt(params.sin2_th13)))
 
+    # Calculate bin centers for oscillation probability evaluation
     bin_centers = (bin_edges[1:end-1] + bin_edges[2:end]) / 2.0
     bin_centers_calc = (bin_edges_calc[1:end-1] + bin_edges_calc[2:end]) / 2.0
 
@@ -182,7 +182,6 @@ function propagateSamples(unoscillatedSample, responseMatrices, params, solarMod
     oscProbs_nuother_8B_night = 1 .- oscProbs_nue_8B_night
     oscProbs_nuother_hep_night = 1 .- oscProbs_nue_hep_night
 
-
     # Apply weights to true energy and propagate through reco matrix. Set samples to zero if channel is not being fit ###
     if ES_mode
       oscillated_sample_ES_nue_day = unoscillatedSample.ES_nue_8B .* oscProbs_nue_8B_day .* params.integrated_8B_flux .+ unoscillatedSample.ES_nue_hep .* oscProbs_nue_hep_day .* params.integrated_HEP_flux
@@ -216,7 +215,7 @@ function propagateSamples(unoscillatedSample, responseMatrices, params, solarMod
 
       eventRate_CC_day = 0.5 .* ((responseMatrices.CC' * oscillated_sample_CC_day) .* CC_eff  .+ BG_CC ) # 0.5 corresponds to the yearly daytime fraction (#CHECK!)
       eventRate_CC_night = vcat([0.5 .* ((row' * responseMatrices.CC) .* CC_eff' ) for row in eachrow(oscillated_sample_CC_night)]...) .+ 0.5 .* (BG_CC' .* exposure_weights)
-
+    
     else
       eventRate_CC_day = fill(0., Ereco_bins_CC.bin_number)
       eventRate_CC_night = fill(0., (cosz_bins.bin_number, Ereco_bins_CC.bin_number))

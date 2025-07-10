@@ -1,56 +1,28 @@
-"""
-This script defines functions for calculating the Poisson log-likelihood of neutrino event data, using 
-Monte Carlo (MC) propagated samples to evaluate expected event rates against observed data. It is part of 
-a larger framework for neutrino physics analysis, focusing on elastic scattering (ES) and charged current 
-(CC) interactions.
+#=
+statsLikelihood.jl
 
-Dependencies:
-- Utilizes Julia packages such as `Random`, `LinearAlgebra`, `Statistics`, `Distributions`, `StatsBase`, 
-  `BAT`, `DensityInterface`, and `IntervalSets` for statistical and mathematical operations.
-- Assumes the existence of organization-specific data structures and modules, including `ereco_data`, 
-  `responseMatrices`, `solarModel`, `unoscillatedSample`, and `backgrounds`.
+Statistical likelihood functions for the Solar Oscillation Fitter.
+This module defines the likelihood function used in Bayesian parameter estimation,
+including Poisson statistics and systematic uncertainties.
 
-Functions:
-- `poissonLogLikelihood`: Computes the Poisson log-likelihood for vectors of expected and measured event 
-  counts, handling edge cases where counts are zero to avoid mathematical errors.
-- `likelihood_all_samples_avg`: Calculates the total log-likelihood for neutrino events using average 
-  propagation of samples, considering ES and CC interactions.
-- `likelihood_all_samples_ctr`: Faster than `likelihood_all_samples_avg`, but uses a different propagation 
-  method for samples, where the propagation is done only at the bin centers instead of integrating over bins.
+Key Features:
+- Poisson log-likelihood for counting statistics
+- Barlow-Beeston method for systematic uncertainties
+- Support for both ES and CC detection channels
+- Parameter bounds checking and validation
+- Comprehensive error handling and debugging
 
-Parameters:
-- `nExpected`: A vector of expected event counts for each interaction channel.
-- `nMeasured`: A vector of measured event counts for each interaction channel.
-- `parameters`: Model parameters used in the propagation of samples and likelihood calculations.
+The main likelihood function compares predicted event rates (from oscillation
+theory and detector response) with observed data across energy and zenith bins.
 
-Process:
-1. Validates input vectors for non-negativity and equal length in `poissonLogLikelihood`.
-2. Propagates MC samples through the detector simulation using specified functions (`propagateSamplesAvg` or `propagateSamplesCtr`).
-3. Computes expected event rates for different interaction channels and calculates the log-likelihood 
-   using the `poissonLogLikelihood` function.
-4. Handles energy thresholding by identifying the appropriate indices for analysis based on the energy 
-   threshold `Emin`.
-
-Output:
-- Returns the total negative log-likelihood for the given parameters, which can be used in optimization 
-  routines or further statistical analyses.
-
-Testing:
-- Includes a test function `test_log_likelihood_execution_time` to measure the execution time of the 
-  `poissonLogLikelihood` function and verify its correctness against expected results.
-
-Note:
-- Ensure that all required data structures and constants are defined and accessible in the working 
-  environment before executing the script.
-- The script assumes that the input data is pre-processed and compatible with the organization's internal 
-  formats.
-"""
-
+Author: [Author name]
+=#
 
 using Random, LinearAlgebra, Statistics, Distributions, StatsBase
 using BAT, DensityInterface, IntervalSets
 
-
+# Main likelihood function closure
+# This captures all the necessary data and functions for likelihood evaluation
 likelihood_all_samples = let nObserved = ereco_data,
     energies = bin_edges,
     Mreco = responseMatrices,

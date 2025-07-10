@@ -1,70 +1,66 @@
-"""
-This script performs a likelihood scan over neutrino oscillation parameters using a grid search approach. 
-It calculates the log-likelihood values for different combinations of the squared sine of mixing angles 
-(`sin²θ₁₂`, `sin²θ₁₃`) and the squared mass difference (`Δm²₂₁`) and stores the results in CSV files.
 
-Modules and Libraries:
-- Utilizes various Julia packages such as `LinearAlgebra`, `Statistics`, `Distributions`, `StatsBase`, 
-  `BAT`, `DensityInterface`, `IntervalSets`, and `DelimitedFiles` for mathematical operations, statistical 
-  distributions, and file handling.
-- Includes a setup script from `../src/setup.jl` to configure the fitting process.
+#=
+llhScan.jl
 
-Parameters:
-- `nbins`: Number of bins for the grid search, defined by `llhBins`.
-- `lim_th12`, `lim_th13`, `lim_dm21`: Arrays defining the parameter limits for `sin²θ₁₂`, `sin²θ₁₃`, and 
-  `Δm²₂₁` respectively.
+Likelihood scanning for parameter space exploration in the Solar Oscillation Fitter.
+This module performs systematic scans over oscillation parameter space to map
+the likelihood surface and identify confidence regions.
 
-Process:
-1. Initializes parameter ranges for `sin²θ₁₂`, `sin²θ₁₃`, and `Δm²₂₁` based on specified limits and number of bins.
-2. Computes log-likelihood values for each parameter combination using either `likelihood_all_samples_avg` 
-   or `likelihood_all_samples_ctr` based on the `fast` flag.
-3. Stores the results in matrices and writes them to CSV files with appropriate headers indicating the 
-   parameter limits.
+Key Features:
+- 2D likelihood scans over oscillation parameter pairs
+- Integration over systematic uncertainties (nuisance parameters)
+- Degrees of freedom calculations for different channels
+- CSV output with parameter ranges for plotting
+- Support for both ES and CC channel analysis
 
-Output:
-- Three CSV files containing the log-likelihood scans for:
-  1. `sin²θ₁₂` vs `sin²θ₁₃`
-  2. `sin²θ₁₂` vs `Δm²₂₁`
-  3. `sin²θ₁₃` vs `Δm²₂₁`
+The likelihood scans provide complementary information to MCMC sampling
+and are useful for visualizing parameter constraints and correlations.
 
-Note:
-- The script assumes the existence of certain global variables such as `true_params`, `fast`, and `outFile`.
-- Logging is set up but commented out; adjust the logging level as needed for debugging.
-"""
-
-
+Author: [Author name]
+=#
 
 using Logging
 # DEBUGGING AND TESTING: Set the logging level to Warn to suppress Info messages
 # global_logger(ConsoleLogger(stderr, Logging.Warn))
 
 using LinearAlgebra, Statistics, Distributions, StatsBase, BAT, DensityInterface, IntervalSets
-using DelimitedFiles
+using DelimitedFiles  # For CSV output
 
-# Set up the fit
+# Set up the analysis environment
 include("../src/setup.jl")
 
 function get_n_freedom(index)
+    """
+    Calculate degrees of freedom for likelihood analysis.
+    
+    Arguments:
+    - index: 1 for ES channel, 2 for CC channel
+    
+    Returns:
+    Number of degrees of freedom (observations - parameters)
+    """
     if index == 1
-        return n_obs_ES - (2 + length(Δ_FWHM))
+        return n_obs_ES - (2 + length(Δ_FWHM))  # ES observations minus fitted parameters
     elseif index == 2
-        return n_obs_CC - (2 + length(Δ_FWHM))
+        return n_obs_CC - (2 + length(Δ_FWHM))  # CC observations minus fitted parameters
     else
         error("Invalid index: must be 1 or 2 (got $index)")
     end
 end
 
+# Likelihood scan configuration
+nbins = llhBins  # Number of bins for each parameter dimension
 
-nbins = llhBins
+# Parameter ranges for scanning
+lim_th12 = [0.2, 0.4]      # sin²θ₁₂ range
+lim_th13 = [1e-4, 0.25]    # sin²θ₁₃ range  
+lim_dm21 = [4e-5, 1.5e-4]  # Δm²₂₁ range (eV²)
 
-lim_th12 = [0.2, 0.4]
-lim_th13 = [1e-4, 0.25]
-lim_dm21 = [4e-5, 1.5e-4]
-
+# Create parameter value arrays for scanning
 vals_12 = range(lim_th12[1], stop=lim_th12[2], length=nbins)
 vals_13 = range(lim_th13[1], stop=lim_th13[2], length=nbins)
 vals_dm = range(lim_dm21[1], stop=lim_dm21[2], length=nbins)
-flux_8B = true_params.integrated_8B_flux
+flux_8B = true_params.integrated_8B_flux  # Fixed 8B flux for scanning
 
 
 

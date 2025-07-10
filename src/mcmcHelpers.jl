@@ -1,54 +1,95 @@
+#=
+mcmcHelpers.jl
+
+Helper functions and custom algorithms for MCMC sampling in the Solar Oscillation Fitter.
+This module provides utilities for managing MCMC chains, including batch processing,
+chain continuation, custom proposal distributions, and memory management.
+
+Key Features:
+- Custom proposal distribution with user-defined covariance matrices
+- Chain state management for batch processing and continuation
+- Memory-efficient MCMC execution with garbage collection
+- Serialization utilities for chain persistence
+- Custom burnin algorithms including no-burnin option
+
+These utilities enable efficient MCMC sampling for large parameter spaces
+while managing memory usage and allowing for interrupted/resumed analyses.
+
+Author: Andres Lopez Moreno, based on Philipp Eller's Newthrino
+=#
+
 using BAT: MCMCIterator, MCMCInitAlgorithm, MCMCAlgorithm, BATMeasure, BATContext, AbstractMCMCTunerInstance, ConvergenceTest, DensitySampleVector, mcmc_info
-using Serialization
+using Serialization  # For chain state persistence
 
-# Override mv_proposaldist to inject a custom covariance matrix
+# Custom proposal distribution with user-defined covariance matrix
 function mv_proposaldist(T::Type{<:AbstractFloat}, d::TDist, varndof::Integer)
-  df = only(Distributions.params(d))
-  μ = fill(zero(T), varndof)
-  # Use cov matrix if available, otherwise fall back to the identity
-  Σ = (propMatrix !== nothing) ? propMatrix : PDMat(Matrix(I(varndof) * one(T)))
+    """
+    Override BAT's default proposal distribution to inject custom covariance matrix.
+    
+    This allows using pre-computed covariance matrices from previous runs
+    to improve MCMC efficiency and convergence.
+    """
+    df = only(Distributions.params(d))
+    μ = fill(zero(T), varndof)
+    
+    # Use custom covariance matrix if available, otherwise use identity
+    Σ = (propMatrix !== nothing) ? propMatrix : PDMat(Matrix(I(varndof) * one(T)))
 
-  # Construct a multivariate t-distribution with your custom covariance.
-  # Use MvTDist from Distributions, which takes for arguments:
-  #   - degrees of freedom (as a scalar),
-  #   - mean vector, and
-  #   - scale matrix (a regular matrix)
-  return MvTDist(convert(T, df), μ, Matrix(Σ))
+    # Construct multivariate t-distribution with custom covariance
+    # Arguments: degrees of freedom, mean vector, scale matrix
+    return MvTDist(convert(T, df), μ, Matrix(Σ))
 end
 
-# Custom init algorithm and necessary structures for continuing a chain from where we left off:
+# Chain state management for batch processing and continuation
+
 struct ChainState
-  chains::Vector{<:MCMCIterator}
-  tuners::Vector{AdaptiveMHTuning}
-  step_numbers::Vector{Int}
-  chain_ids::Vector{Int32}
-  end_step::Int
+    """
+    Container for MCMC chain state information.
+    
+    Stores all necessary information to resume MCMC chains from a previous state,
+    enabling batch processing and interrupted analysis recovery.
+    """
+    chains::Vector{<:MCMCIterator}      # Active MCMC chain iterators
+    tuners::Vector{AdaptiveMHTuning}    # Adaptive tuning state for each chain
+    step_numbers::Vector{Int}           # Current step number for each chain
+    chain_ids::Vector{Int32}            # Unique identifiers for each chain
+    end_step::Int                       # Total number of completed steps
 end
-
 
 struct ContinueChains <: MCMCInitAlgorithm
-  state::ChainState
+    """
+    Custom MCMC initialization algorithm for continuing from saved state.
+    
+    This allows resuming MCMC sampling from a previously saved ChainState,
+    maintaining all tuning information and chain positions.
+    """
+    state::ChainState
 end
 
-
 function BAT.mcmc_init!(
-  algorithm::MCMCAlgorithm,
-  target::BATMeasure,
-  nchains::Integer,
-  init::ContinueChains,
-  tuning,
-  nonzero_weights::Bool,
-  callback::Function,
-  context::BATContext
+    algorithm::MCMCAlgorithm,
+    target::BATMeasure,
+    nchains::Integer,
+    init::ContinueChains,
+    tuning,
+    nonzero_weights::Bool,
+    callback::Function,
+    context::BATContext
 )
-  length(init.state.chains) == nchains || throw(ArgumentError("Chain count mismatch"))
-  return (
-    chains=init.state.chains,
-    tuners=init.state.tuners,
-    chain_outputs=DensitySampleVector[
-      DensitySampleVector(c) for c in init.state.chains
-    ]
-  )
+    """
+    Initialize MCMC chains from a saved state.
+    
+    Validates chain count consistency and returns the saved chain state
+    for continuation of sampling.
+    """
+    length(init.state.chains) == nchains || throw(ArgumentError("Chain count mismatch"))
+    return (
+        chains=init.state.chains,
+        tuners=init.state.tuners,
+        chain_outputs=DensitySampleVector[
+            DensitySampleVector(c) for c in init.state.chains
+        ]
+    )
 end
 
 
@@ -185,69 +226,6 @@ function saveBatch(samples, start_step_number, priors)
 end
 
 
-#=
-function saveBatch(samples, start_step_number, priors)
-  println("Saving with starting step number of $start_step_number")
-
-  # Extract parameter names from the first sample
-  param_names = filter(pname -> pname in keys(priors), fieldnames(typeof(samples[1].v)))
-  println(param_names)
-
-  # Initialize a dictionary to hold parameter arrays
-  param_data = param_data = Dict{Symbol, Any}()
-  for pname in param_names
-    values = [getfield(sample.v, pname) for sample in samples]
-    if isa(values[1], AbstractArray)
-        # leave the whole vector of vectors intact
-        param_data[pname] = values
-    else
-        param_data[pname] = values
-    end
-end
-
-  # Extract metadata
-  stepno = [sample.info.stepno for sample in samples] .+ start_step_number
-  chainid = [sample.info.chainid for sample in samples]
-  weights = [sample.weight for sample in samples]
-
-  # Construct output file names
-  fileName = outFile * "_mcmc.bin"
-  infoFileName = outFile * "_info.txt"
-
-  # Serialize data to binary file
-  try
-      open(fileName, isfile(fileName) ? "a" : "w") do io
-          for pname in param_names
-              serialize(io, param_data[pname])
-          end
-          serialize(io, weights)
-          serialize(io, stepno)
-          serialize(io, chainid)
-      end
-  catch err
-      @error "Failed to write MCMC data to $fileName.\nError: $err"
-      return
-  end
-
-  # Write info file describing the order
-  try
-      open(infoFileName, "w") do infoIO
-          println(infoIO, "# Info file for MCMC binary data: $fileName")
-          println(infoIO, "# Listed in the same order as they are serialized:")
-          for (i, pname) in enumerate(param_names)
-              println(infoIO, "$i: $(pname)")
-          end
-          println(infoIO, "$(length(param_names) + 1): weights")
-          println(infoIO, "$(length(param_names) + 2): stepno")
-          println(infoIO, "$(length(param_names) + 3): chainid")
-          println(infoIO, "\n# Use this ordering when deserializing the binary file,")
-          println(infoIO, "# or converting it to another format like JLD2.")
-      end
-  catch err
-      @error "Failed to write info file to $infoFileName.\nError: $err"
-  end
-end
-=#
 
 # Function for running the MCMC in batches
 function runMCMCbatch(currentBatch, args...)
