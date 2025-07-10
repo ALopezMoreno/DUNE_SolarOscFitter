@@ -1,18 +1,27 @@
-################################################################################
-################################################################################
-#
-# Neutrino Oscillation Calculations
-#
-# Oscillation framework adapted from Newthrino by Philipp Eller (special thanks
-# for his support and openess when sharing his code):
-#
-# (add_github_repo_when_public)
-#
-# Barger solution and modifications to calculate the solar night-time propagation
-# added by Andres Lopez Moreno
-#
-#################################################################################
-#################################################################################
+#=
+osc.jl
+
+Neutrino Oscillation Calculations for the Solar Oscillation Fitter.
+
+This module implements comprehensive neutrino oscillation calculations for solar
+neutrinos, including both daytime (solar matter effects) and nighttime (Earth
+matter effects) propagation.
+
+Key Features:
+- MSW (Mikheyev-Smirnov-Wolfenstein) effect in solar matter
+- Earth matter effects for nighttime propagation  
+- Both analytical (Barger) and numerical propagation methods
+- Fast and slow calculation modes for different precision needs
+
+Oscillation framework adapted from Newthrino by Philipp Eller (special thanks
+for his support and openness when sharing his code):
+(add_github_repo_when_public)
+
+Barger solution and modifications to calculate the solar night-time propagation
+added by Andres Lopez Moreno
+
+Author: Andres Lopez Moreno, based on Philipp Eller's Newthrino
+=#
 
 module Osc
 

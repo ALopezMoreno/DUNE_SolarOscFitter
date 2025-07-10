@@ -1,39 +1,64 @@
+#=
+makePaths.jl
+
+Neutrino path generation through Earth for matter effect calculations.
+This module creates detailed paths for neutrinos traveling through Earth's
+varying density profile, accounting for different zenith angles.
+
+Key Features:
+- Earth geometry calculations for neutrino trajectories
+- Density profile segmentation and layer identification
+- Jump detection for discontinuous density changes
+- Path optimization for numerical integration
+- Support for systematic uncertainties in Earth matter density
+
+The paths are used in oscillation calculations to account for matter effects
+as neutrinos propagate through Earth's layers with different densities.
+
+Author: [Author name]
+=#
+
 ################################################################################
 # Global Constants and Imports
 ################################################################################
 
-using Statistics
-using StaticArrays
-using Interpolations
+using Statistics      # For statistical calculations
+using StaticArrays    # For efficient static arrays
+using Interpolations  # For density profile interpolation
 
-global EARTH_RADIUS = 6371
-global RESOLUTION = 12000
+# Earth model parameters
+global EARTH_RADIUS = 6371  # Earth radius in km
+global RESOLUTION = 12000   # Number of points along neutrino path
 
 ################################################################################
 # Struct Definitions
 ################################################################################
 
+# Represents a discontinuous jump in Earth's density profile
 struct Jump
-    x::Float64
-    b::Float64
-    a::Float64
+    x::Float64      # Position along path where jump occurs (km)
+    b::Float64      # Density value before the jump (g/cm³)
+    a::Float64      # Density value after the jump (g/cm³)
 end
 
+# Represents a continuous segment of the neutrino path through Earth
 struct Segment
-    index::Int16
-    start::Float64
-    finish::Float64
-    nodes::Vector{Float64}
-    values::Vector{Float64}
-    length::Float64
-    avgRho::Float64
+    index::Int16                # Layer index for systematic uncertainties
+    start::Float64              # Starting position along path (km)
+    finish::Float64             # Ending position along path (km)
+    nodes::Vector{Float64}      # Integration nodes within segment (km)
+    values::Vector{Float64}     # Density values at nodes (g/cm³)
+    length::Float64             # Segment length (km)
+    avgRho::Float64             # Average density in segment (g/cm³)
 end
 
+# Complete neutrino path through Earth with jumps and segments
 struct Path
-    jumps::Vector{Jump}
-    segments::Vector{Segment}
+    jumps::Vector{Jump}         # Density discontinuities along path
+    segments::Vector{Segment}   # Continuous path segments for integration
 end
 
+# Detector depth below sea level (km) - essentially at surface
 global depth = 0.001 # basically sea level
 
 ################################################################################

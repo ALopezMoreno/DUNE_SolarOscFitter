@@ -1,25 +1,66 @@
-using JLD2
-using Interpolations
-using Plots
-using Statistics
+#=
+earthUncertainty.jl
+
+Earth matter density uncertainty processing for systematic error analysis.
+This module loads and processes uncertainties in the Earth's density profile
+(PREM model uncertainties) and propagates them through the neutrino oscillation
+calculations to estimate systematic uncertainties in predicted event rates.
+
+Key Features:
+- Loading of PREM (Preliminary Reference Earth Model) uncertainty data
+- Interpolation and rebinning of uncertainty matrices
+- Propagation of Earth model uncertainties through full analysis chain
+- Calculation of covariance matrices for systematic uncertainties
+- Statistical analysis of uncertainty distributions
+
+The Earth matter uncertainties affect neutrino oscillation probabilities
+during nighttime propagation and contribute to systematic errors in the analysis.
+
+Author: [Author name]
+=#
+
+using JLD2           # For loading uncertainty data files
+using Interpolations # For uncertainty matrix interpolation
+using Plots          # For diagnostic plotting (optional)
+using Statistics     # For statistical calculations
 
 include("../src/propagateSample.jl")
-earth_uncertainty = JLD2.load("./inputs/prem_uncertainties_4.500e-5.jld2", "probabilities")
-extent = [(-1, 0), (3, 20)]
-extent2 = [(cosz_bins.min, cosz_bins.max), (Etrue_bins.min * 1e3, Etrue_bins.max * 1e3)]
 
-# Function to interpolate each matrix in the 3D array
+# Load PREM uncertainty data
+# This contains oscillation probability uncertainties due to Earth density variations
+earth_uncertainty = JLD2.load("./inputs/prem_uncertainties_4.500e-5.jld2", "probabilities")
+
+# Define coordinate extents for interpolation
+extent = [(-1, 0), (3, 20)]  # Original data extent: [cos(zenith), energy(MeV)]
+extent2 = [(cosz_bins.min, cosz_bins.max), (Etrue_bins.min * 1e3, Etrue_bins.max * 1e3)]  # Analysis extent
+
+# Uncertainty matrix processing functions
+
 function interpolate_matrices(earth_uncertainty, extent)
+    """
+    Interpolate each uncertainty matrix in the 3D array to enable rebinning.
+    
+    Creates B-spline interpolation objects for each uncertainty realization
+    to allow evaluation at arbitrary coordinate points.
+    
+    Arguments:
+    - earth_uncertainty: 3D array of uncertainty matrices
+    - extent: Coordinate ranges for interpolation
+    
+    Returns:
+    - interpolated_matrices: Array of interpolation objects
+    """
     interpolated_matrices = []
-    # Build x and y coordinate ranges from the extent:
+    
+    # Build coordinate ranges from the extent
     x_range = range(extent[1][1], extent[1][2], length=size(earth_uncertainty, 1))
     y_range = range(extent[2][1], extent[2][2], length=size(earth_uncertainty, 2))
 
-
+    # Process each uncertainty realization
     for i in 1:size(earth_uncertainty, 1)
         matrix = reverse(earth_uncertainty[:, :, i], dims=1)
 
-        # Create a linear interpolation object with specified coordinate ranges
+        # Create B-spline interpolation with coordinate scaling
         itp = interpolate(matrix, BSpline(Linear()))
         sitp = Interpolations.scale(itp, x_range, y_range)
         push!(interpolated_matrices, sitp)
@@ -27,9 +68,22 @@ function interpolate_matrices(earth_uncertainty, extent)
     return interpolated_matrices
 end
 
-# Function to average over specified bins
-
 function average_over_bins(interpolated_matrices, nbins_z, nbins_e, extent)
+    """
+    Average interpolated uncertainty matrices over analysis bins.
+    
+    Evaluates each interpolated matrix on a fine grid within each analysis bin
+    and computes the average value for that bin.
+    
+    Arguments:
+    - interpolated_matrices: Array of interpolation objects
+    - nbins_z: Number of zenith angle bins
+    - nbins_e: Number of energy bins
+    - extent: Coordinate ranges for binning
+    
+    Returns:
+    - averaged_matrices: Array of rebinned uncertainty matrices
+    """
     averaged_matrices = []
     x_bins = range(extent[1][1], extent[1][2], length=nbins_z + 1)
     y_bins = range(extent[2][1], extent[2][2], length=nbins_e + 1)
@@ -41,17 +95,18 @@ function average_over_bins(interpolated_matrices, nbins_z, nbins_e, extent)
                 x_start, x_end = x_bins[i], x_bins[i + 1]
                 y_start, y_end = y_bins[j], y_bins[j + 1]
                 
-                # Generate a grid of points within the current bin
-                x_points = range(x_start, x_end, length=30)  # Adjust the length as needed
-                y_points = range(y_start, y_end, length=30)  # Adjust the length as needed
+                # Generate fine grid within current bin for accurate averaging
+                x_points = range(x_start, x_end, length=30)
+                y_points = range(y_start, y_end, length=30)
                 
-                # Evaluate the spline at each point in the grid
+                # Evaluate interpolated function at grid points
                 values = [myfunct(x, y) for x in x_points, y in y_points]
                 
-                # Calculate the average
+                # Store average value for this bin
                 new_matrix[i, j] = mean(values)
             end
         end
+        # Apply coordinate transformations for proper orientation
         push!(averaged_matrices, reverse(reverse(new_matrix', dims=1), dims=2))
     end
     return averaged_matrices

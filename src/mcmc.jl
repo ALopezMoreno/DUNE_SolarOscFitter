@@ -1,36 +1,32 @@
-"""
-This script performs Bayesian parameter estimation for neutrino oscillation parameters using Markov Chain 
-Monte Carlo (MCMC) sampling. It leverages the BAT.jl library to sample from the posterior distribution 
-defined by a likelihood function and prior distributions over the parameters of interest.
+#=
+mcmc.jl
 
-Modules and Libraries:
-- Utilizes Julia packages such as `LinearAlgebra`, `Statistics`, `Distributions`, `StatsBase`, `BAT`, 
-  `DensityInterface`, `IntervalSets`, `Plots`, and `JLD2` for mathematical operations, statistical 
-  distributions, Bayesian analysis, plotting, and data storage.
-- Includes a setup script from `../src/setup.jl` to configure the fitting process.
+Bayesian parameter estimation for neutrino oscillation parameters using Markov Chain 
+Monte Carlo (MCMC) sampling with the BAT.jl library.
 
-Parameters:
-- `prior`: A product of distributions defining uniform priors for the squared sine of mixing angles 
-  (`sin²θ₁₂`, `sin²θ₁₃`) and the squared mass difference (`Δm²₂₁`).
-- `fast`: A boolean flag that determines which likelihood function to use (`likelihood_all_samples_ctr` 
-  or `likelihood_all_samples_avg`).
+This script performs posterior sampling from the likelihood function defined by the
+solar neutrino data and prior distributions over oscillation parameters.
 
-Process:
-1. Defines a Bayesian model using the `PosteriorMeasure` with the specified likelihood and prior.
-2. Configures MCMC chain parameters, including initialization, burn-in, and convergence settings.
-3. Executes MCMC sampling using the Metropolis-Hastings algorithm, logging the number of chains and steps.
-4. Extracts parameter samples and metadata (step number and chain ID) from the MCMC results.
-5. Saves the extracted data and additional sample information to a JLD2 file for further analysis.
+Key Features:
+- Metropolis-Hastings MCMC sampling with adaptive tuning
+- Support for systematic uncertainties (Earth matter, backgrounds)
+- Batch processing to manage memory usage
+- Configurable proposal distributions and covariance matrices
+- Comprehensive logging and progress tracking
 
-Output:
-- A JLD2 file containing arrays of sampled parameter values (`sin²θ₁₂`, `sin²θ₁₃`, `Δm²₂₁`), step numbers, 
-  chain IDs, and sample data (`ES_nue`, `ES_nuother`, `CC`).
+Workflow:
+1. Define prior distributions for all parameters
+2. Configure MCMC settings (chains, steps, tuning)
+3. Run MCMC sampling in batches
+4. Save results for posterior analysis
 
-Note:
-- The script assumes the existence of certain global variables such as `mcmcChains`, `mcmcSteps`, 
-  `tuningSteps`, `maxTuningAttempts`, `outFile`, and `ereco_data`.
-- Logging is set up but commented out; adjust the logging level as needed for debugging.
-"""
+Dependencies:
+- BAT.jl for Bayesian analysis toolkit
+- Distributions.jl for probability distributions
+- JLD2.jl for data storage
+
+Author: [Author name]
+=#
 
 using Logging
 

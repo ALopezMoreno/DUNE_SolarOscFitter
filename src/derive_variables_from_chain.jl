@@ -1,20 +1,42 @@
-using Serialization
-using ElasticArrays
-using ProgressMeter
-using JLD2
+#=
+derive_variables_from_chain.jl
+
+Post-processing script for deriving additional quantities from MCMC chains.
+This module calculates derived observables (like day-night asymmetries) from
+the posterior samples of oscillation parameters.
+
+Key Features:
+- Loading and parsing of MCMC chain data from binary files
+- Calculation of day-night asymmetries for ES and CC channels
+- Progress tracking for large chain processing
+- Serialization of derived quantities with original chain data
+- Integration with the main analysis pipeline
+
+The derived quantities are calculated by propagating each parameter sample
+through the full detector simulation to obtain observable asymmetries.
+
+Author: [Author name]
+=#
+
+using Serialization   # For binary data I/O
+using ElasticArrays    # For dynamic array handling
+using ProgressMeter    # For progress tracking
+using JLD2            # For data file operations
 
 include("../src/setup.jl")
 
-"""
-    parse_info_file(infoFile::String)
 
-Parses an info file describing the contents of a serialized MCMC binary file.
-
-Returns a named tuple:
-- `entries`: Ordered list of (Int, String) representing top-level fields.
-- `param_names`: Vector{Symbol} of parameter names inside `param_data`, if available.
-"""
 function parse_info_file(infoFile::String)
+    """
+    Parse the info file that describes the structure of the binary MCMC data.
+    
+    The info file contains metadata about parameter names and data structure
+    that allows proper reconstruction of the parameter samples.
+    
+    Returns:
+    - entries: Ordered list of (index, variable_name) pairs
+    - param_names: Vector of parameter names as symbols
+    """
     index_map = Dict{Int,String}()
     param_names = Symbol[]
 
@@ -26,7 +48,7 @@ function parse_info_file(infoFile::String)
             continue
         end
 
-        # Match index and variable name
+        # Match index and variable name patterns
         m = match(r"^(\d+):\s*(\S+)", line_str)
         if m !== nothing
             idx = parse(Int, m.captures[1])
@@ -35,7 +57,7 @@ function parse_info_file(infoFile::String)
             continue
         end
 
-        # Match parameter names if present
+        # Extract parameter names if present
         m_param = match(r"Parameter names:\s*(.+)", line_str)
         if m_param !== nothing
             raw_names = split(m_param.captures[1], ',')
@@ -43,30 +65,13 @@ function parse_info_file(infoFile::String)
         end
     end
 
+    # Return sorted entries and parameter names
     sorted_keys = sort(collect(keys(index_map)))
     entries = [(i, index_map[i]) for i in sorted_keys]
     return (entries=entries, param_names=param_names)
 end
 
 
-
-"""
-    loadAllBatches(binFile::String, infoFile::String)
-
-Reads all MCMC batches from the binary `binFile`, using the structure
-described in the `infoFile`. Each batch is expected to be a tuple of:
-
-  1. `param_data` (Dict{Symbol, Any}) — parameter name => list of values
-  2. `weights`    (Vector{<:Number})
-  3. `stepno`     (Vector{<:Integer})
-  4. `chainid`    (Vector{<:Integer})
-
-Returns:
-  - param_data_accum :: Dict{Symbol, Vector}
-  - weights_accum    :: Vector{<:Number}
-  - stepno_accum     :: Vector{<:Integer}
-  - chainid_accum    :: Vector{<:Integer}
-"""
 function loadAllBatches(binFile::String, infoFile::String)
     # Parse info file to get parameter structure
     parsed_info = parse_info_file(infoFile)

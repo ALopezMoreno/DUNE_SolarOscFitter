@@ -1,13 +1,35 @@
-using YAML
-using Printf
-using JLD2
-using PDMats
-using Plots
-using Distributions
-using Printf
+#=
+readConfig.jl
 
+Configuration file parser and main entry point for the Solar Oscillation Fitter.
+This script reads YAML configuration files and sets up global parameters for
+the analysis, then dispatches to the appropriate analysis mode.
 
-# Function to retrieve process RSS (Resident Set Size) in MB by parsing /proc/self/status.
+Key Features:
+- YAML configuration file parsing
+- Memory usage tracking and profiling
+- Support for multiple run modes (MCMC, LLH scan, derived variables)
+- Automatic parameter validation and type conversion
+- Comprehensive logging and settings export
+
+Run Modes:
+- "MCMC": Bayesian parameter estimation with MCMC sampling
+- "LLH": Likelihood scanning over parameter space
+- "derived": Post-processing of MCMC chains for derived quantities
+
+Author: [Author name]
+=#
+
+using YAML          # For configuration file parsing
+using Printf        # For formatted output
+using JLD2          # For data file I/O
+using PDMats        # For positive definite matrices
+using Plots         # For memory usage plotting
+using Distributions # For prior distributions
+
+# Memory monitoring utilities
+
+# Function to retrieve process RSS (Resident Set Size) in MB by parsing /proc/self/status
 function get_rss_mb()
     for line in eachline("/proc/self/status")
          if startswith(line, "VmRSS:")

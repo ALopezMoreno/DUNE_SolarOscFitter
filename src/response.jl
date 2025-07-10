@@ -1,35 +1,71 @@
+#=
+response.jl
+
+Detector response matrix creation for the Solar Oscillation Fitter.
+This module processes Monte Carlo simulation data to create response matrices
+that map true neutrino energies to reconstructed energies, accounting for
+detector resolution and efficiency effects.
+
+Key Features:
+- Response matrix creation from MC truth and reconstruction data
+- Energy binning and histogram processing
+- Detection efficiency calculations (selection + reconstruction)
+- Support for different neutrino interaction channels (ES, CC)
+- Extended energy binning with infinite bounds for edge effects
+
+The response matrices are essential for converting theoretical predictions
+at true energy into observable distributions at reconstructed energy.
+
+Author: [Author name]
+=#
+
 include("../src/histHelpers.jl")
 
 function create_response_matrix(data, bin_info_etrue, bin_info_ereco)
-    # Extract values from the named tuples and replace zeros
+    """
+    Create a detector response matrix from Monte Carlo simulation data.
+    
+    The response matrix R[i,j] gives the probability that a neutrino with
+    true energy in bin i will be reconstructed with energy in bin j.
+    
+    Arguments:
+    - data: Named tuple with e_true and e_reco vectors
+    - bin_info_etrue: True energy binning specification
+    - bin_info_ereco: Reconstructed energy binning specification
+    
+    Returns:
+    - contribution_matrix: Normalized response matrix (rows sum to 1)
+    """
+    # Replace zero energies with small values to avoid binning issues
     e_true = ifelse.(data.e_true .== 0, 1e-9, data.e_true)
     e_reco = ifelse.(data.e_reco .== 0, 1e-9, data.e_reco)
 
-    # Extract bin information for e_true
+    # Extract true energy binning parameters
     bin_number_etrue = bin_info_etrue.bin_number
     min_val_etrue = bin_info_etrue.min
     max_val_etrue = bin_info_etrue.max
 
-    # Extract bin information for e_reco
+    # Extract reconstructed energy binning parameters
     bin_number_ereco = bin_info_ereco.bin_number
     min_val_ereco = bin_info_ereco.min
     max_val_ereco = bin_info_ereco.max
 
-    # Create bins for e_true and e_reco
+    # Create bin edges
     bins_etrue = range(min_val_etrue, stop=max_val_etrue, length=bin_number_etrue + 1)
-    bins_ereco = bin_info_ereco.bins # These should always already exist!!!
+    bins_ereco = bin_info_ereco.bins # Extended bins with infinite bounds
 
-    # Initialize the contribution matrix
+    # Initialize the response matrix
     contribution_matrix = zeros(Float64, bin_number_etrue, bin_number_ereco)
 
-    # Map e_true and e_reco to their respective bins and fill the contribution matrix
+    # Fill the response matrix by binning MC events
     @inbounds for (true_val, reco_val) in zip(e_true, e_reco)
-        # Check if the values are within the specified bounds
+        # Check if values are within analysis bounds
         if min_val_etrue <= true_val <= max_val_etrue && min_val_ereco <= reco_val <= max_val_ereco
+            # Find appropriate bins
             true_bin = searchsortedfirst(bins_etrue, true_val)
             reco_bin = searchsortedfirst(bins_ereco, reco_val)
 
-            # Adjust true_bin and reco_bin if they exceed their respective bin numbers
+            # Handle edge cases for bin indices
             if true_bin > bin_number_etrue
                 true_bin = bin_number_etrue
             end
@@ -37,12 +73,13 @@ function create_response_matrix(data, bin_info_etrue, bin_info_ereco)
                 reco_bin = bin_number_ereco
             end
 
-            # Increment the contribution matrix
+            # Increment the response matrix element
             contribution_matrix[true_bin, reco_bin] += 1
         end
     end
 
-    # Normalize each row to sum to 1
+    # Normalize each row to create probability matrix
+    # Each row represents P(E_reco | E_true) for a given true energy bin
     for i in 1:bin_number_etrue
         row_sum = sum(contribution_matrix[i, :])
         if row_sum > 0
