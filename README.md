@@ -147,7 +147,7 @@ llh_bins: 15
 
 ### Derived Quantities
 
-Post-process existing MCMC chains:
+Post-process existing MCMC chains to append the Day-Night asymmetry at each step (not done by default due to its heavy computational cost):
 
 ```yaml
 RunMode: "derived"
