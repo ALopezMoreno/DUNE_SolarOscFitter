@@ -175,7 +175,7 @@ The analysis fits the following parameters:
 
 ### Flux Parameters
 - `⁸B flux`: Boron-8 solar neutrino flux
-- `HEP flux`: High-energy (HEP) neutrino flux
+- `HEP flux`: He3+p (HEP) neutrino flux
 
 ### Systematic Parameters
 - Earth matter density uncertainties
