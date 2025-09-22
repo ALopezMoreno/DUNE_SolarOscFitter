@@ -22,9 +22,7 @@ added by Andres Lopez Moreno
 
 Author: Andres Lopez Moreno, based on Philipp Eller's Newthrino
 =#
-
 module Osc
-
 using LinearAlgebra
 using StaticArrays
 
@@ -448,25 +446,248 @@ module NumOsc
 end
 
 
+################################################################################
+# 4-state numerical propagation
+################################################################################
+module nu4NumOsc
+    using LinearAlgebra, StaticArrays
+
+    # we need to redefine the mixing matrix an oscpars to accept new parameters:
+    struct oscPars
+        Δm²₂₁::Float64
+        θ₁₂::Float64
+        θ₁₃::Float64
+        Δm²₃₁::Float64
+        m₀::Float64
+        θ₂₃::Float64
+        δCP::Float64
+
+        Δm²₄₁::Float64
+        θ₁₄::Float64
+        θ₂₄::Float64
+        θ₃₄::Float64
+        # We are ignoring the sterile complex phases because we are not sensitive to them
+    end
+
+    # Constructor with default values
+    oscPars(Δm²₂₁, θ₁₂, θ₁₃, θ₁₄, θ₂₄, θ₃₄, Δm²₄₁; Δm²₃₁=2.5e-3, m₀=1e-9, θ₂₃=asin(sqrt(0.56)), δCP=-1.6) = 
+        oscPars(Δm²₂₁, θ₁₂, θ₁₃, Δm²₃₁, m₀, θ₂₃, δCP, Δm²₄₁, θ₁₄, θ₂₄, θ₃₄)
+
+
+    @inline function osc_kernel(U::Matrix{ComplexF64}, H::Vector{Float64}, e::Float64, l::Float64)
+        phase_factors = exp.(2.5338653580781976im * (l / e) .* H) 
+        tmp = U .* phase_factors'  
+        return tmp * adjoint(U)
+    end
+
+    @inline function decoherent_osc_kernel(U::Matrix{ComplexF64}, U_end::SMatrix{4,4,ComplexF64})
+        P_decoherent = abs2.(U)
+    end
+
+    @inline function get_eigen(H::Hermitian{ComplexF64,SMatrix{4,4,ComplexF64,16}})
+        eigen(H)
+    end
+    
+    function get_PMNS(params)
+        T = typeof(params.θ₂₃)
+
+        U23 = SMatrix{4,4}(one(T), zero(T), zero(T), zero(T), zero(T), cos(params.θ₂₃), -sin(params.θ₂₃), zero(T), zero(T), sin(params.θ₂₃), cos(params.θ₂₃), zero(T), zero(T), zero(T), zero(T), one(T))
+
+        U13 = SMatrix{4,4}(cos(params.θ₁₃), zero(T), -sin(params.θ₁₃) * exp(1im * params.δCP), zero(T), zero(T), one(T), zero(T), zero(T), sin(params.θ₁₃) * exp(-1im * params.δCP), zero(T), cos(params.θ₁₃), zero(T), zero(T), zero(T), zero(T), one(T))
+
+        U12 = SMatrix{4,4}(cos(params.θ₁₂), -sin(params.θ₁₂), zero(T), zero(T), sin(params.θ₁₂), cos(params.θ₁₂), zero(T), zero(T), zero(T), zero(T), one(T), zero(T), zero(T), zero(T), zero(T), one(T))
+
+        U14 = SMatrix{4,4}(cos(params.θ₁₄), zero(T), zero(T), -sin(params.θ₁₄), zero(T), one(T), zero(T), zero(T), zero(T), zero(T), one(T), zero(T), sin(params.θ₁₄), zero(T), zero(T), cos(params.θ₁₄))
+
+        U24 = @SMatrix [
+            one(T)            zero(T)         zero(T)         zero(T)
+            zero(T)           cos(params.θ₂₄) zero(T)        -sin(params.θ₂₄)
+            zero(T)           zero(T)         one(T)          zero(T)
+            zero(T)           sin(params.θ₂₄) zero(T)         cos(params.θ₂₄)
+        ]
+
+        U34 = @SMatrix [
+            one(T)            zero(T)         zero(T)         zero(T)
+            zero(T)           one(T)          zero(T)         zero(T)
+            zero(T)           zero(T)         cos(params.θ₃₄) -sin(params.θ₃₄)
+            zero(T)           zero(T)         sin(params.θ₃₄)  cos(params.θ₃₄)
+        ]
+
+        U = U34 * U24 * U14 * U23 * U13 * U12 
+        return U
+    end
+
+    function get_matrices(params)
+        U = get_PMNS(params)
+        H = Diagonal(SVector(zero(typeof(params.θ₂₃)), params.Δm²₂₁, params.Δm²₃₁, params.Δm²₄₁))
+        return U, H
+    end
+
+    @inline function get_H(H_vac, e, rho, rho_n, massMatrix, anti::Bool=false)
+        # Start from vacuum Hamiltonian and apply matter potentials only on the diagonal
+        Hm = MMatrix{4,4}(H_vac)
+        ee = Float64(e)
+        rr = Float64(rho)
+        rn = Float64(rho_n)
+
+        @inbounds begin
+            if anti
+                # Antineutrinos: sign flip for charged current potential
+                Hm[1, 1] -= (rr - rn/2) * ee
+                Hm[2, 2] -= rn/2 * ee
+                Hm[3, 3] -= rn/2 * ee
+                # Hm[4,4] unchanged
+            else
+                Hm[1, 1] += (rr - rn/2) * ee 
+                Hm[2, 2] -= rn/2 * ee
+                Hm[3, 3] -= rn/2 * ee
+                # Hm[4,4] unchanged
+            end
+        end
+
+        Hh = Hermitian(SMatrix(Hm))
+        tmp = get_eigen(Hh)
+
+        # Ensure correct ordering of eigenvalues: if mixing
+        # non-zero then crossings are allowed: we order by same as vacuum
+        # otherwise, match the sterile to its constant mass
+        tol = 1e-10
+        reference_masses = diag(massMatrix)
+        
+        # Step 1: Get sorting indices for reference masses
+        ref_sort_indices = sortperm(reference_masses)
+        rank_order = invperm(ref_sort_indices)
+        
+        # Step 2: Sort eigenvalues and eigenvectors
+        eig_sort_indices = sortperm(tmp.values)
+        sorted_vals = tmp.values[eig_sort_indices]
+        sorted_vecs = tmp.vectors[:, eig_sort_indices]
+        
+        # Step 3: Apply rank ordering
+        final_vals = sorted_vals[rank_order]
+        final_vecs = sorted_vecs[:, rank_order]
+        
+        # Step 4: Check for matches and swap (optimized)
+        final_vals_arr = Vector(final_vals)
+        final_vecs_arr = Matrix(final_vecs)
+        
+        n = length(final_vals_arr)
+        matched_indices = falses(n)  # Track which indices have been matched
+        
+        # Precompute differences for efficiency
+        for j in 1:n
+            ref_mass_j = reference_masses[j]
+            # Find the best match for reference_masses[j]
+            best_match_idx = 0
+            best_match_diff = Inf
+            
+            for i in 1:n
+                if !matched_indices[i]
+                    diff = abs(final_vals_arr[i] - ref_mass_j)
+                    if diff < tol && diff < best_match_diff
+                        best_match_idx = i
+                        best_match_diff = diff
+                    end
+                end
+            end
+            
+            if best_match_idx > 0 && best_match_idx != j
+                # Swap eigenvalues
+                final_vals_arr[j], final_vals_arr[best_match_idx] = final_vals_arr[best_match_idx], final_vals_arr[j]
+                
+                # Swap eigenvectors
+                for k in 1:size(final_vecs_arr, 1)
+                    final_vecs_arr[k, j], final_vecs_arr[k, best_match_idx] = final_vecs_arr[k, best_match_idx], final_vecs_arr[k, j]
+                end
+                
+                matched_indices[best_match_idx] = true
+                matched_indices[j] = true
+            elseif best_match_idx == j
+                matched_indices[j] = true
+            end
+        end
+        
+        return final_vecs_arr, final_vals_arr
+    end
+
+    function osc_prob_day(E::AbstractVector{<:Real}, params, solarModel; process="8B")
+        n_e = process == "8B" ? solarModel.avgNeBoron :
+        process == "hep" ? solarModel.avgNeHep :
+        error("Invalid process specified. Please use '8B' or 'hep'.")
+        
+        n_n = n_e * 0.7
+
+        display(n_e)
+
+        rho_e =  n_e .* 5.4489e-5 .* 2 .* sqrt(2)
+        rho_n =  n_n .* 5.4489e-5 .* 2 .* sqrt(2)
+
+        U, H = get_matrices(params)
+
+        H_eff = U * Diagonal{Complex{eltype(H)}}(H) * adjoint(U)
+        U_sol = [get_H(H_eff, e, rho_e, rho_n, H)[1] for e in E]
+
+        enuOscProb = stack(map(U_eff -> decoherent_osc_kernel(U_eff, U), U_sol))
+
+        return enuOscProb
+    end
+
+    function osc_reduce(Mix::SMatrix{4,4,ComplexF64}, Mix_dagger::SMatrix{4,4,ComplexF64}, matter_matrices, path, e::Float64, anti::Bool)
+        @inbounds begin
+            first_p, first_mn = path[1], matter_matrices[end]
+            X = osc_kernel(first_mn[1], first_mn[2], e, first_p) 
+            for i in 2:length(path)
+                p = path[i]
+                m, n = matter_matrices[end - i + 1]
+                X = X * osc_kernel(m, n, e, p)
+            end
+            A = abs2.(Mix_dagger * X)
+        end
+        return A
+    end
+
+    function matter_osc_per_e(lookup_density, Mix, Mix_dagger, H_eff, massMatrix, e, index_array, l_Array, anti)
+        lookup_matrices = map(rho_vec -> get_H.(Ref(H_eff), e, rho_vec, (rho_vec .* 0.7), Ref(massMatrix), anti), lookup_density)
+        matter_matrices = map(indices -> lookup_matrices[indices], index_array)
+
+        stack(map((path, matter) -> osc_reduce(Mix, Mix_dagger, matter, path, e, anti), l_Array, matter_matrices))
+    end
+
+    function osc_prob_earth(E::AbstractVector{<:Real}, params::oscPars, lookup_density, paths; anti=false)
+        U, H = get_matrices(params)
+        Udag = adjoint(U)
+        Uc = anti ? conj.(U) : U
+        H_eff = Uc * Diagonal{Complex{eltype(H)}}(H) * adjoint(Uc)
+
+        # We reverse the indices here to avoid reversing in the computation of the amplitude
+        index_array = [reverse([s.index for s in path.segments]) for path in paths]
+        l_Array = [reverse([s.length for s in path.segments]) for path in paths]
+
+        p1e = stack(map(e -> matter_osc_per_e(lookup_density, U, Udag, H_eff, H, e, index_array, l_Array, anti), E)) # [1, 1, :, :]
+    end
 end
 
+## MODULE END ##
+end
+################
 
-#=
+
 ####################################################
 #####################
 ###### TESTING ######
 #####################
-
+#=
 using ProgressMeter
 using Printf
 using Measures
 using ColorTypes
 using ColorSchemes
 using LaTeXStrings
+using .Osc: nu4NumOsc
 using .Osc: oscPars, osc_prob_night
 
-theme(:dracula)
-scalefontsizes(2)
+#theme(:dracula)
+scalefontsizes(1)
 
 # Helper functions for diagnostics
 function format_sig_figs(x, sig_figs)
@@ -487,10 +708,10 @@ end
 
 
 mixingPars_dict = (
-    sin2_th12=sin2_th12_true,
-    sin2_th13=sin2_th13_true,
-    θ₁₃=asin(sqrt(sin2_th13_true)),
-    θ₁₂=asin(sqrt(sin2_th12_true)),
+    sin2_th12=0.303,
+    sin2_th13=0.022,
+    θ₁₃=asin(sqrt(0.022)),
+    θ₁₂=asin(sqrt(0.303)),
     θ₂₃=asin(sqrt(0.5)), # Example value
     δCP=0.0,   # Example value
     Δm²₂₁=7.5e-5,
@@ -498,10 +719,17 @@ mixingPars_dict = (
     m₀=1e-9 # Example value
 )
 
+# mixingPars = nu4NumOsc.oscPars(mixingPars_dict.Δm²₂₁, asin(sqrt(mixingPars_dict.sin2_th12)), asin(sqrt(mixingPars_dict.sin2_th13)), 0, 0, 0, 1)
 mixingPars = oscPars(mixingPars_dict.Δm²₂₁, asin(sqrt(mixingPars_dict.sin2_th12)), asin(sqrt(mixingPars_dict.sin2_th13)))
 
+energies = collect(range(0.1, stop=18, length=300)) * 1e-3
 
-energies = collect(range(3, stop=20, length=300)) * 1e-3
+solarModel = (avgNeBoron = 100,)
+
+# oscProbs = nu4NumOsc.osc_prob_day(energies, mixingPars, solarModel)
+# p1 = plot(energies, oscProbs)
+# display(p1)
+
 
 #=
 num_runs = 100
@@ -611,6 +839,7 @@ display(p1)
 
 =#
 # -----------------------------------------------------------------------------#
+
 using .Osc: osc_prob_both_fast
 using .Osc.NumOsc: Fast
 
@@ -726,14 +955,14 @@ parulas = ColorScheme([RGB(0.2422, 0.1504, 0.6603),
 
 
 p2 = heatmap(
-    energies,
+    energies*1e3,
     y_coords,
-    prob_num_fast_slow-prob_num_fast_fast,
-    xlabel=L"E_{\nu} \, (\mathrm{GeV})",
+    prob_num_fast_fast,
+    xlabel=L"E_{\nu} \, (\mathrm{MeV})",
     ylabel=L"\cos(z)",
-    title="Diff fast/slow earth propagation",
-    #colormap=cgrad(parulas),
-    colormap=:berlin,
+    title="Night-time probability",
+    colormap=cgrad(parulas),
+    #colormap=:berlin,
     size=(1200, 900),
     margin=10mm,
     #clim=(0.20, 0.55)

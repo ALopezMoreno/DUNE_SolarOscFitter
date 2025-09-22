@@ -393,7 +393,7 @@ def plot_corner(variables, data_dict, externalContours=False, colorlist=['b', 'p
                     hist.collections[0].set_norm(colors.LogNorm(vmin=1))
 
 
-                x_grid, y_grid, density, levels, x_HPD, y_HPD = get_contours(data[j], data[i], weights, bins2D, smooth=0.2)
+                x_grid, y_grid, density, levels, x_HPD, y_HPD = get_contours(data[j], data[i], weights, bins2D, smooth=0.5)
                 # Add custom colour transitions for levels
                 original_color = colors.to_rgb(color)  # (0.2549, 0.4118, 0.8824)
 
@@ -614,13 +614,13 @@ def add_external_solar_data(ax):
     bestFitkamLAND[0] = np.sin(np.arctan(np.sqrt(bestFitkamLAND[0])))**2
     bestFitkamLAND[1] = bestFitkamLAND[1]*1e0
 
-    global1 = np.genfromtxt('inputs/contours/solar_world_1sigma.csv', delimiter=',')
+    global1 = np.genfromtxt('inputs/contours/nuFit_1sigma.csv', delimiter=',')
     global1[:, 1] = global1[:, 1]*1e-1
 
-    global2 = np.genfromtxt('inputs/contours/solar_world_2sigma.csv', delimiter=',')
+    global2 = np.genfromtxt('inputs/contours/nuFit_2sigma.csv', delimiter=',')
     global2[:, 1] = global2[:, 1]*1e-1
 
-    global3 = np.genfromtxt('inputs/contours/solar_world_3sigma.csv', delimiter=',')
+    global3 = np.genfromtxt('inputs/contours/nuFit_3sigma.csv', delimiter=',')
     global3[:, 1] = global3[:, 1]*1e-1
 
     bestFitGlobal = np.genfromtxt('inputs/contours/bestFitGlobal.csv', delimiter=',')
@@ -644,9 +644,9 @@ def add_external_solar_data(ax):
     overlay_contours(kamLAND3, ax, color=kamcol, lw=2, ls=':')
     ax.plot(bestFitkamLAND[0], bestFitkamLAND[1], color=kamcol, linestyle='', marker='s', markersize=5)
 
-    overlay_contours(global1, ax, color=globcol, lw=2, ls='-')  # linewidth=10)
-    overlay_contours(global2, ax, color=globcol, lw=2, label='Global', ls='-.')
-    overlay_contours(global3, ax, color=globcol, lw=2, ls=':')
+    overlay_contours(global1, ax, color=globcol, lw=3, ls='-')  # linewidth=10)
+    overlay_contours(global2, ax, color=globcol, lw=3, label='Global', ls='-.')
+    overlay_contours(global3, ax, color=globcol, lw=3.5, ls=':')
     ax.plot(bestFitGlobal[0], bestFitGlobal[1], color=globcol, linestyle='', marker='P', markersize=6)
 
 
