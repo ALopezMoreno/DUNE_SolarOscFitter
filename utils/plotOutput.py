@@ -97,10 +97,10 @@ if diagnostics:
 else:
     # Fix axes limits to display global constraints nicely
     for k, par in enumerate(variables):
-        axes[k, 0].set_xlim(0.23, 0.38)
-        axes[k, 2].set_xlim(0.26, 1)
+        axes[k, 0].set_xlim(0.23, 0.43)   # 0.23, 0.38
+        axes[k, 2].set_xlim(0.2, 1.4)
         if k != 2:
-            axes[2, k].set_ylim(0.26, 1)
+            axes[2, k].set_ylim(0.2, 1.4)
 
 
 # Save figs
@@ -235,6 +235,7 @@ if expanded:
         # Fix axes limits to display global constraints nicely
         for k, par in enumerate(axes):
             axes[k, 0].set_xlim(0.23, 0.38)
+            axes[k, 0].set_xlim(0.15, 0.45)
             axes[k, 2].set_xlim(0.26, 1)
             if len(axes) > 5   :
                 axes[k, 5].set_xlim(-0.12, 0.02)
