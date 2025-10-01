@@ -161,8 +161,8 @@ The analysis requires several input files:
 - **Solar model**: `inputs/AGSS09_high_z.jld2`
 - **Neutrino fluxes**: `inputs/fluxes.jld2`
 - **Earth model**: `inputs/EARTH_MODEL_PREM_DENSE.dat`
-- **Detector response**: Monte Carlo samples for CC and ES channels
-- **Background samples**: Neutron and gamma background events
+- **Detector response**: Monte Carlo samples with E_truth and E_reco for CC and ES channels (csv)
+- **Background samples**: Monte Carlo samples with E_reco for Neutron and gamma backgrounds (csv)
 
 ## Physics Parameters
 
