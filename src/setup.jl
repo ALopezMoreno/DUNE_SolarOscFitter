@@ -190,7 +190,7 @@ CC_combined = vec(ereco_data.CC_day) .+ vec(CC_night_summed)
 println(" ")
 
 # load likelihood
-include("../src/statsLikelihood.jl")
+include("../src/likelihoods/likelihood_main.jl")
 
 
 ###################
