@@ -1,0 +1,81 @@
+################################################################################
+#             Solar Oscillation Fitter Configuration for Profiling             #
+################################################################################
+
+outFile: "outputs/profiling_benchmark"
+
+RunMode: "PROFILE"
+Asimov: true
+fastFit: true
+
+# Detection channel selection:
+# false - Fit both ES (Elastic Scattering) and CC (Charged Current) channels
+# "ES"  - Fit only Elastic Scattering channel
+# "CC"  - Fit only Charged Current channel
+singleChannel: "CC"
+
+# Binning
+#######################################################################################
+nBins_Etrue: 30         # Number of true energy bins
+nBins_Ereco_ES: 40      # ES reconstructed energy bins
+nBins_Ereco_CC: 40      # CC reconstructed energy bins
+nBins_cosz: 40          # Number of cos(zenith) bins from -1 (upward) to 0 (horizontal)
+#######################################################################################
+
+
+true_sin2_th12: 0.307    # Solar mixing angle
+true_sin2_th13: 0.0224   # Reactor mixing angle
+true_dm2_21: 6e-5        # Solar mass-squared difference
+true_integrated_HEP_flux: 8250.0  # HEP neutrino flux (B16-AGSS09 prediction)
+
+
+prior_sin2_th12: Uniform(0.15, 0.5)
+prior_sin2_th13: Truncated(Normal(0.022, 0.0007), 0.005, 0.035)
+prior_dm2_21: Uniform(2e-5, 3e-4)
+prior_8B_flux: Truncated(Normal(5.46e6, 0.218e6), 1.5e6, 1e7)
+prior_HEP_flux: Uniform(0, 2e4)
+
+
+nChains: 1              # Number of parallel MCMC chains (recommended: number of available cores)
+nSteps: 10000           # Number of post-tuning steps per chain
+maxTuningAttempts: 30   # Maximum tuning cycles (0 = no tuning, faster but less efficient)
+nTuning: 1000          # Steps per tuning cycle (recommended: O(1000))
+earth_potential_uncertainties: true  # Include Earth matter density uncertainties
+
+# Likelihood scanning configuration (only used when RunMode: "LLH")
+llh_bins: 15            # Number of bins per parameter dimension for 2D scans
+
+# Detector exposure (determines event statistics)
+CC_exposure: 10         # Charged Current exposure in module-years
+ES_exposure: 10         # Elastic Scattering exposure in module-years
+                        # 1 module-year ≈ 10 kton-year for DUNE
+
+ES_background_normalisations: [0.01]       # ES background components
+CC_background_normalisations: [0.0000002, 0.00000002] # CC background components [neutrons, gammas]
+ES_background_systematics: [0.02]         # 2% uncertainty on ES backgrounds  
+CC_background_systematics: [0.02, 0.02]   # 2% uncertainty on each CC background
+
+range_Etrue: [0.1, 25]  # True energy range in MeV
+range_Ereco_ES: [0.1, 25]  # ES energy range in MeV
+range_Ereco_CC: [5, 25]    # CC energy range in MeV
+Ereco_min_ES: 5       # ES threshold in MeV
+Ereco_min_CC: 5       # CC threshold in MeV
+
+earth_normalisation_prior_file: "inputs/earth_uncertainty_cov.jld2"
+solar_model_file: "inputs/AGSS09_high_z.jld2"     # Solar structure and neutrino production regions
+flux_model_file: "inputs/fluxes.jld2"             # Solar neutrino energy spectra
+earth_model_file: "inputs/EARTH_MODEL_PREM_DENSE.dat"  # PREM Earth density profile
+earth_uncertainty_file: "inputs/earth_uncertainty_4.5e-5.jld2"  # Earth matter uncertainties
+solar_exposure_file: "inputs/solarExposure.csv"   # Detector exposure vs zenith angle
+
+reconstruction_sample_CC: "inputs/sergio_reco_CC_withFullCuts.csv"
+reconstruction_sample_ES_nue: "inputs/CC_reconstruction_fullEFF.csv"      # ES ν_e interactions
+reconstruction_sample_ES_nuother: "inputs/CC_reconstruction_fullEFF.csv"  # ES ν_μ,τ interactions
+
+CC_background_files: ["inputs/neutron_bg_CC_sergio_withFullCuts.csv", 
+                      "inputs/gamma_bg_CC_sergio_withFullCuts.csv"]
+ES_background_files: ["inputs/Ereco_NGamma_1e6-1_evts_GeV_june2025_v2.csv"]
+
+##### Real data file (only used when Asimov: false) #####
+data_file: "data.txt"   # Real data file (format TBD)
+  

@@ -26,7 +26,7 @@ using DataFrames  # For data manipulation
 using Plots       # For plotting functionality
 
 # Include local modules and objects
-include("../src/objects.jl")
+include("../src/core.jl")
 
 # Display current channel configuration to user
 println(" ")
