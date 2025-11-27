@@ -317,7 +317,7 @@ function main()
     # Previous file?
     global prevFile = haskey(config, "prevFile") ? config["prevFile"] : nothing
 
-    allowed_modes = ["LLH", "MCMC", "derived"]
+    allowed_modes = ["LLH", "MCMC", "derived", "PROFILE"]
     run_mode = config["RunMode"]
 
     if run_mode ∉ allowed_modes
@@ -328,7 +328,8 @@ function main()
     script_to_run = Dict(
         "LLH" => "llhScan.jl",
         "MCMC" => "mcmc.jl",
-        "derived" => "derive_variables_from_chain.jl"
+        "derived" => "derive_variables_from_chain.jl",
+        "PROFILE" => "profiling.jl"
     )[run_mode]
 
     script_path = joinpath(@__DIR__, script_to_run)  # Reference script in the same directory
