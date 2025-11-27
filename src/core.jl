@@ -1,8 +1,7 @@
 #=
-objects.jl
+core.jl
 
-Defines fundamental physics constants, cross-section parameters, and data structures
-used throughout the Solar Oscillation Fitter.
+Defines fundamental physics constants, cross-section parameters, and core data structures.
 
 Key components:
 - Physical constants (Fermi constant, particle masses, mixing angles)
@@ -89,19 +88,4 @@ mutable struct NuSpectrum
         new(ETrue8B, events8B_es, events8B_cc, ETrueHep, eventsHep_es, eventsHep_cc, 
             nothing, nothing, nothing, nothing, nothing, nothing, nothing, nothing, nothing, nothing)
     end
-end
-
-# Structure of inputs for the likelihood function called in BAT
-struct LikelihoodInputs
-    nObserved      # should have ES_day, ES_night, CC_day, CC_night
-    energies
-    Mreco
-    SSM
-    MC_no_osc
-    BG
-    f              # propagation function
-    ES_mode::Bool
-    CC_mode::Bool
-    index_ES::Int
-    index_CC::Int
 end

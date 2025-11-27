@@ -60,7 +60,7 @@ function llh_CC_barlowBeeston(
 
     # --- Night contribution with Barlow–Beeston ---
     loglh_CC_night = sum(
-        systematicLogLikelihood(
+        barlowBeestonLogLikelihood(
             row[idx:end],
             obs_row[idx:end],
             σ_row[idx:end]

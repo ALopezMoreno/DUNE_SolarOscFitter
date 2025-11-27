@@ -66,7 +66,7 @@ function barlowBeestonLogLikelihood(nExpected, nMeasured, sigmaVar)
     if !all(x -> x >= 0, nExpected) || !all(x -> x >= 0, nMeasured)
         throw(ArgumentError("Inputs must be non-negative"))
     end
-    if length(nExpected) != length(nMeasured)
+    if length(nExpected) != length(nMeasured) || length(nExpected) != length(sigmaVar)
         throw(ArgumentError("Inputs must have the same length"))
     end
 
