@@ -193,7 +193,7 @@ The analysis fits the following parameters:
 
 ## Performance Tips
 
-- Use multiple threads: `julia -t auto` or `julia -t N`
+- Use multiple threads: `julia -t auto` or `julia -t N` . **NOT COMPATIBLE WITH NUFAST**
 - Enable fast mode: `fastFit: true` in config
 - Adjust MCMC parameters based on available compute time
 - Use proposal matrices from previous runs for faster convergence
@@ -201,4 +201,4 @@ The analysis fits the following parameters:
 
 ## Acknowledgments
 
-- Thanks to Philipp Eller for providing the Newthrino source code, upon which the oscillation calculations are based
+- Thanks to Philipp Eller for providing the Newthrino source code, upon which the julia oscillation calculations are based
