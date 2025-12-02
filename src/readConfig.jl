@@ -167,6 +167,7 @@ function save_settings_to_file(filename::String)
         write(file, "Ereco bins (CC): $(Ereco_bins_CC)\n")
         write(file, "Energy thresholds (ES, CC): $E_threshold\n")
         write(file, "cos(z) bins: $cosz_bins\n\n")
+        write(file, "cos(s) bins: $cos_scatter_bins\n\n")
 
         # MCMC parameters
         write(file, "----- MCMC -----\n")
