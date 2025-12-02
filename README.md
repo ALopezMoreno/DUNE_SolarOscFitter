@@ -45,9 +45,8 @@ pip install numpy matplotlib seaborn mplhep cmasher scipy corner h5py pandas
 Install **nuFast-Earth**:  
 <https://github.com/PeterDenton/NuFast-Earth>
 
-After building the project, copy the compiled library into:
-
-`src/oscillations/`
+Edit the following line in the Makefile to point at your nuFast-Earth directory:
+`NUFAST_DIR ?= ../NuFast-Earth`
 
 ## Quick Start
 
