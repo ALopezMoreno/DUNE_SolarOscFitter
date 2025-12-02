@@ -149,6 +149,7 @@ function save_settings_to_file(filename::String)
         # General settings
         write(file, "----- General -----\n")
         write(file, "Fast mode: $fast\n")
+        write(file, "Use nuFast (overrides Fast mode to *true*): $nuFast\n")
         write(file, "Earth uncertainty enabled: $earthUncertainty\n")
         write(file, "Single channel mode: $singleChannel\n\n")
 
@@ -266,6 +267,7 @@ function main()
     global Ereco_bins_CC = (bin_number=config["nBins_Ereco_CC"], min=config["range_Ereco_CC"][1]*1e-3, max=config["range_Ereco_CC"][2]*1e-3)  # The first and last bins are exended ad infinitum
     global E_threshold = (ES=config["Ereco_min_ES"]*1e-3, CC=config["Ereco_min_CC"]*1e-3)
     global cosz_bins = (bin_number=config["nBins_cosz"], min=-1, max=0)
+    global cos_scatter_bins = (bin_number=config["nBins_cos_scatter"], min=-1, max=0)
 
     # MCMC parameters
     load_proposal_matrix(config)
@@ -294,6 +296,8 @@ function main()
 
     # Fast mode?
     global fast = config["fastFit"]
+    # use NuFast?
+    global nuFast = config["nuFast"]
 
     # Single channel fit?
     global singleChannel = get(config, "singleChannel", false)
@@ -310,6 +314,9 @@ function main()
     else
         error("Invalid value for singleChannel: $singleChannel. Expected false, \"CC\", or \"ES\".")
     end
+
+    # Angular likelihood info? -- NOT YET
+    global angular_reco = false
 
     # Uncertainties?
     global earthUncertainty = config["earth_potential_uncertainties"]
