@@ -117,8 +117,8 @@ global earth_lookup = get_avg_densities(earth_paths)
 backgrounds = (ES=ES_bg, CC=CC_bg)
 
 # Propagate Asimov point to generate Asimov event rates
+include(joinpath(@__DIR__, "propagation", "propagation_main.jl"))
 
-include("../src/propagateSample.jl")
 measuredRate_ES_day, measuredRate_CC_day, measuredRate_ES_night, measuredRate_CC_night, BG_ES_tot_true, BG_CC_tot_true = propagateSamples(unoscillatedSample, responseMatrices, true_params, solarModel, bin_edges, backgrounds)
 
 # Find the first index where energy is greater than Emin
