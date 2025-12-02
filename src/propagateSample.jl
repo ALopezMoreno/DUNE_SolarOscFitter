@@ -22,13 +22,23 @@ Author: [Author name]
 include("../src/oscillations/osc.jl")
 
 # Import oscillation calculation functions
-using .Osc: oscPars, osc_prob_both_fast, osc_prob_both_slow
+using .Osc: oscPars, osc_prob_both_slow
 
-# Choose fast or slow Earth propagation based on configuration
-if fast
-  using .Osc.NumOsc.Fast: osc_prob_earth
+# Set energy bin centers for calculation
+global E_calc = (bin_edges_calc[1:end-1] + bin_edges_calc[2:end]) / 2.0
+
+# Choose fast or slow Earth propagation based on configuration. Choose oscillations calculator (nuFast only works on fast mode)
+if nuFast
+    include("../src/oscillations/nuFast_interface.jl")
+    using .nuFastOsc: osc_prob_both_fast, init_engines
+    nuFastOsc.init_engines(E_calc, cosz_calc)
 else
-  using .Osc.NumOsc.Slow: osc_prob_earth
+  using .Osc: osc_prob_both_fast
+  if fast
+    using .Osc.NumOsc.Fast: osc_prob_earth
+  else
+    using .Osc.NumOsc.Slow: osc_prob_earth
+  end
 end
 
 using LinearAlgebra  # For matrix operations
@@ -121,18 +131,23 @@ function propagateSamples(unoscillatedSample, responseMatrices, params, solarMod
     # Convert oscillation parameters to internal format
     mixingPars = oscPars(params.dm2_21, asin(sqrt(params.sin2_th12)), asin(sqrt(params.sin2_th13)))
 
-    # Calculate bin centers for oscillation probability evaluation
-    bin_centers = (bin_edges[1:end-1] + bin_edges[2:end]) / 2.0
-    bin_centers_calc = (bin_edges_calc[1:end-1] + bin_edges_calc[2:end]) / 2.0
+    # Calculate bin centers for oscillation probability evaluation #### we already do this outside!!!!!
+    # bin_centers = (bin_edges[1:end-1] + bin_edges[2:end]) / 2.0
+    # bin_centers_calc = (bin_edges_calc[1:end-1] + bin_edges_calc[2:end]) / 2.0
 
     # call the appropriate function for getting the earth propagation matrix ##########################################
     if earthUncertainty
         n = length(earth_lookup)
         earth_norm_vector = [getfield(params, Symbol("earth_norm_", i)) for i in 1:n]
         lookup = earth_norm_vector .* earth_lookup
-        oscProbs_1e = osc_prob_earth(bin_centers_calc, mixingPars, lookup, earth_paths)
-    else
-         oscProbs_1e = osc_prob_earth(bin_centers_calc, mixingPars, earth_lookup, earth_paths)
+        if !nuFast
+          oscProbs_1e = osc_prob_earth(E_calc, mixingPars, lookup, earth_paths)
+        end
+        else
+          earth_norm_vector = []
+          if !nuFast
+            oscProbs_1e = osc_prob_earth(E_calc, mixingPars, earth_lookup, earth_paths)
+          end
     end
 
     # Add backgrounds and normalise according to uncertainty parameters (if any) #######################################
@@ -160,12 +175,15 @@ function propagateSamples(unoscillatedSample, responseMatrices, params, solarMod
     BG_CC = reduce(+, backgrounds.CC)
     
     # get oscillation probabilities with fine resolution ################################################################
-    if fast
-      oscProbs_nue_8B_day_large, oscProbs_nue_8B_night_large = osc_prob_both_fast(bin_centers_calc, oscProbs_1e, mixingPars, solarModel, process="8B")
-      oscProbs_nue_hep_day_large, oscProbs_nue_hep_night_large = osc_prob_both_fast(bin_centers_calc, oscProbs_1e, mixingPars, solarModel, process="hep")
+    if nuFast
+      oscProbs_nue_8B_day_large, oscProbs_nue_8B_night_large = osc_prob_both_fast(E_calc, mixingPars, lookup, earth_paths, n_vec=earth_norm_vector)
+      oscProbs_nue_hep_day_large, oscProbs_nue_hep_night_large = osc_prob_both_fast(E_calc, mixingPars, lookup, earth_paths, n_vec=earth_norm_vector) ## NOT YET IMPLEMENTED
+    elseif fast
+      oscProbs_nue_8B_day_large, oscProbs_nue_8B_night_large = osc_prob_both_fast(E_calc, oscProbs_1e, mixingPars, solarModel, process="8B")
+      oscProbs_nue_hep_day_large, oscProbs_nue_hep_night_large = osc_prob_both_fast(E_calc, oscProbs_1e, mixingPars, solarModel, process="hep")
     else
-      oscProbs_nue_8B_day_large, oscProbs_nue_8B_night_large = osc_prob_both_slow(bin_centers_calc, oscProbs_1e, mixingPars, solarModel, process="8B")
-      oscProbs_nue_hep_day_large, oscProbs_nue_hep_night_large = osc_prob_both_slow(bin_centers_calc, oscProbs_1e, mixingPars, solarModel, process="hep")
+      oscProbs_nue_8B_day_large, oscProbs_nue_8B_night_large = osc_prob_both_slow(E_calc, oscProbs_1e, mixingPars, solarModel, process="8B")
+      oscProbs_nue_hep_day_large, oscProbs_nue_hep_night_large = osc_prob_both_slow(E_calc, oscProbs_1e, mixingPars, solarModel, process="hep")
     end
 
     # average over fine resolution to desired binning ###################################################################
