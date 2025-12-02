@@ -69,8 +69,8 @@ if get(ENV, "JULIA_LIKELIHOOD_BENCH", "0") == "1"
 
         params = Dict(:theta => 1.0)
 
-        b = @benchmark $total_llh($params)
-        @info "total_llh median time (ms):"  median(b).time / 1e6
+        b = @benchmark $total_llh($params) samples=10_000 evals=10_000 seconds=30
+        @info "total_llh median time (µs):" round(median(b).time / 1e3, digits=3)
         @info "total_llh memory (Kb):"    median(b).memory /1e3
     end
 else
