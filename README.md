@@ -40,6 +40,15 @@ Install the required Python packages:
 pip install numpy matplotlib seaborn mplhep cmasher scipy corner h5py pandas
 ```
 
+### C++ Dependencies
+
+Install **nuFast-Earth**:  
+<https://github.com/PeterDenton/NuFast-Earth>
+
+After building the project, copy the compiled library into:
+
+`src/oscillations/`
+
 ## Quick Start
 
 ### 1. Basic Usage
