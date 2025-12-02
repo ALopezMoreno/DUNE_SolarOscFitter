@@ -1,7 +1,7 @@
-include("../likelihoods/likelihood_core.jl")
-include("../likelihoods/likelihood_debug.jl")
-include("../likelihoods/likelihood_statistical.jl")
-include("../likelihoods/likelihood_builder.jl")
+include(joinpath(@__DIR__, "likelihood_core.jl"))
+include(joinpath(@__DIR__, "likelihood_debug.jl"))
+include(joinpath(@__DIR__, "likelihood_statistical.jl"))
+include(joinpath(@__DIR__, "likelihood_builder.jl"))
 
 likelihood_inputs = LikelihoodInputs(
     ereco_data,
