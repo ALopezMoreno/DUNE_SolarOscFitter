@@ -303,7 +303,7 @@ module BargerOsc
             stack(map((path, matter) -> (osc_reduce(U, matter, path, e, anti)), l_Array, matter_matrices))
         end
 
-        function osc_prob_earth(E::AbstractVector{<:Real}, params::oscPars, paths; anti=false)
+        function osc_prob_earth(E::AbstractVector{<:Real}, params::oscPars, lookup_density, paths; anti=false)
             U, H = get_matrices(params)
             # We work on the mass basis
 
@@ -402,7 +402,7 @@ module NumOsc
             stack(map((path, matter) -> (osc_reduce(Mix_dagger, matter, path, e, anti)), l_Array, matter_matrices))
         end
 
-        function osc_prob_earth(E::AbstractVector{<:Real}, params::oscPars, paths; anti=false)
+        function osc_prob_earth(E::AbstractVector{<:Real}, params::oscPars, lookup_density, paths; anti=false)
             U, H = get_matrices(params)
             Udag = adjoint(U)
             Uc = anti ? conj.(U) : U
