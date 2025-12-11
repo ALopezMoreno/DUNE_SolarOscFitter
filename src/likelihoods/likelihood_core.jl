@@ -18,6 +18,7 @@ function expected_rates(d::LikelihoodInputs, parameters)
     expectedRate_CC_day,
     expectedRate_ES_night,
     expectedRate_CC_night,
+    # eventRate_ES_angular,
     BG_ES_tot,
     BG_CC_tot = d.f(d.MC_no_osc, d.Mreco, parameters, d.SSM, d.energies, d.BG)
 
@@ -26,6 +27,7 @@ function expected_rates(d::LikelihoodInputs, parameters)
         CC_day    = expectedRate_CC_day,
         ES_night  = expectedRate_ES_night,
         CC_night  = expectedRate_CC_night,
+        # ES_angular = eventRate_ES_angular,
         BG_ES_tot = BG_ES_tot,
         BG_CC_tot = BG_CC_tot,
     )

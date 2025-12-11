@@ -39,10 +39,11 @@ end
 
 
 """
-    compute_ES_angular_event_rates(oscSamplesES, responseMatrices, angularResponseMatrices, BG_ES)
+NO LONGER BEING USED --- MIGHT BE IMPLEMENTED FOR HEP SEARCHES WHERE WE STRUGGLE WITH LOW EVENT COUNTS
+compute_ES_angular_event_rates_conditional(oscSamplesES, responseMatrices, angularResponseMatrices, BG_ES)
 
 Compute the reco energy vs. electron scattering angle distribution, combining
-signal and background. Currently assumes no solar-angle dependence in the
+signal and background for an energy-dependent only (conditiona) likelihood. I.e. it assumes no solar-angle dependence in the
 signal; night samples are summed over cos(z) before applying the angular
 response.
 
@@ -64,7 +65,7 @@ Uses globals:
 - `ES_nue_eff`, `ES_nuother_eff`
 - `apply_day_response`, `apply_night_response`
 """
-function compute_ES_angular_event_rates(oscSamplesES, responseMatrices, BG_ES)
+function compute_ES_angular_event_rates_conditional(oscSamplesES, responseMatrices, BG_ES)
     if !ES_mode || oscSamplesES === nothing || !angular_reco
         return fill(0.0, (cos_scatter_bins.bin_number, Ereco_bins_ES.bin_number))
     end
@@ -87,13 +88,47 @@ function compute_ES_angular_event_rates(oscSamplesES, responseMatrices, BG_ES)
 
     # 3) Rescale the energy slices of the angular response matrices by the event rate in each energy bin
     #    (the angular response matrices are already normalised over the angles)
-    eventRate_ES_angular_signal = responseMatrices.ES.angular .*  Diagonal(eventRate_ES_combined)
-    eventRate_ES_angular_background = responseMatrices.BG.angular .* Diagonal(BG_ES)
+    eventRate_ES_angular_signal = responseMatrices.ES.angular .* eventRate_ES_combined'
+    eventRate_ES_angular_background = responseMatrices.BG.angular .* BG_ES'
 
     # 4) Sum total
-    eventRate_ES_angular = eventRate_ES_angular_signal + eventRate_ES_angular_background
+    eventRate_ES_angular = eventRate_ES_angular_signal .+ eventRate_ES_angular_background
 
     return eventRate_ES_angular
+end
+
+
+function compute_ES_angular_event_rates(oscSamplesES, responseMatrices, BG_ES)
+    if !ES_mode || oscSamplesES === nothing || !angular_reco
+        return fill(0.0, (cos_scatter_bins.bin_number, Ereco_bins_ES.bin_number))
+    end
+
+    # 1) Calculate the event rates as usual
+    eventRate_ES_nue_day = apply_day_response(oscSamplesES.nue_day, responseMatrices.ES.nue, ES_nue_eff)
+    eventRate_ES_nue_night = apply_night_response(oscSamplesES.nue_night, responseMatrices.ES.nue, ES_nue_eff)
+
+    eventRate_ES_nuother_day = apply_day_response(oscSamplesES.nuother_day, responseMatrices.ES.nuother, ES_nuother_eff)
+    eventRate_ES_nuother_night = apply_night_response(oscSamplesES.nuother_night, responseMatrices.ES.nuother, ES_nuother_eff)
+
+    eventRate_ES_day   = (eventRate_ES_nue_day   .+ eventRate_ES_nuother_day)
+    eventRate_ES_night = (eventRate_ES_nue_night .+ eventRate_ES_nuother_night)
+
+    # 2) Split signal and background event rates into their angular distributions
+    eventRate_ES_day_angular_signal = responseMatrices.ES.angular .* vec(eventRate_ES_day)'
+    eventRate_ES_day_angular_background = responseMatrices.BG.angular .* vec(BG_ES)' .* 0.5
+
+    eventRate_ES_day_angular = eventRate_ES_day_angular_signal .+ eventRate_ES_day_angular_background
+
+    eventRate_ES_night_angular_signal = responseMatrices.ES.angular .* reshape(eventRate_ES_night', 1, Ereco_bins_ES.bin_number, cosz_bins.bin_number)
+    eventRate_ES_night_angular_background = responseMatrices.BG.angular .* reshape(exposure_weights' .* BG_ES, 1, Ereco_bins_ES.bin_number, cosz_bins.bin_number)
+
+    eventRate_ES_night_angular = eventRate_ES_night_angular_signal .+ eventRate_ES_night_angular_background .* 0.5
+
+    #P1 = plot(eventRate_ES_day_angular[:, 10])
+    #display(P1)
+    #sleep(100)
+
+    return eventRate_ES_day_angular, eventRate_ES_night_angular
 end
 
 

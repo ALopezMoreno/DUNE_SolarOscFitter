@@ -2,11 +2,12 @@
 #             Solar Oscillation Fitter Configuration for Profiling             #
 ################################################################################
 
-outFile: "outputs/profiling_benchmark"
+outFile: "outputs/profiling_benchmark_nuFast"
 
 RunMode: "PROFILE"
 Asimov: true
 fastFit: true
+nuFast: false
 
 # Detection channel selection:
 # false - Fit both ES (Elastic Scattering) and CC (Charged Current) channels
