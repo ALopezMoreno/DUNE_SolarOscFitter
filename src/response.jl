@@ -21,7 +21,7 @@ Author: [Author name]
 
 include("../src/histHelpers.jl")
 
-function create_response_matrix(data, bin_info_etrue, bin_info_ereco)
+function create_response_matrix(data, bin_info_x, bin_info_y)
     """
     Create a detector response matrix from Monte Carlo simulation data.
     
@@ -29,48 +29,53 @@ function create_response_matrix(data, bin_info_etrue, bin_info_ereco)
     true energy in bin i will be reconstructed with energy in bin j.
     
     Arguments:
-    - data: Named tuple with e_true and e_reco vectors
-    - bin_info_etrue: True energy binning specification
-    - bin_info_ereco: Reconstructed energy binning specification
+    - data: Named tuple with x and y vectors
+    - bin_info_x: x-axis binning specification
+    - bin_info_y: y-axis binning specification
     
     Returns:
     - contribution_matrix: Normalized response matrix (rows sum to 1)
     """
     # Replace zero energies with small values to avoid binning issues
-    e_true = ifelse.(data.e_true .== 0, 1e-9, data.e_true)
-    e_reco = ifelse.(data.e_reco .== 0, 1e-9, data.e_reco)
+    x = ifelse.(data.x .== 0, 1e-9, data.x)
+    y = ifelse.(data.y .== 0, 1e-9, data.y)
 
     # Extract true energy binning parameters
-    bin_number_etrue = bin_info_etrue.bin_number
-    min_val_etrue = bin_info_etrue.min
-    max_val_etrue = bin_info_etrue.max
+    bin_number_x = bin_info_x.bin_number
+    min_val_x = bin_info_x.min
+    max_val_x = bin_info_x.max
 
     # Extract reconstructed energy binning parameters
-    bin_number_ereco = bin_info_ereco.bin_number
-    min_val_ereco = bin_info_ereco.min
-    max_val_ereco = bin_info_ereco.max
+    bin_number_y = bin_info_y.bin_number
+    min_val_y = bin_info_y.min
+    max_val_y = bin_info_y.max
 
-    # Create bin edges
-    bins_etrue = range(min_val_etrue, stop=max_val_etrue, length=bin_number_etrue + 1)
-    bins_ereco = bin_info_ereco.bins # Extended bins with infinite bounds
+    # Create/get bin edges
+    bins_x = hasproperty(bin_info_x, :bins) ?
+         bin_info_x.bins :
+         range(min_val_x, stop = max_val_x, length = bin_number_x + 1)
+
+    bins_y = hasproperty(bin_info_y, :bins) ?
+         bin_info_y.bins :
+         range(min_val_y, stop = max_val_y, length = bin_number_y + 1)
 
     # Initialize the response matrix
-    contribution_matrix = zeros(Float64, bin_number_etrue, bin_number_ereco)
+    contribution_matrix = zeros(Float64, bin_number_x, bin_number_y)
 
     # Fill the response matrix by binning MC events
-    @inbounds for (true_val, reco_val) in zip(e_true, e_reco)
+    @inbounds for (x_val, y_val) in zip(x, y)
         # Check if values are within analysis bounds
-        if min_val_etrue <= true_val <= max_val_etrue && min_val_ereco <= reco_val <= max_val_ereco
+        if min_val_x <= x_val <= max_val_x && min_val_y <= y_val <= max_val_y
             # Find appropriate bins
-            true_bin = searchsortedfirst(bins_etrue, true_val)
-            reco_bin = searchsortedfirst(bins_ereco, reco_val)
+            true_bin = searchsortedfirst(bins_x, x_val)
+            reco_bin = searchsortedfirst(bins_y, y_val)
 
             # Handle edge cases for bin indices
-            if true_bin > bin_number_etrue
-                true_bin = bin_number_etrue
+            if true_bin > bin_number_x
+                true_bin = bin_number_x
             end
-            if reco_bin > bin_number_ereco
-                reco_bin = bin_number_ereco
+            if reco_bin > bin_number_y
+                reco_bin = bin_number_y
             end
 
             # Increment the response matrix element
@@ -79,8 +84,8 @@ function create_response_matrix(data, bin_info_etrue, bin_info_ereco)
     end
 
     # Normalize each row to create probability matrix
-    # Each row represents P(E_reco | E_true) for a given true energy bin
-    for i in 1:bin_number_etrue
+    # Each row represents P(y | x) e.g. P(E_reco | E_true) for a given true energy bin
+    for i in 1:bin_number_x
         row_sum = sum(contribution_matrix[i, :])
         if row_sum > 0
             contribution_matrix[i, :] /= row_sum
@@ -93,6 +98,7 @@ end
 # Load simulations and create response matrices
 df_nue = CSV.File(nue_filepath) |> DataFrame
 df_nuother = CSV.File(other_filepath) |> DataFrame
+df_ES_angular = CSV.File(angular_filepath) |> DataFrame
 df_CC = CSV.File(CC_filepath) |> DataFrame
 
 # Extend ereco bins from -inf to +inf:
@@ -108,17 +114,24 @@ bins_CC[end] = Inf
 global Ereco_bins_ES_extended = (bin_number=Ereco_bins_ES.bin_number, min=Ereco_bins_ES.min, max=Ereco_bins_ES.max, bins=bins_ES)
 global Ereco_bins_CC_extended = (bin_number=Ereco_bins_CC.bin_number, min=Ereco_bins_CC.min, max=Ereco_bins_CC.max, bins=bins_CC)
 
-nue_ES_sample = (e_true=df_nue.Etrue, e_reco=df_nue.Ereco)
-other_ES_sample = (e_true=df_nuother.Etrue, e_reco=df_nuother.Ereco)
-CC_sample = (e_true=df_CC.Etrue, e_reco=df_CC.Ereco)
+nue_ES_sample = (x=df_nue.Etrue, y=df_nue.Ereco)
+other_ES_sample = (x=df_nuother.Etrue, y=df_nuother.Ereco)
+angular_ES_sample = (x=df_ES_angular.Ereco, y=df_ES_angular.cos_scatter)
+CC_sample = (x=df_CC.Etrue, y=df_CC.Ereco)
 
-nue_ES_nue_response = create_response_matrix(nue_ES_sample, Etrue_bins, Ereco_bins_ES_extended)
-other_ES_response = create_response_matrix(other_ES_sample, Etrue_bins, Ereco_bins_ES_extended)
+nue_ES_response = create_response_matrix(nue_ES_sample, Etrue_bins, Ereco_bins_ES_extended)
+nuother_ES_response = create_response_matrix(other_ES_sample, Etrue_bins, Ereco_bins_ES_extended)
+
+# transpose angular response because we want Ereco always on the same axis
+angular_ES_response = create_response_matrix(angular_ES_sample, Ereco_bins_ES_extended, cos_scatter_bins)'
+
 CC_response = create_response_matrix(CC_sample, Etrue_bins, Ereco_bins_CC_extended)
 
+angular_BG_response = fill(1 / cos_scatter_bins.bin_number, size(angular_ES_response))
+
 # Save in named tuple
-ES_response = (nue=nue_ES_nue_response, nuother=other_ES_response)
-responseMatrices = (ES=ES_response, CC=CC_response)
+ES_response = (nue=nue_ES_response, nuother=nuother_ES_response, angular=angular_ES_response)
+responseMatrices = (ES=ES_response, CC=CC_response, BG=(angular=angular_BG_response,))
 
 # Helper function to safely get weights if they exist
 function get_weights(df, mask=nothing)
@@ -188,6 +201,7 @@ global CC_reco_eff = fill(0.9, Ereco_bins_CC.bin_number)
 global ES_nue_eff = ES_nue_selection_eff .* ES_nue_reco_eff
 global ES_nuother_eff = ES_nuother_selection_eff .* ES_nuother_reco_eff
 global CC_eff = CC_selection_eff .* CC_reco_eff
+
 
 #=
 myP = plot(CC_bin_centers.*1000, CC_eff, 

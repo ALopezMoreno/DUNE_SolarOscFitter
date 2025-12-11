@@ -20,7 +20,7 @@ Author: [Author name]
 # Load solar neutrino fluxes and create interpolated functions
 using Interpolations  # For flux interpolation
 using QuadGK          # For flux normalization integrals
-include("../src/objects.jl")
+include("../src/core.jl")
 
 # Extend energy range for proper interpolation
 # Add zero energy point and ensure coverage up to maximum analysis energy

@@ -3,18 +3,17 @@
 
 # If prevFile is not commented, the fitter will search for prevFile and continue the MCMC chain
 # from where it left off. ====> This field is compulsory when calculating derived quantities! <====
-# prevFile: "outputs/CC-only__sergioReco__10MeV__0BG__4%8B-sys__2%BG-sys__12%Earth-sys__dm21-4.5"
-outFile: "outputs/CC-only__sergioReco__10MeV__0BG__4%8B-sys__2%BG-sys__12%Earth-sys__dm21-4.5_asymmetry"
+#prevFile: "outputs/test_fit_CC_10MeV_-2BG_deltam4.5"
+outFile:  "outputs/CC_5MeV_-1sergioBGStrongCuts_deltam6"
 
 # Will you run in "LLH" (Log likelihood scan), "MCMC" (Markov Chain Monte-Carlo fit), or "derived" (calculate derived quantities from an existing fit) mode?
-RunMode: "derived"  
-
-# GET LLH SCANS WORKING!!!!
+RunMode: "MCMC"  
 
 Asimov: true    # Data fit or Asimov fit?
-fastFit: true    # Accelerate calculations by evaluating parameters at bin centers instead of averaging and evaluating oscprob at the average solar density
-# FIX FASTFIT!!!
+fastFit: true   # Accelerate calculations by simplifying the earth model and averaging the solar density over the production region (recommended)
+nuFast: false 
 
+singleChannel: CC  # Choose to run a single channel in the fit: false (both), CC, ES. False unless otherwise specified
 
 ##############################
 ##### Asimov true values #####
@@ -23,8 +22,8 @@ fastFit: true    # Accelerate calculations by evaluating parameters at bin cente
 
 true_sin2_th12: 0.307
 true_sin2_th13: 0.0224
-true_dm2_21: 4.5e-5 # PDG: 7.53e-5,  SNO: 5.113e-5
-true_integrated_HEP_flux: 8250.0 # b16_agss09
+true_dm2_21: 6e-5 # PDG: 7.53e-5,  SNO: 5.113e-5
+true_integrated_HEP_flux: 8250.0 # as given by b16_agss09
 
 
 ###############################
@@ -51,14 +50,14 @@ prior_8B_flux: Truncated(Normal(5.46e6, 0.218e6), 1.5e6, 1e7) #4% uncertainty
 
 # the total HEP flux can be thought as HEP discovery
 
-prior_HEP_flux: Uniform(0, 2e4) # Assume at most 2-3 orders of magnitude smallr than 8B flux
+prior_HEP_flux: Uniform(0, 2e4) # Assume at most 2-3 orders of magnitude smaller than 8B flux
 
 
 ###########################
 ##### MCMC parameters #####
 
 nChains: 10
-nSteps: 200000 # Number of post-stabilisation steps
+nSteps: 60000 # Number of post-stabilisation steps
 
 maxTuningAttempts: 30 # Set  to zero for no adaptive stepsize tuning
 nTuning: 2500 # Number of tuning steps on each cycle
@@ -70,43 +69,43 @@ earth_potential_uncertainties: true
 ##########################
 ##### LLH parameters #####
 
-llh_bins: 50
+llh_bins: 15
 
 
 #################################
 ##### MC and fit properties #####40
 
-CC_flux_normalisation: 4 # * 100 kTon years 
-ES_flux_normalisation: 1 # * 100 kTon years 
+CC_exposure: 40 # in module years (10s of kTon years)
+ES_exposure: 40 # in module years (10s of kTon years)
 
-ES_background_normalisations: [0.0]
+##### Background rates in Hz / module
 
-# CC BACKGROUNDS: AT THE MOMENT, WE EXPECT:
-# 8.81e+05  neutrons per kTon year
-# 4.717e+05   gammas per kTon year
-# CURRENT NORMALISATION OF CC FLUX IS AT 400 kTon year
-# ==> CC backgrounds: [3.524e8, 1.887e8]
+# Nominal values:
+# ? ES backgrounds  --> using 4e-4 atm
+# neutrons: 4.98 Hz/module 
+# gammas: 1.145 x neutrons = 5.70 Hz/module
 
-CC_background_normalisations: [3.524e8, 1.887e8]
+ES_background_normalisations: [4e-6] 
+CC_background_normalisations: [0.78e-1,  0.78e-1]
 
-ES_background_systematics: [0.0]
-CC_background_systematics: [0.02, 0.02] # Fractional Currently at 2%
+ES_background_systematics: [0.02] # Fractional rate uncertainty
+CC_background_systematics: [0.02, 0.02] # Fractional rate uncertainty
 
-nBins_Etrue: 60
+nBins_Etrue: 40
 
-range_Etrue: [5, 25]
-
-nBins_Ereco_CC: 40
+range_Etrue: [0.1, 25]
 
 nBins_Ereco_ES: 40
 
+nBins_Ereco_CC: 40
+
+range_Ereco_ES: [0.1, 25]
 range_Ereco_CC: [5, 25]
-range_Ereco_ES: [5, 25]
 
-Ereco_min_ES: 10
-Ereco_min_CC: 10
+Ereco_min_ES: 0.1
+Ereco_min_CC: 5
 
-nBins_cosz: 20
+nBins_cosz: 40
 
 
 #######################
@@ -129,18 +128,13 @@ earth_model_file: "inputs/EARTH_MODEL_PREM_DENSE.dat"
 earth_uncertainty_file: "inputs/earth_uncertainty_4.5e-5.jld2"
 solar_exposure_file: "inputs/solarExposure.csv"
 
-# Detector response files
-reconstruction_sample_CC: "inputs/sergio_CC_response.csv"
-# reconstruction_sample_CC: "inputs/Enu_Ereco_CC_smeared.csv"
-reconstruction_sample_ES_nue: "inputs/Enu_Ereco_ES_nue.csv"
-reconstruction_sample_ES_nuother: "inputs/Enu_Ereco_ES_nuother.csv"
+# Detector response files ###### NOT UPDATED. AT THE MOMENT YOU ARE EXPECTED TO USE YOUR OWN!!!!
+reconstruction_sample_CC: "inputs/sergio_reco_CC_withFullCuts.csv" #"inputs/ES_reconstruction_fullEFF.csv" #"inputs/sergio_reco_CC_withMediumCuts.csv"
+reconstruction_sample_ES_nue: "inputs/CC_reconstruction_fullEFF.csv"
+reconstruction_sample_ES_nuother: "inputs/CC_reconstruction_fullEFF.csv"
 
-# Efficiency files
-ES_efficiency_file: "inputs/eff_CC_sergio.csv"
-CC_efficiency_file: "inputs/eff_CC_sergio.csv"
-
-# Background files
-CC_background_files: ["inputs/neutron_bg_CC_sergio.csv", "inputs/gamma_bg_CC_sergio.csv"]
-ES_background_files: ["inputs/Ereco_NGamma_1e6-1_evts.csv"]
+# Background files ###### NOT UPDATED. AT THE MOMENT YOU ARE EXPECTED TO USE YOUR OWN!!!!
+CC_background_files: ["inputs/neutron_bg_CC_sergio_withFullCuts.csv", "inputs/gamma_bg_CC_sergio_withFullCuts.csv"]
+ES_background_files: ["inputs/Ereco_NGamma_1e6-1_evts_GeV_june2025_v2.csv"]
 
 data_file: "data.txt"

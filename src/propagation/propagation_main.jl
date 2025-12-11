@@ -58,11 +58,13 @@ function propagateSamples(unoscillatedSample, responseMatrices, params, solarMod
     oscillatedSample = compute_oscillated_samples(unoscillatedSample, params, oscProbs)
 
     # 6) ES reco event rates
-    eventRate_ES_angular =
-        compute_ES_angular_event_rates(oscillatedSample.ES, responseMatrices, BG_ES)
-PropagationDebug
-    eventRate_ES_day, eventRate_ES_night =
-        compute_ES_event_rates(oscillatedSample.ES, responseMatrices, BG_ES)
+    if angular_reco
+        eventRate_ES_day, eventRate_ES_night =
+            compute_ES_angular_event_rates(oscillatedSample.ES, responseMatrices, BG_ES)
+    else
+        eventRate_ES_day, eventRate_ES_night =
+            compute_ES_event_rates(oscillatedSample.ES, responseMatrices, BG_ES)
+    end
 
     # 7) CC reco event rates
     eventRate_CC_day, eventRate_CC_night =
@@ -79,5 +81,5 @@ PropagationDebug
         sleep(200) # wait for a while
     end
 
-    return eventRate_ES_day, eventRate_CC_day, eventRate_ES_night, eventRate_CC_night, eventRate_ES_angular, BG_ES, BG_CC
+    return eventRate_ES_day, eventRate_CC_day, eventRate_ES_night, eventRate_CC_night, BG_ES, BG_CC
 end

@@ -26,7 +26,8 @@
 
 # Output file prefix for all generated files (chains, plots, etc.)
 # Results will be saved as: outFile_mcmc.bin, outFile_info.txt, etc.
-outFile: "outputs/CC_5MeVthershold_noShielding_strongCuts_deltam6"
+# outFile: "outputs/CC_10MeVthershold_Shielding_strongCuts_deltam6_HDonly"
+outFile: "outputs/ES_only_AngleInformationV2_3MeVthreshold_shieldBG"
 
 # Previous file to continue MCMC chain from (optional)
 # Uncomment to resume a previous run from where it left off
@@ -49,11 +50,14 @@ Asimov: true
 # false - Slow mode: full Earth model, detailed solar density integration (slightly more accurate)
 fastFit: true
 
+# Use nufast calculator? (overrides fastFit mode to true -- NO MULTITHREADING!!)
+nuFast: false
+
 # Detection channel selection:
 # false - Fit both ES (Elastic Scattering) and CC (Charged Current) channels
 # "ES"  - Fit only Elastic Scattering channel
 # "CC"  - Fit only Charged Current channel
-singleChannel: CC
+singleChannel: "ES"
 
 ##############################
 ##### Asimov true values #####
@@ -87,7 +91,7 @@ true_integrated_HEP_flux: 8250.0  # HEP neutrino flux (B16-AGSS09 prediction)
 ##### Neutrino oscillation parameters #####
 
 # Solar mixing angle squared sin²θ₁₂
-prior_sin2_th12: Uniform(0.23, 0.5)
+prior_sin2_th12: Uniform(0.15, 0.5)
 #Uniform prior covering region of interest: Uniform(0.15, 0.5)
 
 # Reactor mixing angle squared sin²θ₁₃  
@@ -126,7 +130,7 @@ prior_HEP_flux: Uniform(0, 2e4)
 # More chains and steps = better statistics but longer runtime
 
 nChains: 10             # Number of parallel MCMC chains (recommended: number of available cores)
-nSteps: 15000           # Number of post-tuning steps per chain
+nSteps: 100000           # Number of post-tuning steps per chain
                         # Total samples = nChains × nSteps
 
 # Adaptive step size tuning (improves sampling efficiency)
@@ -150,18 +154,18 @@ llh_bins: 15            # Number of bins per parameter dimension for 2D scans
 ##### Detector configuration #####
 
 # Detector exposure (determines event statistics)
-CC_exposure: 40         # Charged Current exposure in module-years
-ES_exposure: 40         # Elastic Scattering exposure in module-years
+CC_exposure: 10         # Charged Current exposure in module-years
+ES_exposure: 10         # Elastic Scattering exposure in module-years
                         # 1 module-year ≈ 10 kton-year for DUNE
 
 ##### Background event rates #####
 
 # Background normalizations (events/second/module before cuts ---still after efficiency atm---)
-ES_background_normalisations: [4e-6]       # ES background components
-CC_background_normalisations: [1.01, 1.01] # CC background components [neutrons, gammas]
+ES_background_normalisations: [2e-4, 2e-4]       # ES background components
+CC_background_normalisations: [1, 1] # CC background components [neutrons, gammas]
 
 # Background systematic uncertainties (fractional)
-ES_background_systematics: [0.02]         # 2% uncertainty on ES backgrounds  
+ES_background_systematics: [0.02, 0.02]   # 2% uncertainty on ES backgrounds  
 CC_background_systematics: [0.02, 0.02]   # 2% uncertainty on each CC background
 
 # Note: Background files must match the number of components specified above
@@ -170,23 +174,27 @@ CC_background_systematics: [0.02, 0.02]   # 2% uncertainty on each CC background
 ##### Energy binning configuration #####
 
 # True neutrino energy binning (for oscillation calculations)
-nBins_Etrue: 40         # Number of true energy bins
+nBins_Etrue: 30         # Number of true energy bins
 range_Etrue: [0.1, 25]  # True energy range in MeV
 
 # Reconstructed energy binning (for detector response)
 nBins_Ereco_ES: 40      # ES reconstructed energy bins
 nBins_Ereco_CC: 40      # CC reconstructed energy bins
 
-range_Ereco_ES: [0.1, 25]  # ES energy range in MeV
+range_Ereco_ES: [1, 15]  # ES energy range in MeV
 range_Ereco_CC: [5, 25]    # CC energy range in MeV
 
 # Analysis energy thresholds (events below these energies are excluded)
-Ereco_min_ES: 0.1       # ES threshold in MeV
-Ereco_min_CC: 5         # CC threshold in MeV
+Ereco_min_ES: 3       # ES threshold in MeV
+Ereco_min_CC: 5       # CC threshold in MeV
 
 # Zenith angle binning (for Earth matter effects)
-nBins_cosz: 40          # Number of cos(zenith) bins from -1 (upward) to 0 (horizontal)
+nBins_cosz: 35         # Number of cos(zenith) bins from -1 (upward) to 0 (horizontal)
 
+# Scattering angle binning (for ES reconstruction)
+nBins_cos_scatter: 30
+# Use ES scattering?
+use_scattering_info: true
 
 #######################
 ##### Input files #####
@@ -216,16 +224,19 @@ solar_exposure_file: "inputs/solarExposure.csv"   # Detector exposure vs zenith 
 # Monte Carlo samples for detector response matrices
 # CSV files with columns: Etrue, Ereco, mask (selection), weights (optional)
 reconstruction_sample_CC: "inputs/sergio_reco_CC_withFullCuts.csv"
-reconstruction_sample_ES_nue: "inputs/CC_reconstruction_fullEFF.csv"      # ES ν_e interactions
-reconstruction_sample_ES_nuother: "inputs/CC_reconstruction_fullEFF.csv"  # ES ν_μ,τ interactions
+reconstruction_sample_ES_nue: "inputs/Enu_Ereco_ES_nue_smeared.csv"      # ES ν_e interactions
+reconstruction_sample_ES_nuother: "inputs/Enu_Ereco_ES_nuother_smeared.csv"  # ES ν_μ,τ interactions
+reconstruction_sample_ES_angle: "inputs/ES_angular_reco.csv"
 
 ##### Background Monte Carlo files #####
 
 # Background event samples (must match number of components in normalisations above)
 CC_background_files: ["inputs/neutron_bg_CC_sergio_withFullCuts.csv", 
                       "inputs/gamma_bg_CC_sergio_withFullCuts.csv"]
-ES_background_files: ["inputs/Ereco_NGamma_1e6-1_evts_GeV_june2025_v2.csv"]
+ES_background_files: ["inputs/Ereco_NGamma_1e6-1_evts_GeV_june2025_v2.csv",
+                      "inputs/Ereco_NGamma_1e6-1_evts_GeV_june2025_v2.csv"]
 
 ##### Real data file (only used when Asimov: false) #####
 
 data_file: "data.txt"   # Real data file (format TBD)
+  
