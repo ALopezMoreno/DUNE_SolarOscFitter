@@ -23,7 +23,7 @@ using DataFrames      # For data manipulation
 using Interpolations  # For cross-section interpolation
 
 # Load physics constants and detector parameters
-include("../src/objects.jl")
+include("../src/core.jl")
 
 # Load charged current cross-section data
 # Alternative: Gardiner 2020 cross-sections (commented out)

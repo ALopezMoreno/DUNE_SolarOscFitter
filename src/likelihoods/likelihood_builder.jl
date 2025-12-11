@@ -19,6 +19,48 @@ function llh_ES_poisson(d::LikelihoodInputs, parameters, rates)::Float64
     return loglh_ES_day + loglh_ES_night
 end
 
+function llh_ES_angle(d::LikelihoodInputs, parameters, rates)::Float64
+    idx  = d.index_ES
+    nObs = d.nObserved
+
+    # DAY: rates.ES_day and nObs.ES_day are (Ncos, NE)
+    # → restrict in energy (dimension 2) and flatten over all cos bins + energy bins
+    loglh_ES_day = poissonLogLikelihood(
+        vec(rates.ES_day[:, idx:end]),
+        vec(nObs.ES_day[:, idx:end]),
+    )
+
+    # NIGHT: rates.ES_night and nObs.ES_night are (Ncos, NE, Nnight)
+    # → loop over the night bins (dim=3), restrict in energy, and sum log-likelihoods
+    loglh_ES_night = sum(
+        poissonLogLikelihood(
+            vec(rate_slice[:, idx:end]),
+            vec(obs_slice[:, idx:end]),
+        )
+        for (rate_slice, obs_slice) in zip(
+            eachslice(rates.ES_night, dims = 3),
+            eachslice(nObs.ES_night,  dims = 3),
+        )
+    )
+
+    return loglh_ES_day + loglh_ES_night
+end
+
+
+
+function llh_ES_angle_conditional(d::LikelihoodInputs, parameters, angle_rates)::Float64
+    idx  = d.index_ES
+    nObs = d.nObserved
+
+    loglh_ES_angle = sum(
+    conditional_poissonLogLikelihood(col, obs_col)
+    for (col, obs_col) in zip(eachcol(angle_rates[:, idx:end]),
+                              eachcol(nObs.ES_angular[:, idx:end]))
+    )
+
+    return loglh_ES_angle
+end
+
 
 ###################################
 # --- CC sample contributions --- #
@@ -105,7 +147,11 @@ function make_likelihood(
 
         # === ES contribution ==========================================
         if use_ES
-            loglh += ES_llh(d, parameters, rates)
+            if angular_reco
+                loglh += llh_ES_angle(d, parameters, rates)
+            else
+                loglh += ES_llh(d, parameters, rates)
+            end
         end
 
         # === CC contribution ==========================================

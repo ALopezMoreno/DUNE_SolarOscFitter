@@ -141,8 +141,13 @@ ES_bg_aboveThreshold = sum(BG_ES_tot_true[index_ES:end])
 CC_Ntot = sum(@view measuredRate_CC_night[:, index_CC:end]) - 0.5 * CC_bg_aboveThreshold
 CC_Dtot = sum(measuredRate_CC_day[index_CC:end]) - 0.5 * CC_bg_aboveThreshold
 
-ES_Ntot = sum(@view measuredRate_ES_night[:, index_ES:end]) - 0.5 * ES_bg_aboveThreshold
-ES_Dtot = sum(measuredRate_ES_day[index_ES:end]) - 0.5 * ES_bg_aboveThreshold
+if angular_reco
+    ES_Ntot = sum(@view measuredRate_ES_night[:, index_ES:end, :]) - 0.5 * ES_bg_aboveThreshold
+    ES_Dtot = sum(measuredRate_ES_day[:, index_ES:end]) - 0.5 * ES_bg_aboveThreshold
+else
+    ES_Ntot = sum(@view measuredRate_ES_night[:, index_ES:end]) - 0.5 * ES_bg_aboveThreshold
+    ES_Dtot = sum(measuredRate_ES_day[index_ES:end]) - 0.5 * ES_bg_aboveThreshold
+end
 
 ES_denominator = ES_Dtot + ES_Ntot
 CC_denominator = CC_Dtot + CC_Ntot
@@ -174,13 +179,20 @@ ereco_data = (
     CC_day=measuredRate_CC_day,
     
     ES_night=measuredRate_ES_night,
-    CC_night=measuredRate_CC_night
+    CC_night=measuredRate_CC_night,
+
+    # ES_angular = measuredRate_ES_angular
     )
 
-ES_night_summed = sum(ereco_data.ES_night, dims=1)
-CC_night_summed = sum(ereco_data.CC_night, dims=1)
+if angular_reco
+    ES_night_summed = sum(ereco_data.ES_night, dims=(1, 3))
+    ES_combined = vec(sum(ereco_data.ES_day, dims=1)) .+ vec(ES_night_summed)
+else
+    ES_night_summed = sum(ereco_data.ES_night, dims=1)
+    ES_combined = vec(ereco_data.ES_day) .+ vec(ES_night_summed)
+end
 
-ES_combined = vec(ereco_data.ES_day) .+ vec(ES_night_summed)
+CC_night_summed = sum(ereco_data.CC_night, dims=1)
 CC_combined = vec(ereco_data.CC_day) .+ vec(CC_night_summed)
 
 @logmsg Setup "Total number of ES data above threshold: $(sci_notation(sum(ES_combined[index_ES:end])))" 
@@ -242,6 +254,7 @@ diff_data = adjusted_CC_night_pos .- ereco_data_mergedES.CC_day' .* exposure_wei
 # Set color limits for log_data (should now be linear in log scale)
 clims_log = (minimum(log_data), maximum(log_data))
 
+using Plots
 using ColorSchemes
 
 parulas = ColorScheme([RGB(0.2422, 0.1504, 0.6603),
@@ -265,7 +278,7 @@ parulas = ColorScheme([RGB(0.2422, 0.1504, 0.6603),
         RGB(0.1786, 0.5289, 0.9682),
         RGB(0.1764, 0.5499, 0.9520),
         RGB(0.1687, 0.5703, 0.9359),
-        RGB(0.1540, 0.5902, 0.92, integrated_8B_flux=flux_8B)18),
+        RGB(0.1540, 0.5902, 0.9218),
         RGB(0.1460, 0.6091, 0.9079),
         RGB(0.1380, 0.6276, 0.8973),
         RGB(0.1248, 0.6459, 0.8883),
@@ -311,6 +324,26 @@ parulas = ColorScheme([RGB(0.2422, 0.1504, 0.6603),
     "Parula",
     "From MATLAB")
 
+
+myP = heatmap(
+    ereco_data.ES_angular,
+    color = cgrad(parulas),
+    # clim = (0, 50),
+    # colorbar_title = "log10(counts)",
+    title = "Angular dist",
+    xlabel = "Energy",
+    ylabel = "cos(s)")
+
+display(myP)
+sleep(100)
+=#
+#=
+    xticks = (collect(xtick_positions), xtick_labels),
+    yticks = (collect(ytick_positions), ytick_labels)
+)
+=#
+
+#=
 heatmap(
     diff_data,
     color = :inferno, #cgrad(parulas),

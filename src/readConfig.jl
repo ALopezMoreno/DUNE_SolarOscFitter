@@ -244,6 +244,7 @@ function main()
     # Reconstruction samples
     global nue_filepath = config["reconstruction_sample_ES_nue"]
     global other_filepath = config["reconstruction_sample_ES_nuother"]
+    global angular_filepath = config["reconstruction_sample_ES_angle"]
     global CC_filepath = config["reconstruction_sample_CC"]
 
     # MC normalisation
@@ -268,7 +269,7 @@ function main()
     global Ereco_bins_CC = (bin_number=config["nBins_Ereco_CC"], min=config["range_Ereco_CC"][1]*1e-3, max=config["range_Ereco_CC"][2]*1e-3)  # The first and last bins are exended ad infinitum
     global E_threshold = (ES=config["Ereco_min_ES"]*1e-3, CC=config["Ereco_min_CC"]*1e-3)
     global cosz_bins = (bin_number=config["nBins_cosz"], min=-1, max=0)
-    global cos_scatter_bins = (bin_number=config["nBins_cos_scatter"], min=-1, max=0)
+    global cos_scatter_bins = (bin_number=config["nBins_cos_scatter"], min=0, max=1)
 
     # MCMC parameters
     load_proposal_matrix(config)
@@ -316,8 +317,8 @@ function main()
         error("Invalid value for singleChannel: $singleChannel. Expected false, \"CC\", or \"ES\".")
     end
 
-    # Angular likelihood info? -- NOT YET
-    global angular_reco = false
+    # Angular likelihood info?
+    global angular_reco = config["use_scattering_info"]
 
     # Uncertainties?
     global earthUncertainty = config["earth_potential_uncertainties"]
