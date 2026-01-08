@@ -393,7 +393,7 @@ def plot_corner(variables, data_dict, externalContours=False, colorlist=['b', 'p
                     hist.collections[0].set_norm(colors.LogNorm(vmin=1))
 
 
-                x_grid, y_grid, density, levels, x_HPD, y_HPD = get_contours(data[j], data[i], weights, bins2D, smooth=0.5)
+                x_grid, y_grid, density, levels, x_HPD, y_HPD = get_contours(data[j], data[i], weights, bins2D, smooth=0.75)
                 # Add custom colour transitions for levels
                 original_color = colors.to_rgb(color)  # (0.2549, 0.4118, 0.8824)
 

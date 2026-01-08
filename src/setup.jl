@@ -114,7 +114,7 @@ global earth_lookup = get_avg_densities(earth_paths)
 ##################################
 ######## CREATE FAKE DATA ########
 ##################################
-backgrounds = (ES=ES_bg, CC=CC_bg)
+backgrounds = (ES=ES_bg, CC=CC_bg, sides=ES_sides)
 
 # Propagate Asimov point to generate Asimov event rates
 include(joinpath(@__DIR__, "propagation", "propagation_main.jl"))
@@ -141,13 +141,19 @@ ES_bg_aboveThreshold = sum(BG_ES_tot_true[index_ES:end])
 CC_Ntot = sum(@view measuredRate_CC_night[:, index_CC:end]) - 0.5 * CC_bg_aboveThreshold
 CC_Dtot = sum(measuredRate_CC_day[index_CC:end]) - 0.5 * CC_bg_aboveThreshold
 
-if angular_reco
-    ES_Ntot = sum(@view measuredRate_ES_night[:, index_ES:end, :]) - 0.5 * ES_bg_aboveThreshold
-    ES_Dtot = sum(measuredRate_ES_day[:, index_ES:end]) - 0.5 * ES_bg_aboveThreshold
+if ES_mode
+    if angular_reco
+        ES_Ntot = sum(@view measuredRate_ES_night[:, index_ES:end, :]) - 0.5 * ES_bg_aboveThreshold
+        ES_Dtot = sum(measuredRate_ES_day[:, index_ES:end]) - 0.5 * ES_bg_aboveThreshold
+    else
+        ES_Ntot = sum(@view measuredRate_ES_night[:, index_ES:end]) - 0.5 * ES_bg_aboveThreshold
+        ES_Dtot = sum(measuredRate_ES_day[index_ES:end]) - 0.5 * ES_bg_aboveThreshold
+    end
 else
-    ES_Ntot = sum(@view measuredRate_ES_night[:, index_ES:end]) - 0.5 * ES_bg_aboveThreshold
-    ES_Dtot = sum(measuredRate_ES_day[index_ES:end]) - 0.5 * ES_bg_aboveThreshold
+    ES_Ntot = 0
+    ES_Dtot = 0
 end
+
 
 ES_denominator = ES_Dtot + ES_Ntot
 CC_denominator = CC_Dtot + CC_Ntot
@@ -184,16 +190,22 @@ ereco_data = (
     # ES_angular = measuredRate_ES_angular
     )
 
-if angular_reco
-    ES_night_summed = sum(ereco_data.ES_night, dims=(1, 3))
-    ES_combined = vec(sum(ereco_data.ES_day, dims=1)) .+ vec(ES_night_summed)
-else
-    ES_night_summed = sum(ereco_data.ES_night, dims=1)
-    ES_combined = vec(ereco_data.ES_day) .+ vec(ES_night_summed)
-end
-
 CC_night_summed = sum(ereco_data.CC_night, dims=1)
 CC_combined = vec(ereco_data.CC_day) .+ vec(CC_night_summed)
+
+if ES_mode
+    if angular_reco
+        ES_night_summed = sum(ereco_data.ES_night, dims=(1, 3))
+        ES_combined = vec(sum(ereco_data.ES_day, dims=1)) .+ vec(ES_night_summed)
+    else
+        ES_night_summed = sum(ereco_data.ES_night, dims=1)
+        ES_combined = vec(ereco_data.ES_day) .+ vec(ES_night_summed)
+    end
+else
+    ES_night_summed = zeros(eltype(CC_night_summed), size(CC_night_summed))
+    ES_combined     = zeros(eltype(CC_combined), size(CC_combined))
+end
+
 
 @logmsg Setup "Total number of ES data above threshold: $(sci_notation(sum(ES_combined[index_ES:end])))" 
 @logmsg Setup "Total number of CC data above threshold: $(sci_notation(sum(CC_combined[index_CC:end])))" 
