@@ -28,13 +28,14 @@ df_CC_list = extract_dataframes(CC_filepaths_BG)  # CC background samples
 
 # Process ES background samples
 ES_bg = []
+ES_sides = []
 for df in df_ES_list
     # Create histograms with or without MC weights
     if "weights" in names(df)
         # Weighted MC samples
         ES_temp, ES_temp_etrue = create_histogram(df.Ereco, Ereco_bins_ES_extended, weights=df.weights, normalise=true)
         ES_temp_selec, _ = create_histogram(df.Ereco[df.mask], Ereco_bins_ES_extended, weights=df.weights[df.mask], normalise=false)
-        ES_temp_total, _ = create_histogram(df.Eraw, Ereco_bins_ES_extended, weights=df.weights, normalise=false)
+        ES_temp_total, _ = create_histogram(df.Ereco, Ereco_bins_ES_extended, weights=df.weights, normalise=false)
     else
         # Unweighted MC samples
         ES_temp, ES_temp_etrue = create_histogram(df.Ereco, Ereco_bins_ES_extended, normalise=true)
@@ -42,11 +43,20 @@ for df in df_ES_list
         ES_temp_total, _ = create_histogram(df.Ereco, Ereco_bins_ES_extended, normalise=false)
     end
 
+    if "side" in names(df)
+        side = df.side
+    else
+        side = -1
+    end
+
     # Calculate detection efficiency: selected events / total events
     ES_eff_bg =  @. ifelse(ES_temp_total == 0, 0.0, ES_temp_selec / ES_temp_total)
     
-    # Scale by detection time, efficiency, and exposure normalization
-    push!(ES_bg, ES_temp .* detection_time .* ES_eff_bg .* ES_normalisation)
+    # Scale by detection time, efficiency, and exposure normalization and attenuation ratio over the 50M events of the MC
+    attenuation = sum(ES_temp_total) / 50e6
+
+    push!(ES_bg, ES_temp .* detection_time .* ES_eff_bg .* ES_normalisation .* attenuation)
+    push!(ES_sides, side)
 end
 
 
@@ -70,7 +80,9 @@ for df in df_CC_list
     CC_eff_bg = @. ifelse(CC_temp_total == 0, 0.0, CC_temp_selec / CC_temp_total)
     
     # Scale by detection time, efficiency, and exposure normalization
-    push!(CC_bg, CC_temp .* detection_time .* CC_eff_bg .* CC_normalisation)
+    # push!(CC_bg, CC_temp .* detection_time .* CC_eff_bg .* CC_normalisation)
+    ## MC IS ALREADY NORMALISED TO 1 KT YEAR!
+    push!(CC_bg, CC_temp_selec .* 10 .* CC_normalisation)
 end
 
 # Setup systematic uncertainties for background normalizations
@@ -103,7 +115,8 @@ end
 for (bg, norm, sys) in zip(CC_bg, CC_bg_norms, CC_bg_sys)
     if sys == 0
         # No systematic uncertainty - apply fixed normalization
-        bg .*= norm
+        # The MC for CC was created using a 4pi flux of 9.86e-8 n/cm2/s, which corresponds to a flux on the wall of 2.2e-6 n/cm2/s
+        bg .*= norm / 2.2e-6
         push!(CC_bg_par_counts, 0)
     else
         # Systematic uncertainty present - create nuisance parameter
