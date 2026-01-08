@@ -190,6 +190,16 @@ The analysis fits the following parameters:
 - Background normalizations
 - Detector response uncertainties
 
+> ⚠️ **Warning: Delete Existing Output Files Before Rewriting**
+>
+> When regenerating results, make sure to **delete any existing output files** first.
+> Some serialization and output routines may **not cleanly overwrite** previous files,
+> which can lead to corrupted, partially overwritten, or unexpectedly appended data.
+>
+> To avoid inconsistent results, always remove old output files manually before running
+> a job that rewrites them.
+
+
 ## Performance Tips
 
 - Use multiple threads: `julia -t auto` or `julia -t N` . **NOT COMPATIBLE WITH NUFAST**

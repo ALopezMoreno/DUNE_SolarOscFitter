@@ -20,11 +20,11 @@ def convert_mcmc_to_jld2(bin_file, info_file, out_jld2):
         return 0
 
 
-def load_posterior(mcmc_chains, parameters, burnin=100, test=None):
+def load_posterior(mcmc_chains, parameters, burnin=5_000, test=None):
     valid_chains = []
     for mcmc_chain in mcmc_chains:
         if not os.path.exists(mcmc_chain + ".jld2"):
-            print(f"The file '{mcmc_chain}.jld2' does not exist. Looking for binaries")
+            print(f"The file '{mcmc_chain}.jld2' does not exist. Looking for binaries")  
             
             if not os.path.exists(mcmc_chain + "_mcmc.bin"):
                 print(f"Error: The mcmc file '{mcmc_chain}_mcmc.bin' does not exist.")
@@ -68,7 +68,7 @@ def load_posterior(mcmc_chains, parameters, burnin=100, test=None):
             chains = np.array(f['chainid'][()])
             
             # Create burnin mask (excluding chain 17 as in your original code)
-            mask = (stepno > burnin) & (~np.isin(chains, [17]))
+            mask = (stepno > burnin) # & (~np.isin(chains, [17]))
             
             # Store chain IDs and step numbers (after burnin)
             results['chains'].append(chains[mask])
@@ -81,6 +81,7 @@ def load_posterior(mcmc_chains, parameters, burnin=100, test=None):
                     # Ensure we're working with 1D arrays
                     if data.ndim > 1:
                         data = data.squeeze()
+                        print("we had to flatten" + param)
                     results[param].append(data[mask])
                 else:
                     raise ValueError(f"Parameter '{param}' not found in MCMC chain file")

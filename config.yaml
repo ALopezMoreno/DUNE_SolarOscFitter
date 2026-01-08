@@ -27,7 +27,7 @@
 # Output file prefix for all generated files (chains, plots, etc.)
 # Results will be saved as: outFile_mcmc.bin, outFile_info.txt, etc.
 # outFile: "outputs/CC_10MeVthershold_Shielding_strongCuts_deltam6_HDonly"
-outFile: "outputs/ES_only_AngleInformationV2_3MeVthreshold_shieldBG"
+outFile: "outputs/CC_only_5MeVthreshold_shieldBG_SNOfluxPrior"
 
 # Previous file to continue MCMC chain from (optional)
 # Uncomment to resume a previous run from where it left off
@@ -57,7 +57,7 @@ nuFast: false
 # false - Fit both ES (Elastic Scattering) and CC (Charged Current) channels
 # "ES"  - Fit only Elastic Scattering channel
 # "CC"  - Fit only Charged Current channel
-singleChannel: "ES"
+singleChannel: "CC"
 
 ##############################
 ##### Asimov true values #####
@@ -111,8 +111,8 @@ prior_dm2_21: Uniform(2e-5, 3e-4)
 # Option 1: Free flux (no external constraint)
 # prior_8B_flux: Uniform(1e5, 2e7)
 
-# Option 2: Current Borexino constraint (~12% uncertainty)
-# prior_8B_flux: Truncated(Normal(5.46e6, 0.66e6), 0.1, 1e7)
+# Option 2: SNO neutral current measurement (~5.3% uncertainty)
+# prior_8B_flux: Truncated(Normal(5.25e6, 0.28e6), 1.5e6, 1e7)
 
 # Option 3: Future ES measurement constraint (4% uncertainty)
 prior_8B_flux: Truncated(Normal(5.46e6, 0.218e6), 1.5e6, 1e7)
@@ -129,8 +129,8 @@ prior_HEP_flux: Uniform(0, 2e4)
 # Markov Chain Monte Carlo sampling configuration
 # More chains and steps = better statistics but longer runtime
 
-nChains: 10             # Number of parallel MCMC chains (recommended: number of available cores)
-nSteps: 100000           # Number of post-tuning steps per chain
+nChains: 10              # Number of parallel MCMC chains (recommended: number of available cores)
+nSteps: 10000           # Number of post-tuning steps per chain
                         # Total samples = nChains × nSteps
 
 # Adaptive step size tuning (improves sampling efficiency)
@@ -161,8 +161,8 @@ ES_exposure: 10         # Elastic Scattering exposure in module-years
 ##### Background event rates #####
 
 # Background normalizations (events/second/module before cuts ---still after efficiency atm---)
-ES_background_normalisations: [2e-4, 2e-4]       # ES background components
-CC_background_normalisations: [1, 1] # CC background components [neutrons, gammas]
+ES_background_normalisations: [2.2e-6, 2.2e-6]   # ES background fluxes in cm-2s-1 -- nominal: 2.2e-6 -- shielded: CHANGE BKG FILES
+CC_background_normalisations: [4.4e-8, 4.4e-8]   # CC background fluxes in cm-2s-1 -- nominal: 2.2e-6 -- shielded: 4.4e-8
 
 # Background systematic uncertainties (fractional)
 ES_background_systematics: [0.02, 0.02]   # 2% uncertainty on ES backgrounds  
@@ -233,8 +233,8 @@ reconstruction_sample_ES_angle: "inputs/ES_angular_reco.csv"
 # Background event samples (must match number of components in normalisations above)
 CC_background_files: ["inputs/neutron_bg_CC_sergio_withFullCuts.csv", 
                       "inputs/gamma_bg_CC_sergio_withFullCuts.csv"]
-ES_background_files: ["inputs/Ereco_NGamma_1e6-1_evts_GeV_june2025_v2.csv",
-                      "inputs/Ereco_NGamma_1e6-1_evts_GeV_june2025_v2.csv"]
+ES_background_files: ["inputs/ES_neutron_background_wShielding_1mFidu_discri_angle_cut_100Emin_longW.csv",
+                      "inputs/ES_neutron_background_wShielding_1mFidu_discri_angle_cut_100Emin_Bottom.csv"]
 
 ##### Real data file (only used when Asimov: false) #####
 
