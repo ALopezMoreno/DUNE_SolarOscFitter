@@ -87,19 +87,21 @@ if earthUncertainty
     end
 end
 
-
-if !isempty(ES_bg_norms_true)
-    for (i, norm) in enumerate(ES_bg_norms_true)
-        true_parameters[Symbol("ES_bg_norm_$i")] = norm
-    end
-end
-  
-if !isempty(CC_bg_norms_true)
-    for (i, norm) in enumerate(CC_bg_norms_true)
-        true_parameters[Symbol("CC_bg_norm_$i")] = norm
+if ES_mode
+    if !isempty(ES_bg_norms_true)
+        for (i, norm) in enumerate(ES_bg_norms_true)
+            true_parameters[Symbol("ES_bg_norm_$i")] = norm
+        end
     end
 end
 
+if CC_mode
+    if !isempty(CC_bg_norms_true)
+        for (i, norm) in enumerate(CC_bg_norms_true)
+            true_parameters[Symbol("CC_bg_norm_$i")] = norm
+        end
+    end
+end
 
 # create tuple
 true_params = (; true_parameters...)

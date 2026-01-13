@@ -171,12 +171,12 @@ function compute_oscillated_samples(unoscillatedSample, params, oscProbs)
                 (unoscillatedSample.ES_nue_hep' .* (params.integrated_HEP_flux  .* oscProbs.nue_hep_night .* exposure_weights)),
 
             nuother_day =
-                unoscillatedSample.ES_nuother_8B  .* oscProbs.nuother_8B_day  .* params.integrated_8B_flux .+
-                unoscillatedSample.ES_nuother_hep .* oscProbs.nuother_hep_day .* params.integrated_HEP_flux,
+                unoscillatedSample.ES_nuother_8B  .* params.integrated_8B_flux .+
+                unoscillatedSample.ES_nuother_hep .* params.integrated_HEP_flux,
 
             nuother_night =
-                (unoscillatedSample.ES_nuother_8B'  .* (params.integrated_8B_flux' .* oscProbs.nuother_8B_night  .* exposure_weights)) .+
-                (unoscillatedSample.ES_nuother_hep' .* (params.integrated_HEP_flux  .* oscProbs.nuother_hep_night .* exposure_weights)),
+                (unoscillatedSample.ES_nuother_8B'  .* (params.integrated_8B_flux' .* exposure_weights)) .+
+                (unoscillatedSample.ES_nuother_hep' .* (params.integrated_HEP_flux .* exposure_weights)),
         )
     end
 

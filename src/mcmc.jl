@@ -71,15 +71,19 @@ if earthUncertainty
   # param_bounds = Dict(:earth_norm => (0.0, 2.0)) # We want these to be fixed between 0 and 2
 end
 
-if !isempty(ES_bg_norms_pars)
-  for (i, norm) in enumerate(ES_bg_norms_pars)
-      priors[Symbol("ES_bg_norm_$i")] = norm
+if ES_mode
+  if !isempty(ES_bg_norms_pars)
+    for (i, norm) in enumerate(ES_bg_norms_pars)
+        priors[Symbol("ES_bg_norm_$i")] = norm
+    end
   end
 end
 
-if !isempty(CC_bg_norms_pars)
-  for (i, norm) in enumerate(CC_bg_norms_pars)
-      priors[Symbol("CC_bg_norm_$i")] = norm
+if CC_mode
+  if !isempty(CC_bg_norms_pars)
+    for (i, norm) in enumerate(CC_bg_norms_pars)
+        priors[Symbol("CC_bg_norm_$i")] = norm
+    end
   end
 end
 
@@ -147,7 +151,7 @@ println(" ")
 
 
 # Run MCMC in batches to not overwhelm the RAM
-# Setting a batch size of 10K steps, count tuning as the zeroth batch
+# Setting a batch size of 1K steps, count tuning as the zeroth batch
 batchSteps = 1_000
 nBatches = ceil(Int, mcmcSteps / batchSteps)
 
