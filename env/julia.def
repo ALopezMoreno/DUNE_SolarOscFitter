@@ -1,0 +1,52 @@
+Bootstrap: docker
+From: ubuntu:22.04
+
+%post
+    apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates curl tar git \
+        && rm -rf /var/lib/apt/lists/*
+
+    # Install Julia
+    JULIA_VER=1.12.3
+    mkdir -p /opt/julia
+    curl -fsSL https://julialang-s3.julialang.org/bin/linux/x64/1.12/julia-${JULIA_VER}-linux-x86_64.tar.gz \
+      | tar -xz -C /opt/julia --strip-components=1
+    ln -s /opt/julia/bin/julia /usr/local/bin/julia
+
+    # Make a depot inside the image so packages are embedded
+    mkdir -p /opt/julia_depot
+    chmod -R a+rX /opt/julia_depot
+    
+    # Instantiate & precompile project packages into the image
+    export JULIA_DEPOT_PATH=/opt/julia_depot
+    julia --project=/opt/app -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
+
+%files
+    src /opt/app/src
+    Project.toml /opt/app/Project.toml
+    Manifest.toml /opt/app/Manifest.toml
+    # (optional) config templates, data, etc:
+    # configs /opt/app/configs
+
+%environment
+    export JULIA_DEPOT_PATH=/opt/julia_depot
+    export JULIA_PROJECT=/opt/app
+
+%runscript
+    # Usage:
+    #   apptainer run julia_app.sif <nthreads> [configFilePath]
+    # Examples:
+    #   apptainer run julia_app.sif 8
+    #   apptainer run julia_app.sif 8 /path/to/config.toml
+
+    THREADS="${1:-1}"
+    shift || true
+
+    # Put a writable depot first, keep the baked depot second
+    export JULIA_DEPOT_PATH="${HOME}/.julia:/opt/julia_depot"
+    export JULIA_PROJECT=/opt/app
+
+    exec julia --project=/opt/app -t "${THREADS}" /opt/app/src/readConfig.jl "$@"
+
+%test
+    julia -e 'println("Julia OK: ", VERSION)'
