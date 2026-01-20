@@ -16,6 +16,9 @@ from matplotlib import colors
 import matplotlib.ticker as ticker
 from scipy.special import erf
 import corner
+from dataclasses import dataclass, field
+from typing import Dict, Optional, Tuple, Literal, Union
+
 
 plt.rcParams['text.usetex'] = True
 hep.style.use("CMS")
@@ -614,6 +617,18 @@ def add_external_solar_data(ax):
     bestFitkamLAND[0] = np.sin(np.arctan(np.sqrt(bestFitkamLAND[0])))**2
     bestFitkamLAND[1] = bestFitkamLAND[1]*1e0
 
+    juno1 = np.genfromtxt('inputs/contours/juno_1sigma.csv', delimiter=',')
+    juno1[:, 1] *= 1e-1
+
+    juno2 = np.genfromtxt('inputs/contours/juno_2sigma.csv', delimiter=',')
+    juno2[:, 1] *= 1e-1
+
+    juno3 = np.genfromtxt('inputs/contours/juno_3sigma.csv', delimiter=',')
+    juno3[:, 1] *= 1e-1
+
+    bestFitJuno = np.genfromtxt('inputs/contours/bestFitJuno.csv', delimiter=',')
+    bestFitJuno[1] *= 1e-1
+
     global1 = np.genfromtxt('inputs/contours/nuFit_1sigma.csv', delimiter=',')
     global1[:, 1] = global1[:, 1]*1e-1
 
@@ -630,6 +645,7 @@ def add_external_solar_data(ax):
     kamcol = 'purple'
     globcol = 'orange'
     snocol = 'green'
+    junocol = "crimson"
 
     #kamcol = '#009E73'
     #globcol = '#E69F00'
@@ -642,12 +658,18 @@ def add_external_solar_data(ax):
     overlay_contours(kamLAND1, ax, color=kamcol, lw=2, ls='-')  # linewidth=10)
     overlay_contours(kamLAND2, ax, color=kamcol, lw=2, label='KamLAND', ls='-.')
     overlay_contours(kamLAND3, ax, color=kamcol, lw=2, ls=':')
-    ax.plot(bestFitkamLAND[0], bestFitkamLAND[1], color=kamcol, linestyle='', marker='s', markersize=5)
 
     overlay_contours(global1, ax, color=globcol, lw=3, ls='-')  # linewidth=10)
     overlay_contours(global2, ax, color=globcol, lw=3, label='Global', ls='-.')
     overlay_contours(global3, ax, color=globcol, lw=3.5, ls=':')
+    
+    overlay_contours(juno1, ax, color=junocol, lw=2, ls='-')  # linewidth=10)
+    overlay_contours(juno2, ax, color=junocol, lw=2, label='Juno', ls='-')
+    overlay_contours(juno3, ax, color=junocol, lw=2, ls='-')
+
+    ax.plot(bestFitkamLAND[0], bestFitkamLAND[1], color=kamcol, linestyle='', marker='s', markersize=5)
     ax.plot(bestFitGlobal[0], bestFitGlobal[1], color=globcol, linestyle='', marker='P', markersize=6)
+    ax.plot(bestFitJuno[0], bestFitJuno[1], color=junocol, linestyle='', marker='d', markersize=5)    
 
 
 
@@ -712,3 +734,426 @@ def plot_covariance(raw_matrix, colormap='viridis', labels=None,
     plt.tight_layout()
     return fig, ax
 
+
+
+def plot_binmap(ax, Z, x_edges=None, y_edges=None, title=None,
+                symmetric=False, cmap=None, vmin=None, vmax=None,
+                mask=None, add_colorbar=True, cbar_kw=None,
+                topk=None, topk_style=None):
+    """
+    Plot a 2D bin map (e.g. CCnight_var, corr, score) onto an existing Axes.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+    Z : 2D array
+        Map to plot.
+    x_edges, y_edges : 1D arrays or None
+        Bin edges for pcolormesh. If None, uses pixel coordinates.
+    symmetric : bool
+        If True, set vmin/vmax symmetric about 0 (good for correlations).
+    cmap : str or Colormap or None
+        If None, matplotlib default.
+    vmin, vmax : float or None
+        Color limits. If symmetric=True and both None, auto symmetric.
+    mask : 2D bool array or None
+        If provided, mask out bins where mask==False (set to NaN).
+    add_colorbar : bool
+    cbar_kw : dict or None
+        Passed to fig.colorbar.
+    topk : tuple(rows, cols) or tuple(rows, cols, vals) or None
+        Overlay markers at top bins (indices in Z).
+    topk_style : dict or None
+        Scatter kwargs (e.g. dict(s=30, facecolors='none', edgecolors='k')).
+
+    Returns
+    -------
+    mappable : QuadMesh or AxesImage
+    """
+    Zp = np.array(Z, dtype=float, copy=True)
+    if mask is not None:
+        Zp[~mask] = np.nan
+
+    if symmetric and (vmin is None) and (vmax is None):
+        m = np.nanmax(np.abs(Zp))
+        vmin, vmax = -m, m
+
+    if x_edges is not None and y_edges is not None:
+        extent = (
+            x_edges[0],
+            x_edges[-1],
+            y_edges[0],
+            y_edges[-1],
+        )
+
+        mappable = ax.imshow(
+            Zp,
+            origin="lower",
+            aspect="auto",
+            extent=extent,
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+            interpolation="nearest"
+        )
+    else:
+        mappable = ax.imshow(Zp, origin="lower", aspect="auto",
+                             cmap=cmap, vmin=vmin, vmax=vmax)
+
+    if x_edges is not None:
+        ax.set_xlabel(r"$E_{reco}(MeV)$", fontsize=20)
+    if title:
+        ax.set_title(title)
+
+    if topk is not None:
+        rows, cols = topk[0], topk[1]
+        style = dict(s=40, facecolors="none", edgecolors="g", linewidths=1.5, marker='s')
+        if topk_style:
+            style.update(topk_style)
+
+        if x_edges is not None and y_edges is not None:
+            ax.scatter(x_edges[cols], y_edges[rows], **style)
+        else:
+            ax.scatter(cols, rows, **style)
+
+    if add_colorbar:
+        fig = ax.figure
+        if cbar_kw is None:
+            cbar_kw = {}
+        fig.colorbar(mappable, ax=ax, **cbar_kw)
+
+    ax.tick_params(axis="both", which="major", labelsize=20)
+    return mappable
+
+
+
+def plot_binseries(ax, y, x_edges=None, title=None, ylabel=None,
+                   kind="step", marker=None, mask=None,
+                   topk_idx=None, topk_style=None, ylim=None):
+    """
+    Plot a 1D binned series (e.g. CCday_var, CCday_score, corr vs energy).
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+    y : 1D array
+    x_edges : 1D array or None
+        If given, plot vs bin centers (line) or as a step curve.
+    kind : {"step","line","bar"}
+    marker : str or None
+    mask : 1D bool array or None
+        If provided, masked points are set to NaN.
+    topk_idx : 1D int array or None
+        Indices of top bins to mark.
+    topk_style : dict or None
+        kwargs for ax.scatter markers
+
+    Returns
+    -------
+    artist
+    """
+    if ylim is not None:
+        ax.set_ylim(*ylim)
+
+    y = np.array(y, dtype=float, copy=True)
+    if mask is not None:
+        y[~mask] = np.nan
+
+    if x_edges is None:
+        x = np.arange(len(y))
+        if kind == "bar":
+            artist = ax.bar(x, y)
+        else:
+            artist = ax.plot(x, y, marker=marker)[0]
+    else:
+        if kind == "step":
+            # step wants edges; provide y per bin
+            artist = ax.step(x_edges, np.r_[y, y[-1]], where="post")[0]
+        elif kind == "bar":
+            width = x_edges[1]-x_edges[0]
+            artist = ax.bar(x_edges, y, width=width, align="center")
+        else:  # "line"
+            artist = ax.plot(x_edges, y, marker=marker)[0]
+
+    if title:
+        ax.set_title(title)
+    if ylabel:
+        ax.set_ylabel(ylabel)
+    if x_edges is not None:
+        ax.set_xlabel(r"$E_{reco}(MeV)$", fontsize=20)
+
+    if topk_idx is not None and x_edges is not None:
+        style = dict(s=35, facecolors="none", edgecolors="k", linewidths=1.0)
+        if topk_style:
+            style.update(topk_style)
+        x_cent = 0.5 * (x_edges[:-1] + x_edges[1:])
+        ax.scatter(x_cent[topk_idx], y[topk_idx], **style)
+
+    ax.tick_params(axis="both", which="major", labelsize=20)
+    return artist
+
+
+@dataclass(frozen=True)
+class GroupSpec:
+    """Defines one group of panels (data columns)."""
+    name: str
+    ncols: int
+    wspace: float = 0.02  # currently unused in this interleaved approach
+
+
+CBarMode = Literal["none", "global", "per_group", "per_plot"]
+
+
+@dataclass
+class GridLayout:
+    """
+    Holds axes for data panels and any colorbar axes.
+
+    - axs: shape (nrows, n_data_cols)
+    - cax_global: one Axes if cbar_mode == "global"
+    - cax_group: group name -> Axes if cbar_mode == "per_group"
+    - cax_plot: shape (nrows, n_data_cols) if cbar_mode == "per_plot"
+    """
+    axs: np.ndarray
+    cax_global: Optional[plt.Axes] = None
+    cax_group: Dict[str, plt.Axes] = field(default_factory=dict)
+    cax_plot: Optional[np.ndarray] = None
+
+
+def build_grouped_layout(
+    fig: plt.Figure,
+    nrows: int,
+    groups: Tuple[GroupSpec, ...],
+    *,
+    panel_ratio: float = 1.0,
+    cbar_ratio: float = 0.06,
+    cbar_mode: CBarMode = "per_group",
+    square: bool = True,
+    sharey_within_group: bool = True,
+    hide_inner_ylabel: bool = True,
+) -> GridLayout:
+    """
+    Build an interleaved outer GridSpec.
+
+    Colorbar modes:
+      - "none":     data panels only
+      - "global":   data panels + ONE global colorbar column at the far right (spans all rows)
+      - "per_group":each group gets ONE colorbar column after its data columns (spans all rows)
+      - "per_plot": each individual subplot gets its own colorbar column immediately to its right
+                   (so columns are [panel][cbar][panel][cbar]...)
+
+    Returns a GridLayout with the appropriate cax populated.
+    """
+
+    n_data_cols = sum(g.ncols for g in groups)
+
+    # --- determine total outer columns and width ratios ---
+    width_ratios_outer: list[float] = []
+    if cbar_mode == "per_plot":
+        # For each data column: [panel][cbar]
+        ncols_outer = n_data_cols * 2
+        for _ in range(n_data_cols):
+            width_ratios_outer.extend([panel_ratio, cbar_ratio])
+    else:
+        # Data columns first, optionally with group/global cbar columns interleaved/added
+        if cbar_mode == "none":
+            ncols_outer = n_data_cols
+            width_ratios_outer = [panel_ratio] * n_data_cols
+
+        elif cbar_mode == "global":
+            ncols_outer = n_data_cols + 1
+            width_ratios_outer = [panel_ratio] * n_data_cols + [cbar_ratio]
+
+        elif cbar_mode == "per_group":
+            ncols_outer = n_data_cols + len(groups)
+            for g in groups:
+                width_ratios_outer.extend([panel_ratio] * g.ncols)
+                width_ratios_outer.append(cbar_ratio)
+
+        else:
+            raise ValueError(f"Unknown cbar_mode: {cbar_mode!r}")
+
+    gs_outer = fig.add_gridspec(
+        nrows=nrows,
+        ncols=ncols_outer,
+        width_ratios=width_ratios_outer,
+    )
+
+    axs = np.empty((nrows, n_data_cols), dtype=object)
+
+    cax_global: Optional[plt.Axes] = None
+    cax_group: Dict[str, plt.Axes] = {}
+    cax_plot: Optional[np.ndarray] = None
+    if cbar_mode == "per_plot":
+        cax_plot = np.empty((nrows, n_data_cols), dtype=object)
+
+    # --- build axes ---
+    outer_col = 0     # column cursor into gs_outer
+    data_col = 0      # column cursor into axs
+
+    for g in groups:
+        for j in range(g.ncols):
+            # Create data axes for this data column (all rows)
+            for r in range(nrows):
+                ax = fig.add_subplot(gs_outer[r, outer_col])
+                axs[r, data_col] = ax
+
+            # Share y within group across its columns (for each row)
+            # We share to the first column of the group for that row.
+            if sharey_within_group and g.ncols > 1 and j > 0:
+                for r in range(nrows):
+                    axs[r, data_col].sharey(axs[r, data_col - j])  # group's first col for that row
+                    if hide_inner_ylabel:
+                        axs[r, data_col].tick_params(labelleft=False)
+
+            if square:
+                for r in range(nrows):
+                    axs[r, data_col].set_box_aspect(1)
+
+            # If per-plot cbar, allocate a cbar axis right next to this panel
+            if cbar_mode == "per_plot":
+                for r in range(nrows):
+                    cax_plot[r, data_col] = fig.add_subplot(gs_outer[r, outer_col + 1])
+                outer_col += 2
+            else:
+                outer_col += 1
+
+            data_col += 1
+
+        # If per-group cbar, allocate one cbar column spanning all rows after group's data
+        if cbar_mode == "per_group":
+            cax_group[g.name] = fig.add_subplot(gs_outer[:, outer_col])
+            outer_col += 1
+
+    # If global cbar, allocate it at the far right spanning all rows
+    if cbar_mode == "global":
+        cax_global = fig.add_subplot(gs_outer[:, -1])
+
+    return GridLayout(axs=axs, cax_global=cax_global, cax_group=cax_group, cax_plot=cax_plot)
+
+
+def add_group_colorbar(
+    fig: plt.Figure,
+    mappable,
+    cax: plt.Axes,
+    label: str,
+    *,
+    ticks_right: bool = True,
+    labelpad: float = 2,
+    labelsize: float = 20,
+    ticksize: float = 20,
+    tickpad: float = 2,
+    shift_left: float = 0.0,
+    sci_range: tuple[float, float] = (0.1, 100.0),
+    powerlimits: tuple[int, int] = (-2, 3),
+    exponent_size: float | None = None,   # NEW
+):
+    # --- physically move the cax left ---
+    if shift_left != 0.0:
+        pos = cax.get_position()
+        cax.set_position([pos.x0 - shift_left, pos.y0, pos.width, pos.height])
+
+    cbar = fig.colorbar(mappable, cax=cax)
+
+    # --- force initial tick creation ---
+    cbar.update_ticks()
+
+    # --- inspect tick locations ---
+    ticks = np.asarray(cbar.get_ticks(), dtype=float)
+    ticks = ticks[np.isfinite(ticks)]
+
+    lo, hi = sci_range
+    abs_ticks = np.abs(ticks[ticks != 0])
+
+    use_sci = True
+    if abs_ticks.size > 0:
+        use_sci = not (abs_ticks.min() >= lo and abs_ticks.max() <= hi)
+
+    # --- formatter ---
+    formatter = ScalarFormatter(useMathText=True)
+    if use_sci:
+        formatter.set_scientific(True)
+        formatter.set_powerlimits(powerlimits)
+    else:
+        formatter.set_scientific(False)
+
+    cbar.formatter = formatter
+    cbar.update_ticks()
+
+    # --- offset text styling (×10^n) ---
+    offset = cbar.ax.yaxis.get_offset_text()
+    if exponent_size is not None:
+        offset.set_fontsize(exponent_size)
+    else:
+        offset.set_fontsize(ticksize)
+
+    # --- labels & ticks ---
+    cbar.set_label(label, rotation=90, fontsize=labelsize)
+    cbar.ax.yaxis.labelpad = labelpad
+    cbar.ax.tick_params(labelsize=ticksize, pad=tickpad)
+
+    if ticks_right:
+        cbar.ax.yaxis.set_ticks_position("right")
+        cbar.ax.yaxis.set_label_position("right")
+    else:
+        cbar.ax.yaxis.set_ticks_position("left")
+        cbar.ax.yaxis.set_label_position("left")
+
+    return cbar
+
+
+def add_sidebar_totals_in_margin(fig, totals, which="dm2",
+                                order=("CCnight", "CCday", "ESnight", "ESday"),
+                                rect=(0.945, 0.12, 0.045, 0.76),
+                                fontsize=8):
+    """
+    Two stacked sidebar bar plots (dm2 on top, sin2 on bottom)
+    - x tick labels shown
+    - NO tick marks
+    - visible separation between panels
+    - axes box preserved
+    """
+
+    left, bottom, width, height = rect
+    gap = 0.05 * height
+    h = (height - gap) / 2.0
+
+    ax_sin2  = fig.add_axes((left, bottom + h + gap, width, h))
+    ax_dm2 = fig.add_axes((left, bottom,             width, h),
+                           sharex=ax_sin2)
+
+    vals_dm2  = [totals[s]["dm2"]  for s in order]
+    vals_sin2 = [totals[s]["sin2"] for s in order]
+
+    colors = ["darkred", "lightsalmon", "midnightblue", "dodgerblue"]
+
+    ax_dm2.bar(order,  vals_dm2,  color=colors[:len(order)], width=0.8)
+    ax_sin2.bar(order, vals_sin2, color=colors[:len(order)], width=0.8)
+
+    ax_dm2.set_title(r"$\Delta m^2_{21}$", fontsize=fontsize*1.3, pad=6)
+    ax_sin2.set_title(r"$\sin^2\theta_{12}$", fontsize=fontsize*1.3, pad=5)
+
+    for ax in (ax_dm2, ax_sin2):
+        # keep ticks for labels, but make them invisible
+        ax.tick_params(axis="x",
+                       length=0,        # <<< NO TICK LINES
+                       labelrotation=90,
+                       labelsize=fontsize)
+        ax.tick_params(axis="y",
+                       length=0,
+                       labelleft=False)
+
+        ax.grid(True, axis="y", alpha=0.2)
+
+    # show x labels only on bottom panel
+    ax_sin2.tick_params(labelbottom=False)
+
+    labels = ["CC-night", "CC-day", "ES-night", "ES-day"]
+
+    for ax in (ax_dm2, ax_sin2):
+        ax.minorticks_off()
+        ax.tick_params(axis="x", length=0, labelrotation=90, labelsize=fontsize)
+        ax.set_xticks(range(len(order)))
+        ax.set_xticklabels(labels)
+
+    return ax_dm2, ax_sin2

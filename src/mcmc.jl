@@ -60,7 +60,11 @@ priors = Dict{Symbol,Any}(
 
 
 # Conditionally add nuisance parameters
-if earthUncertainty
+if earthUncertainty  if !isempty(CC_bg_norms_pars)
+    for (i, norm) in enumerate(CC_bg_norms_pars)
+        priors[Symbol("CC_bg_norm_$i")] = norm
+    end
+  end
   # FOR NOW, SET THE INPUTS AS A SERIRES OF INDEPENDENT VARIABLES: TRANSFORM THE MVNORMAL INTO AN ARRAY OF 1DNORMALS
   means = mean(earth_normalisation_prior)
   covmat = cov(earth_normalisation_prior)
