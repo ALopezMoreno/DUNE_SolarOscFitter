@@ -101,6 +101,12 @@ ES_exposure: 40          # Module-years
 python3 utils/plotOutput.py --help
 python3 utils/plotOutput.py outFileName
 ```
+#### Bin diagnostic results (derived mode)
+
+```bash
+python3 utils/plotBinDiagnostics.py --help
+python3 utils/plotBinDiagnostics.py outFileName
+```
 
 #### Likelihood Scans
 
@@ -155,7 +161,7 @@ llh_bins: 15
 
 ### Derived Quantities
 
-Post-process existing MCMC chains to append the Day-Night asymmetry at each step (not done by default due to its heavy computational cost):
+Post-process existing MCMC chains to append the Day-Night asymmetry at each step, as well as by-bin likelihood contributions (not done by default due to its heavy computational cost):
 
 ```yaml
 RunMode: "derived"
