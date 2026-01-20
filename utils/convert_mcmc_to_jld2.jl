@@ -127,35 +127,60 @@ function loadAllBatches(binFile::String, infoFile::String)
     return sample_data, weights_accum, stepno_accum, chainid_accum
 end
 
+# --- helper: coerce any per-sample value into a 1D Vector{Float64} ---
+function as_f64vec(v)
+    if v isa Number
+        return [Float64(v)]
+    elseif v isa Tuple
+        return Float64.(collect(v))              # tuple -> vector
+    elseif v isa AbstractArray
+        return Float64.(vec(collect(v)))         # array -> flattened vector
+    else
+        # fallback: try to iterate/collect
+        return Float64.(collect(v))
+    end
+end
 
+# --- helper: stack Vector{Vector{Float64}} into a matrix (nsamp x ndim) ---
+function stack_rows(vs::Vector{Vector{Float64}})
+    if isempty(vs)
+        return zeros(Float64, 0, 0)
+    end
+    d = length(vs[1])
+    # sanity check (avoid silent ragged stacking)
+    for (i, v) in enumerate(vs)
+        if length(v) != d
+            throw(ArgumentError("Ragged parameter: entry $i has length $(length(v)) != $d"))
+        end
+    end
+    mat = Matrix{Float64}(undef, length(vs), d)
+    for i in 1:length(vs)
+        @inbounds mat[i, :] = vs[i]
+    end
+    return mat
+end
 
-"""
-    batchesToJLD2(binFile::String, outJLD2::String)
-
-Loads all batches from `binFile` and writes the merged results
-to `outJLD2`, with each parameter in `param_data` saved as a 
-separate top-level variable, along with:
-  • weights  (Vector{Int})
-  • stepno   (Vector{Int})
-  • chainid  (Vector{Int})
-"""
 function batchesToJLD2(binFile::String, infoFile::String, outJLD2::String)
     param_data, weights, stepno, chainid = loadAllBatches(binFile, infoFile)
-    
+
     jldopen(outJLD2, "w") do f
         for (name, values) in param_data
             try
-                # Convert to Vector of Float64 vectors (force materialization and copy if needed)
-                value_array = [Float64.(collect(v)) for v in values]
-    
-                # Now convert into a Matrix (samples × dimensions)
-                mat = reduce(vcat, [v' for v in value_array])  # v' makes it a row vector
-    
+                # values is a Vector of per-sample things (numbers, vectors, arrays, etc.)
+                rows = Vector{Vector{Float64}}(undef, length(values))
+                for i in eachindex(values)
+                    rows[i] = as_f64vec(values[i])
+                end
+
+                mat = stack_rows(rows)  # (nsamp x ndim)
+
                 if size(mat, 2) == 1
-                    f[string(name)] = vec(mat)  # Save as 1D array if scalar
+                    # store as 1D array of length nsamp
+                    f[string(name)] = vec(mat)
                 else
-                    for i in 1:size(mat, 2)
-                        f["$(name)_$i"] = mat[:, i]
+                    # store as separate columns name_1, name_2, ...
+                    for j in 1:size(mat, 2)
+                        f["$(name)_$j"] = mat[:, j]
                     end
                 end
             catch err
@@ -163,9 +188,8 @@ function batchesToJLD2(binFile::String, infoFile::String, outJLD2::String)
             end
         end
 
-        # Optionally save weights, stepno, etc.
         f["weights"] = weights
-        f["stepno"] = stepno
+        f["stepno"]  = stepno
         f["chainid"] = chainid
     end
 
