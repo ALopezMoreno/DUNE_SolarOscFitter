@@ -43,6 +43,36 @@ function poissonLogLikelihood(nExpected::Vector{Float64}, nMeasured::Vector{Floa
 end
 
 
+function perbin_poissonLogLikelihood(nExpected::AbstractArray,
+                                     nMeasured::AbstractArray)
+    size(nExpected) == size(nMeasured) ||
+        throw(DimensionMismatch("Inputs must have the same size"))
+
+    out = Array{Float64}(undef, size(nExpected))
+
+    @inbounds for I in eachindex(nExpected)
+        e = Float64(nExpected[I])
+        m = Float64(nMeasured[I])
+
+        if m > 0
+            if e > 0
+                out[I] = - (e - m + m * log(m / e))
+            else
+                out[I] = -1e9
+            end
+        else
+            if e == 0
+                out[I] = 0.0
+            else
+                out[I] = -e
+            end
+        end
+    end
+
+    return out
+end
+
+
 function conditional_poissonLogLikelihood(nExpected::AbstractVector{<:Float64}, nMeasured::AbstractVector{<:Float64})::Float64
     """
     conditional_poissonLogLikelihood(nExpected, nMeasured) -> Float64

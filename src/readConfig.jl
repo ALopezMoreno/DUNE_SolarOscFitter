@@ -289,6 +289,9 @@ function main()
     # LLH parameters
     global llhBins = config["llh_bins"]
 
+    # Derived parameters
+    global thinning = config["thinning"]
+
     # Asimov values
     global sin2_th12_true = config["true_sin2_th12"]
     global sin2_th13_true = config["true_sin2_th13"]
@@ -327,7 +330,7 @@ function main()
     global prevFile = haskey(config, "prevFile") ? config["prevFile"] : nothing
 
     allowed_modes = ["LLH", "MCMC", "derived", "PROFILE"]
-    run_mode = config["RunMode"]
+    global run_mode = config["RunMode"]
 
     if run_mode ∉ allowed_modes
         error("Invalid RunMode: '$run_mode'. Must be one of: $(join(allowed_modes, ", "))")
