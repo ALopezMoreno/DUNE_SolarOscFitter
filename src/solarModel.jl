@@ -53,13 +53,8 @@ if isfile(flux_file_path)
         energies = file["energies"]              # Neutrino energies (GeV)
         flux8B = file["flux8B"]                  # 8B neutrino flux spectrum
         fluxHep = file["fluxHep"]                # HEP neutrino flux spectrum
-        
-        # Load total flux normalizations
-        # Factor 0.514 accounts for updated 8B flux measurements
-        global total_flux_8B = file["total8B"] * 0.514
-        global total_flux_hep = file["totalHep"]
-        
-        return energies, flux8B, fluxHep, total_flux_8B, total_flux_hep
+
+        return energies, flux8B, fluxHep
     end
 else
     error("Solar flux file not found: $flux_file_path")
