@@ -37,95 +37,123 @@ def downsample_mask(mask_dense, length_param, max_steps):
     return mask_dense[idx_dense]
 
 
-def load_posterior(mcmc_chains, parameters, burnin=10_000, test=None):
+def _is_batched_jld2(h5file):
+    """Return True if the JLD2 file uses the batch_N group format."""
+    return any(k.startswith("batch_") for k in h5file.keys())
+
+
+def _read_jld2_batched(h5file, keys):
+    """
+    Read a batched JLD2 file (batch_0, batch_1, ...) and return concatenated
+    arrays for each key in `keys`.  Batches are processed in numeric order.
+    """
+    batch_names = sorted(
+        [k for k in h5file.keys() if k.startswith("batch_")],
+        key=lambda x: int(x.split("_")[1])
+    )
+    accum = {k: [] for k in keys}
+    for batch in batch_names:
+        g = h5file[batch]
+        for k in keys:
+            if k in g:
+                accum[k].append(np.array(g[k][()]))
+    return {k: np.concatenate(v) if v else np.array([]) for k, v in accum.items()}
+
+
+def _read_jld2_flat(h5file, keys):
+    """Read a flat (legacy) JLD2 file written by convert_mcmc_to_jld2.jl."""
+    return {k: np.array(h5file[k][()]) if k in h5file else np.array([]) for k in keys}
+
+
+def load_posterior(mcmc_chains, parameters, burnin=20_000, test=None):
     valid_chains = []
     for mcmc_chain in mcmc_chains:
         if not os.path.exists(mcmc_chain + ".jld2"):
-            print(f"The file '{mcmc_chain}.jld2' does not exist. Looking for binaries")  
-            
+            print(f"The file '{mcmc_chain}.jld2' does not exist. Looking for binaries")
+
             if not os.path.exists(mcmc_chain + "_mcmc.bin"):
                 print(f"Error: The mcmc file '{mcmc_chain}_mcmc.bin' does not exist.")
                 continue
 
             if not os.path.exists(mcmc_chain + "_info.txt"):
-                print(f"Error: The info file '{mcmc_chain}_info.txt' does not exist.")  
+                print(f"Error: The info file '{mcmc_chain}_info.txt' does not exist.")
                 continue
-            
+
             convert_mcmc_to_jld2(mcmc_chain + "_mcmc.bin", mcmc_chain + "_info.txt", mcmc_chain + ".jld2")
-        
+
         valid_chains.append(mcmc_chain)
-    
+
     if not valid_chains:
         raise ValueError("No valid MCMC chains found")
 
     # Handle test parameters if specified
     if test is not None:
         with h5py.File(valid_chains[0] + ".jld2", 'r') as f:
+            sample_keys = f["batch_0"].keys() if _is_batched_jld2(f) else f.keys()
             for v in test:
-                if v[0] in f and v[0] not in parameters:
+                if v[0] in sample_keys and v[0] not in parameters:
                     parameters.append(v[0])
 
     # Initialize dictionary to store concatenated data
     results = {param: [] for param in parameters}
-    results['chains'] = []  # Always track chain IDs
-    results['weights'] = [] # Always get weights 
-    results['stepno'] = []  # Always track step numbers
-    
-    # Iterate over each valid MCMC chain file
+    results['chains'] = []
+    results['weights'] = []
+    results['stepno'] = []
+
     for mcmc_chain in valid_chains:
         with h5py.File(mcmc_chain + ".jld2", 'r') as f:
+            batched = _is_batched_jld2(f)
+
             # Detect all parameter names if requested
             if parameters == "all":
                 skip_keys = {'stepno', 'chainid', 'weights'}
-                parameters = [key for key in f.keys() if key not in skip_keys]
+                sample_keys = f["batch_0"].keys() if batched else f.keys()
+                parameters = [k for k in sample_keys if k not in skip_keys]
                 results.update({param: [] for param in parameters})
-            
-            # Get step numbers and chain IDs first to create burnin mask
-            stepno = np.array(f['stepno'][()])
-            chains = np.array(f['chainid'][()])
-            
-            # Create burnin mask (excluding chain 17 as in your original code)
-            mask = (stepno > burnin) & (~np.isin(chains, [16]))
-            max_steps = len(mask)
-            
-            # Store chain IDs and step numbers (after burnin)
-            results['chains'].append(chains[mask])
-            results['stepno'].append(stepno[mask])
-            
-            # Load each requested parameter
-            for param in parameters:
-                if "_llh" in param:
-                    continue  # skip by-bin loglik diagnostics parameters
 
-                if param in f:
-                    data = np.array(f[param][()])
-                    if data.ndim > 1:
-                        data = data.squeeze()
-                        print("we had to flatten " + param)
+            meta_keys = ['stepno', 'chainid', 'weights']
+            all_keys  = list(parameters) + meta_keys
 
-                    # align mask to this parameter's length
-                    mask_param = downsample_mask(mask, len(data), max_steps)
+            raw = _read_jld2_batched(f, all_keys) if batched else _read_jld2_flat(f, all_keys)
 
-                    results[param].append(data[mask_param])
-                else:
-                    raise ValueError(f"Parameter '{param}' not found in MCMC chain file")
-            
-            # Handle weights separately if they exist
-            if 'weights' in f:
-                weights = np.array(f['weights'][()])
-                results['weights'].append(weights[mask])
-    
-    # Concatenate all data for each parameter
+        stepno  = raw['stepno']
+        chains  = raw['chainid']
+        weights = raw.get('weights', np.array([]))
+
+        mask = (stepno > burnin) & (~np.isin(chains, [20]))
+        max_steps = len(mask)
+
+        results['chains'].append(chains[mask])
+        results['stepno'].append(stepno[mask])
+
+        for param in parameters:
+            if "_llh" in param:
+                continue
+
+            data = raw.get(param, None)
+            if data is None or data.size == 0:
+                raise ValueError(f"Parameter '{param}' not found in MCMC chain file")
+
+            if data.ndim > 1:
+                data = data.squeeze()
+                print("we had to flatten " + param)
+
+            mask_param = downsample_mask(mask, len(data), max_steps)
+            results[param].append(data[mask_param])
+
+        if weights.size > 0:
+            results['weights'].append(weights[mask])
+
     for key in results:
-        if results[key]:  # Only concatenate if there's data
+        if results[key]:
             results[key] = np.concatenate(results[key])
         else:
-            results[key] = np.array([])  # Ensure empty arrays for missing data
+            results[key] = np.array([])
 
     chain_indexes = np.unique(results['chains'])
     print(f"Unique chain IDs: {chain_indexes}")
     print("Number of effective steps in posterior:", np.sum(results['weights']))
-    
+
     return results
 
 
