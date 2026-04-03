@@ -20,15 +20,17 @@ parser.add_argument('-d', '--diagnostics', action="store_true", help="Run in plo
 parser.add_argument('-e', '--expanded', action="store_true", help="Make additional corner plots including other parameters of interest: HEP flux (discovery), 8B flux, DN_asymmetry")
 parser.add_argument('-f', '--full_output', action="store_true", help="Make additional corner plot over **all** parameters (default corner.py plot).")
 parser.add_argument('-p', '--parameters', nargs='+', help="Choose parameters to be plotted (default corner.py plot).")
+parser.add_argument('-b', '--burnin', type=int, default=20_000, help="Burnin steps to discard (default: 20000).")
 
 args = parser.parse_args()
 
-mcmc_chains = args.chains 
-output_name = args.output   
+mcmc_chains = args.chains
+output_name = args.output
 diagnostics = args.diagnostics
 expanded = args.expanded
 full = args.full_output
 customParameters = args.parameters
+burnin = args.burnin
 
 # Check if at least one file is provided
 if not mcmc_chains:
@@ -45,7 +47,7 @@ start_time = time.time()
 parameters = ['sin2_th12', 'sin2_th13', 'dm2_21']
 variables = [r'$\sin^2\theta_{12}$', r'$\sin^2\theta_{13}$', r'$\Delta m^2_{21}$ $(10^{-4} \mathrm{ eV}^2)$']
 
-data = posteriorHelpers.load_posterior(mcmc_chains, parameters)
+data = posteriorHelpers.load_posterior(mcmc_chains, parameters, burnin=burnin)
 
 ##### Some useful colours #####
 #----------------------------------------------#
@@ -127,7 +129,7 @@ if customParameters is not None:
 
     start_time = time.time()
 
-    data = posteriorHelpers.load_posterior(mcmc_chains, customParameters)
+    data = posteriorHelpers.load_posterior(mcmc_chains, customParameters, burnin=burnin)
 
     # Create the corner plot
     fig = plotting.plot_default_corner(data, diagnostics=diagnostics)
@@ -152,7 +154,7 @@ if full:
     print(f"Generating corner plot with all parameters")
     start_time = time.time()
 
-    data = posteriorHelpers.load_posterior(mcmc_chains, 'all')
+    data = posteriorHelpers.load_posterior(mcmc_chains, 'all', burnin=burnin)
 
     chain_indexes = np.unique(data["chains"])
     print("Plotting traces")
@@ -198,7 +200,7 @@ if expanded:
 
     test = [("derived_CC_asymmetry", r'$A_{D-N}(CC)$')]
 
-    data = posteriorHelpers.load_posterior(mcmc_chains, parameters, test=test)
+    data = posteriorHelpers.load_posterior(mcmc_chains, parameters, burnin=burnin, test=test)
 
     for v in test:
         if v[0] in data:
