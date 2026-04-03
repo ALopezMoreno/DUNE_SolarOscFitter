@@ -178,50 +178,46 @@ function BAT.mcmc_burnin!(
 end
 
 
-# Function to save output chunks into the same file
+# Function to save output chunks into the same JLD2 file, one group per batch.
+# Each batch is written as "batch_N" so that groups can be appended without
+# extending existing datasets (which JLD2 does not support).
 
-function saveBatch(samples, start_step_number, priors)
-  println("Saving with starting step number of $start_step_number")
+function saveBatch(samples, start_step_number, priors, batchNumber)
+  println("Saving batch $batchNumber (starting step $start_step_number)")
 
-  # 1) pick out only the priors you care about
+  # 1) pick out only the sampled parameters
   param_names = filter(p -> p in keys(priors),
                        fieldnames(typeof(samples[1].v)))
 
-  # 2) build a Dict that can hold anything
+  # 2) extract per-sample values
   param_data = Dict{Symbol, Any}()
-
   for pname in param_names
-      vals = [getfield(s.v, pname) for s in samples]
-      param_data[pname] = vals
+      param_data[pname] = [getfield(s.v, pname) for s in samples]
   end
 
   # 3) metadata
   stepno  = [s.info.stepno  for s in samples] .+ start_step_number
   chainid = [s.info.chainid for s in samples]
-  weights = [s.weight         for s in samples]
+  weights = [s.weight       for s in samples]
 
   println("Number of samples to save: ", length(samples))
-  # 4) write in one go
-  fileName = outFile * "_mcmc.bin"
-  try
-    open(fileName, isfile(fileName) ? "a" : "w") do io
-      serialize(io, (param_data, weights, stepno, chainid))
-    end
-  
-  catch err
-      @error "Failed to write MCMC data to $fileName.\nError: $err"
-      return
-  end
 
-  # 5) simple info file
-  infoFileName = outFile * "_info.txt"
-  open(infoFileName, "w") do io
-    println(io, "# Saved fields in binary (in order):")
-    println(io, "1: param_data (Dict{Symbol,Any})")
-    println(io, "   Parameter names: ", join(string.(keys(param_data)), ", "))
-    println(io, "2: weights (Vector)")
-    println(io, "3: stepno  (Vector)")
-    println(io, "4: chainid (Vector)")
+  # 4) write as a new group inside the shared JLD2 file.
+  #    "a+" opens for appending (creates file if absent); writing a new group
+  #    never requires extending an existing dataset.
+  fileName = outFile * ".jld2"
+  try
+    jldopen(fileName, "a+") do f
+      g = JLD2.Group(f, "batch_$batchNumber")
+      for (k, v) in param_data
+          g[string(k)] = v
+      end
+      g["weights"] = weights
+      g["stepno"]  = stepno
+      g["chainid"] = chainid
+    end
+  catch err
+    @error "Failed to write MCMC data to $fileName.\nError: $err"
   end
 end
 
@@ -273,7 +269,7 @@ function runMCMCbatch(currentBatch, args...)
                                                       convergence=convergence))
           
           # Save batch
-          saveBatch(samples.result, starting_step, priors)
+          saveBatch(samples.result, starting_step, priors, currentBatch)
           chain_state = save_chain_state(samples, starting_step)
           save_chainstate_serialized(chain_state, outFile*"_chainState.bin")
           # Clear heavy data immediately
@@ -305,8 +301,8 @@ function runMCMCbatch(currentBatch, args...)
 
           
       # Save batch
-      saveBatch(samples.result, starting_step, priors)
-      
+      saveBatch(samples.result, starting_step, priors, currentBatch)
+
       # Store statistics before clearing samples
       mode_result = mode(samples.result)
       mean_result = mean(samples.result)
@@ -331,7 +327,7 @@ function runMCMCbatch(currentBatch, args...)
 
       println(" ")
 
-      @logmsg Output "$(mcmcChains) output chain(s) saved to : $(outFile) (+_mcmc.bin/_info.txt)"
+      @logmsg Output "$(mcmcChains) output chain(s) saved to : $(outFile).jld2"
   end
 
   # Final cleanup to ensure no lingering references

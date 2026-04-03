@@ -18,7 +18,6 @@ through the full detector simulation to obtain observable asymmetries.
 Author: [Author name]
 =#
 
-using Serialization   # For binary data I/O
 using ElasticArrays    # For dynamic array handling
 using ProgressMeter    # For progress tracking
 using JLD2            # For data file operations
@@ -26,85 +25,32 @@ using JLD2            # For data file operations
 include("../src/setup.jl")
 
 
-function parse_info_file(infoFile::String)
-    """
-    Parse the info file that describes the structure of the binary MCMC data.
-    
-    The info file contains metadata about parameter names and data structure
-    that allows proper reconstruction of the parameter samples.
-    
-    Returns:
-    - entries: Ordered list of (index, variable_name) pairs
-    - param_names: Vector of parameter names as symbols
-    """
-    index_map = Dict{Int,String}()
-    param_names = Symbol[]
 
-    for (line_idx, line) in enumerate(eachline(infoFile))
-        line_str = strip(line)
-
-        # Skip comments and blank lines
-        if isempty(line_str) || startswith(line_str, "#")
-            continue
-        end
-
-        # Match index and variable name patterns
-        m = match(r"^(\d+):\s*(\S+)", line_str)
-        if m !== nothing
-            idx = parse(Int, m.captures[1])
-            varName = m.captures[2]
-            index_map[idx] = varName
-            continue
-        end
-
-        # Extract parameter names if present
-        m_param = match(r"Parameter names:\s*(.+)", line_str)
-        if m_param !== nothing
-            raw_names = split(m_param.captures[1], ',')
-            param_names = Symbol.(strip.(raw_names))
-        end
-    end
-
-    # Return sorted entries and parameter names
-    sorted_keys = sort(collect(keys(index_map)))
-    entries = [(i, index_map[i]) for i in sorted_keys]
-    return (entries=entries, param_names=param_names)
-end
-
-
-function loadAllBatches(binFile::String, infoFile::String)
-    # Parse info file to get parameter structure
-    parsed_info = parse_info_file(infoFile)
-    param_names = parsed_info.param_names
-
-    # Initialize accumulators
+function loadAllBatches(jld2File::String)
     param_data_accum = Dict{Symbol,Vector}()
-    for pname in param_names
-        param_data_accum[pname] = Vector()
-    end
-
     weights_accum = Int[]
-    stepno_accum = Int[]
+    stepno_accum  = Int[]
     chainid_accum = Int[]
 
-    # Read and accumulate batches
-    open(binFile, "r") do io
-        while !eof(io)
-            batch = deserialize(io)  # (param_data, weights, stepno, chainid)
-            param_data, weights, stepno, chainid = batch
-
-            # Accumulate each parameter's values
-            for (pname, vals) in param_data
+    jldopen(jld2File, "r") do f
+        batch_names = sort(
+            [k for k in keys(f) if startswith(k, "batch_")],
+            by = k -> parse(Int, split(k, "_")[2])
+        )
+        for bname in batch_names
+            g = f[bname]
+            skip_keys = Set(["weights", "stepno", "chainid"])
+            for k in keys(g)
+                k in skip_keys && continue
+                pname = Symbol(k)
                 if !haskey(param_data_accum, pname)
-                    param_data_accum[pname] = Any[]
+                    param_data_accum[pname] = []
                 end
-                append!(param_data_accum[pname], vals)
+                append!(param_data_accum[pname], g[k])
             end
-
-            # Accumulate metadata
-            append!(weights_accum, weights)
-            append!(stepno_accum, stepno)
-            append!(chainid_accum, chainid)
+            append!(weights_accum, g["weights"])
+            append!(stepno_accum,  g["stepno"])
+            append!(chainid_accum, g["chainid"])
         end
     end
 
@@ -112,30 +58,18 @@ function loadAllBatches(binFile::String, infoFile::String)
 end
 
 
-function saveDerivedChain(samples, derived, weights, stepno, chainid)
-    # write file
-    fileName = outFile * "_mcmc.bin"
+function saveDerivedChain(derived)
+    # Write derived quantities as flat top-level keys into the source chain's JLD2 file.
+    # load_bin_diagnostics reads these keys directly from the top level (no batch grouping).
+    fileName = prevFile * ".jld2"
     try
-        open(fileName, isfile(fileName) ? "a" : "w") do io
-            serialize(io, (samples, derived, weights, stepno, chainid))
+        jldopen(fileName, "a+") do f
+            for (k, v) in derived
+                f["derived_" * string(k)] = v
+            end
         end
-
     catch err
-        @error "Failed to write MCMC data to $fileName.\nError: $err"
-        return
-    end
-
-    # write info file
-    infoFileName = outFile * "_info.txt"
-    open(infoFileName, "w") do io
-        println(io, "# Saved fields in binary (in order):")
-        println(io, "1: param_data (Dict{Symbol,Any})")
-        println(io, "   Parameter names: ", join(string.(keys(samples)), ", "))
-        println(io, "2: derived_quantities (Dict{Symbol,Any})")
-        println(io, "   Derived quantity names: ", join(string.(keys(derived)), ", "))
-        println(io, "3: weights (Vector)")
-        println(io, "4: stepno  (Vector)")
-        println(io, "5: chainid (Vector)")
+        @error "Failed to write derived quantities to $fileName.\nError: $err"
     end
 end
 
@@ -150,7 +84,7 @@ else
     @logmsg Setup ("Calculating DN-asymmetry for chain *$(prevFile)*")
 end
 
-param_data, weights, stepno, chainid = loadAllBatches(prevFile * "_mcmc.bin", prevFile * "_info.txt")
+param_data, weights, stepno, chainid = loadAllBatches(prevFile * ".jld2")
 
 param_fields = collect(keys(param_data))
 n_total = length(param_data[param_fields[1]])
@@ -244,8 +178,13 @@ for i in 1:n_total
     temp_CC_Ntot = sum(@view expectedRate_CC_night[:, index_CC:end]) - 0.5 * BG_CC_expected
     temp_CC_Dtot = sum(expectedRate_CC_day[index_CC:end]) - 0.5 * BG_CC_expected
 
-    temp_ES_Ntot = sum(@view expectedRate_ES_night[:, index_ES:end]) - 0.5 * BG_ES_expected
-    temp_ES_Dtot = sum(expectedRate_ES_day[index_ES:end]) - 0.5 * BG_ES_expected  # (kept consistent with index_ES)
+    if angular_reco
+        temp_ES_Ntot = sum(@view expectedRate_ES_night[:, index_ES:end, :]) - 0.5 * BG_ES_expected
+        temp_ES_Dtot = sum(expectedRate_ES_day[:, index_ES:end]) - 0.5 * BG_ES_expected
+    else
+        temp_ES_Ntot = sum(@view expectedRate_ES_night[:, index_ES:end]) - 0.5 * BG_ES_expected
+        temp_ES_Dtot = sum(expectedRate_ES_day[index_ES:end]) - 0.5 * BG_ES_expected
+    end
 
     expected_asymm_CC = 2 * (temp_CC_Dtot - temp_CC_Ntot) / (temp_CC_Dtot + temp_CC_Ntot)
     expected_asymm_ES = 2 * (temp_ES_Dtot - temp_ES_Ntot) / (temp_ES_Dtot + temp_ES_Ntot)
@@ -532,6 +471,6 @@ println(" ")
 @logmsg Output ("True derived values: $(true_parameters[:ES_asymmetry]), $(true_parameters[:CC_asymmetry])")
 println(" ")
 
-saveDerivedChain(param_data, derived, weights, stepno, chainid)
+saveDerivedChain(derived)
 
 @logmsg Output ("Saved derived quantities")
