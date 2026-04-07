@@ -74,10 +74,16 @@ function propagateSamples(unoscillatedSample, responseMatrices, params, solarMod
     DEBUG_PLOTS = false  
 
     if DEBUG_PLOTS
-        PropagationDebug.debug_plot_CC_backgrounds(backgrounds)
-        PropagationDebug.debug_heatmap_response_CC(responseMatrices)
-        PropagationDebug.debug_heatmap_CC_night(eventRate_CC_night)
-
+        #PropagationDebug.debug_plot_CC_backgrounds(backgrounds)
+        #PropagationDebug.debug_heatmap_response_CC(responseMatrices)
+        PropagationDebug.debug_heatmap_CC_night(eventRate_ES_night)
+        sleep(10)
+        myP = plot(eventRate_ES_day,
+        seriestype = :bar,
+        xlabel = "Bin number",
+        ylabel = "Count",
+        legend = false)
+        display(myP)
         sleep(200) # wait for a while
     end
 
