@@ -18,118 +18,53 @@ while managing memory usage and allowing for interrupted/resumed analyses.
 Author: Andres Lopez Moreno, based on Philipp Eller's Newthrino
 =#
 
-using BAT: MCMCIterator, MCMCInitAlgorithm, MCMCAlgorithm, BATMeasure, BATContext, AbstractMCMCTunerInstance, ConvergenceTest, DensitySampleVector, mcmc_info
+using BAT: MCMCIterator, MCMCInitAlgorithm, MCMCAlgorithm, BATMeasure, BATContext,
+           ConvergenceTest, DensitySampleVector, mcmc_info, MCMCState, MCMCChainState
 using Serialization  # For chain state persistence
 
-# Custom proposal distribution with user-defined covariance matrix
-function mv_proposaldist(T::Type{<:AbstractFloat}, d::TDist, varndof::Integer)
-    """
-    Override BAT's default proposal distribution to inject custom covariance matrix.
-    
-    This allows using pre-computed covariance matrices from previous runs
-    to improve MCMC efficiency and convergence.
-    """
-    df = only(Distributions.params(d))
-    μ = fill(zero(T), varndof)
-    
-    # Use custom covariance matrix if available, otherwise use identity
-    Σ = (propMatrix !== nothing) ? propMatrix : PDMat(Matrix(I(varndof) * one(T)))
-
-    # Construct multivariate t-distribution with custom covariance
-    # Arguments: degrees of freedom, mean vector, scale matrix
-    return MvTDist(convert(T, df), μ, Matrix(Σ))
-end
-
-# Chain state management for batch processing and continuation
+# Chain state management for batch processing and continuation.
+# v4: MCMCSampleGenerator stores MCMCChainState (MCMCIterator) objects, not MCMCState.
+# We store chain_states (MCMCChainState) and reconstruct full MCMCState on continuation.
 
 struct ChainState
-    """
-    Container for MCMC chain state information.
-    
-    Stores all necessary information to resume MCMC chains from a previous state,
-    enabling batch processing and interrupted analysis recovery.
-    """
-    chains::Vector{<:MCMCIterator}      # Active MCMC chain iterators
-    tuners::Vector{AdaptiveMHTuning}    # Adaptive tuning state for each chain
-    step_numbers::Vector{Int}           # Current step number for each chain
-    chain_ids::Vector{Int32}            # Unique identifiers for each chain
-    end_step::Int                       # Total number of completed steps
+    chain_states::Vector{<:MCMCIterator}  # MCMCChainState objects from generator
+    chain_ids::Vector{Int32}
+    end_step::Int
 end
 
 struct ContinueChains <: MCMCInitAlgorithm
-    """
-    Custom MCMC initialization algorithm for continuing from saved state.
-    
-    This allows resuming MCMC sampling from a previously saved ChainState,
-    maintaining all tuning information and chain positions.
-    """
     state::ChainState
 end
 
 function BAT.mcmc_init!(
-    algorithm::MCMCAlgorithm,
+    samplingalg::TransformedMCMC,
     target::BATMeasure,
-    nchains::Integer,
-    init::ContinueChains,
-    tuning,
-    nonzero_weights::Bool,
+    init_alg::ContinueChains,
     callback::Function,
     context::BATContext
 )
-    """
-    Initialize MCMC chains from a saved state.
-    
-    Validates chain count consistency and returns the saved chain state
-    for continuation of sampling.
-    """
-    length(init.state.chains) == nchains || throw(ArgumentError("Chain count mismatch"))
-    return (
-        chains=init.state.chains,
-        tuners=init.state.tuners,
-        chain_outputs=DensitySampleVector[
-            DensitySampleVector(c) for c in init.state.chains
-        ]
-    )
-end
-
-
-
-function keep_last_step(chain::BAT.MCMCIterator)
-  # Preserve original storage types
-  last_samples = chain.samples[end:end]
-  
-  empty!(chain.samples)
-  GC.gc()
-
-  chain.samples = last_samples
-
-  chain.nsamples = 1
-  chain.stepno = 1
-
-  chain.samples.info[1] = BAT.MCMCSampleID(mcmc_info(chain).id, mcmc_info(chain).cycle, chain.stepno, BAT.CURRENT_SAMPLE)
-  
-  # Set the weight to zero as to not count it twice
-  chain.samples.weight[1] = 0
-  
-  return chain
-
+    length(init_alg.state.chain_states) == samplingalg.nchains ||
+        throw(ArgumentError("Chain count mismatch"))
+    # Reconstruct full MCMCState (chain + tuner) from stored MCMCChainState.
+    # Fresh tuner states are created from samplingalg; the adapted f_transform
+    # inside each chain_state carries over the learned proposal geometry.
+    mcmc_states = map(init_alg.state.chain_states) do cs
+        trafo_tuner   = BAT.create_trafo_tuner_state(samplingalg.transform_tuning, cs, 0)
+        proposal_tuner = BAT.create_proposal_tuner_state(samplingalg.proposal_tuning, cs, 0)
+        temperer      = BAT.create_temperering_state(samplingalg.tempering, cs)
+        MCMCState(cs, proposal_tuner, trafo_tuner, temperer)
+    end
+    outputs = [BAT._empty_chain_outputs(cs) for cs in init_alg.state.chain_states]
+    return (mcmc_states=mcmc_states, outputs=outputs)
 end
 
 function save_chain_state(samples, starting_step)
-  # Generator holds the full chain history
-  generator = samples.generator
-  # tempGen = map(keep_last_step, generator.chains)
-
-  # Build the ChainState using these truncated chains
-  return ChainState(
-      generator.chains,
-      [c.algorithm.tuning for c in generator.chains],
-      # Store only 1 as the step count for each chain,
-      fill(1, length(generator.chains)),
-      [mcmc_info(c).id for c in generator.chains],
-      # Keep the final step number from the run, plus the offset:
-      [sample.info.stepno for sample in samples.result][end] + starting_step
-  )
+    generator = samples.generator
+    return ChainState(
+        generator.chain_states,                          # Vector{MCMCChainState}
+        [mcmc_info(s).id for s in generator.chain_states],
+        [sample.info.stepno for sample in samples.result][end] + starting_step
+    )
 end
 
 function save_chainstate_serialized(cs::ChainState, filename::String)
@@ -148,33 +83,14 @@ end
 # New burnin algorithm type definition
 struct MCMCNoBurnin <: MCMCBurninAlgorithm end
 
-# Required BAT.jl interface implementation
+# Required BAT.jl interface implementation - v4 signature
 function BAT.mcmc_burnin!(
-  outputs::Union{Nothing,Vector{<:DensitySampleVector}},
-  tuners::Vector{AdaptiveMHTuning},
-  chains::Vector{<:MCMCIterator},
-  burnin::MCMCNoBurnin,
-  convergence::ConvergenceTest,
-  strict::Bool,
-  nonzero_weights::Bool,
-  callback::Function
+    outputs::Union{AbstractVector{<:AbstractVector{<:DensitySampleVector}}, Nothing},
+    mcmc_states::AbstractVector{<:MCMCState},
+    samplingalg::TransformedMCMC,
+    callback::Function
 )
-  # No-op implementation that matches BAT's return type expectations
-  return (chains=chains, tuners=MCMCNoOpTuning())
-end
-
-function BAT.mcmc_burnin!(
-  outputs::Union{Nothing,Vector{<:DensitySampleVector}},
-  tuners::Vector{<:AbstractMCMCTunerInstance},
-  chains::Vector{<:MCMCIterator},
-  burnin::MCMCNoBurnin,
-  convergence::ConvergenceTest,
-  strict::Bool,
-  nonzero_weights::Bool,
-  callback::Function
-)
-  # No-op implementation that matches BAT's return type expectations
-  return (chains=chains, tuners=MCMCNoOpTuning())
+    return mcmc_states
 end
 
 
@@ -229,7 +145,7 @@ function runMCMCbatch(currentBatch, args...)
       if isnothing(prevFile)
           @logmsg MCMC "No previous MCMC file indicated. Starting chain from zero"
           # First batch: Run the tuning phase (~500 steps) for stability
-          samples = bat_sample(posterior, MCMCSampling(mcalg=proposal_algorithm,
+          samples = bat_sample(posterior, TransformedMCMC(proposal=proposal_algorithm,
                               nsteps=2_500,
                               nchains=mcmcChains,
                               init=init,
@@ -261,7 +177,7 @@ function runMCMCbatch(currentBatch, args...)
       starting_step = chain_state.end_step
       # Regular batch: Run with batchSteps steps and skip burnin
       elapsed_time = @elapsed begin
-          samples = bat_sample(posterior, MCMCSampling(mcalg=proposal_algorithm,
+          samples = bat_sample(posterior, TransformedMCMC(proposal=proposal_algorithm,
                                                       nsteps=batchSteps,
                                                       nchains=mcmcChains,
                                                       init=ContinueChains(chain_state),
@@ -290,7 +206,7 @@ function runMCMCbatch(currentBatch, args...)
       remainder = mcmcSteps % batchSteps
       lastBatchSteps = (remainder == 0) ? batchSteps : remainder
     
-      samples = bat_sample(posterior, MCMCSampling(mcalg=proposal_algorithm,
+      samples = bat_sample(posterior, TransformedMCMC(proposal=proposal_algorithm,
                           nsteps=lastBatchSteps,
                           nchains=mcmcChains,
                           init=ContinueChains(chain_state),
