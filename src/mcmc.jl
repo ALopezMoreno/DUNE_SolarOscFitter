@@ -108,7 +108,7 @@ posterior = PosteriorMeasure(likelihood_all_samples, prior)
 
 # Set chain parameters
 init = MCMCChainPoolInit(
-  init_tries_per_chain=IntervalSets.ClosedInterval(1, 180),  # Example interval
+  init_tries_per_chain=IntervalSets.ClosedInterval(4, 180),  # min>1 avoids BAT v4 bug in else-branch of chain selection
   nsteps_init=500,
   initval_alg=InitFromTarget()
 )
@@ -144,10 +144,10 @@ end
 
 # Skip tuning if desired
 if maxTuningAttempts == 0
-  proposal_algorithm = MetropolisHastings(proposal=proposal_distribution, tuning=AdaptiveMHTuning(α=ClosedInterval(0, 1)))
+  proposal_algorithm = RandomWalk(proposaldist=proposal_distribution)
   @logmsg MCMC "skipping the tuning stage."
 else
-  proposal_algorithm = MetropolisHastings(proposal=proposal_distribution)
+  proposal_algorithm = RandomWalk(proposaldist=proposal_distribution)
   @logmsg MCMC "tuning will be performed with $tuningSteps steps up to a maximum of $maxTuningAttempts times."
 end
 
