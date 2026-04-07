@@ -27,12 +27,12 @@
 # Output file prefix for all generated files (chains, plots, etc.)
 # Results will be saved as: outFile_mcmc.bin, outFile_info.txt, etc.
 # outFile: "outputs/CC_10MeVthershold_Shielding_strongCuts_deltam6_HDonly"
-outFile: "outputs/ES_3MeVThr_shieldBG_SNOfluxPrior_AngleFull_v2_2"
+outFile: "outputs/CC_5MeVThr_shieldBG_SNOfluxPrior"
 
 # Previous file to continue MCMC chain from (optional)
 # Uncomment to resume a previous run from where it left off
 # REQUIRED when RunMode is "derived" to specify which chain to post-process
-prevFile: "outputs/ES_3MeVThr_shieldBG_SNOfluxPrior_AngleFull_v2"
+# prevFile: "outputs/ES_3MeVThr_shieldBG_SNOfluxPrior_AngleFull_v2"
 
 # Analysis mode selection:
 # "MCMC"   - Bayesian parameter estimation with Markov Chain Monte Carlo
@@ -130,7 +130,7 @@ prior_HEP_flux: Uniform(0, 2e4)
 # More chains and steps = better statistics but longer runtime
 
 nChains: 10              # Number of parallel MCMC chains (recommended: number of available cores)
-nSteps: 300000           # Number of post-tuning steps per chain
+nSteps: 500000           # Number of post-tuning steps per chain
                         # Total samples = nChains × nSteps
 
 # Adaptive step size tuning (improves sampling efficiency)
@@ -164,7 +164,7 @@ ES_exposure: 10         # Elastic Scattering exposure in module-years
 ##### Background event rates #####
 
 # Background normalizations (events/second/module before cuts ---still after efficiency atm---)
-ES_background_normalisations: [2.2e-6, 2.2e-6, 2.2e-6]   # ES background fluxes in cm-2s-1 -- nominal: 2.2e-6 -- shielded: CHANGE BKG FILES
+ES_background_normalisations: [2.2e-26, 2.2e-26, 2.2e-26]   # ES background fluxes in cm-2s-1 -- nominal: 2.2e-6 -- shielded: CHANGE BKG FILES
 CC_background_normalisations: [8.8e-8, 8.8e-8]   # CC background fluxes in cm-2s-1 -- nominal: 2.2e-6 -- shielded: 4.4e-8
 
 # Background systematic uncertainties (fractional)

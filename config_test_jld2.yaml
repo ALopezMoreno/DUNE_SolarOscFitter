@@ -1,0 +1,68 @@
+outFile: "outputs/test_jld2"
+
+RunMode: "MCMC"
+Asimov: true
+fastFit: true
+nuFast: false
+singleChannel: "ES"
+
+true_sin2_th12: 0.307
+true_sin2_th13: 0.0224
+true_dm2_21: 6e-5
+true_integrated_HEP_flux: 8250.0
+
+prior_sin2_th12: Uniform(0.15, 0.5)
+prior_sin2_th13: Truncated(Normal(0.022, 0.0007), 0.005, 0.035)
+prior_dm2_21: Uniform(2e-5, 3e-4)
+prior_8B_flux: Truncated(Normal(5.25e6, 0.28e6), 1.5e6, 1e7)
+prior_HEP_flux: Uniform(0, 2e4)
+
+nChains: 2
+nSteps: 25000       # enough to survive default 20k burnin
+maxTuningAttempts: 0
+nTuning: 200
+
+earth_potential_uncertainties: false
+
+llh_bins: 15
+thinning: 1
+
+CC_exposure: 30
+ES_exposure: 10
+
+ES_background_normalisations: [2.2e-26, 2.2e-26, 2.2e-26]
+CC_background_normalisations: [8.8e-8, 8.8e-8]
+ES_background_systematics: [0.02, 0.02, 0.02]
+CC_background_systematics: [0.02, 0.02]
+
+nBins_Etrue: 25
+range_Etrue: [2, 21]
+nBins_Ereco_ES: 20
+nBins_Ereco_CC: 20
+range_Ereco_ES: [2, 20]
+range_Ereco_CC: [4, 20]
+Ereco_min_ES: 3
+Ereco_min_CC: 5
+nBins_cosz: 30
+nBins_cos_scatter: 20
+use_scattering_info: true
+
+earth_normalisation_prior_file: "inputs/earth_uncertainty_cov.jld2"
+solar_model_file: "inputs/AGSS09_high_z.jld2"
+flux_model_file: "inputs/fluxes.jld2"
+earth_model_file: "inputs/EARTH_MODEL_PREM_DENSE.dat"
+earth_uncertainty_file: "inputs/earth_uncertainty_4.5e-5.jld2"
+solar_exposure_file: "inputs/solarExposure.csv"
+
+reconstruction_sample_CC: "inputs/sergio_reco_CC_withFullCuts.csv"
+reconstruction_sample_ES_nue: "inputs/Enu_Ereco_ES_nue_smeared.csv"
+reconstruction_sample_ES_nuother: "inputs/Enu_Ereco_ES_nuother_smeared.csv"
+reconstruction_sample_ES_angle: "inputs/ES_angular_reco.csv"
+
+CC_background_files: ["inputs/neutron_bg_CC_sergio_withFullCuts.csv",
+                      "inputs/gamma_bg_CC_sergio_withFullCuts.csv"]
+ES_background_files: ["inputs/ES_neutron_background_wShielding_1mFidu_discri_100Emin_longW.csv",
+                      "inputs/ES_neutron_background_wShielding_1mFidu_discri_100Emin_Bottom.csv",
+                      "inputs/ES_neutron_background_wShielding_1mFidu_discri_100Emin_shortW.csv"]
+
+data_file: "data.txt"

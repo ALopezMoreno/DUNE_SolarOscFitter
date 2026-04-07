@@ -89,7 +89,12 @@ def load_posterior(mcmc_chains, parameters, burnin=20_000, test=None):
     # Handle test parameters if specified
     if test is not None:
         with h5py.File(valid_chains[0] + ".jld2", 'r') as f:
-            sample_keys = f["batch_0"].keys() if _is_batched_jld2(f) else f.keys()
+            if _is_batched_jld2(f):
+                first_batch = sorted([k for k in f.keys() if k.startswith("batch_")],
+                                     key=lambda x: int(x.split("_")[1]))[0]
+                sample_keys = f[first_batch].keys()
+            else:
+                sample_keys = f.keys()
             for v in test:
                 if v[0] in sample_keys and v[0] not in parameters:
                     parameters.append(v[0])
