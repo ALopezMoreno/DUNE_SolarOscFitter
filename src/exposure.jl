@@ -34,7 +34,7 @@ cosz_y = exposure[:, 2]  # Relative exposure values
 
 # Create interpolated exposure function
 # Uses flat extrapolation beyond data range
-exposure_intp = LinearInterpolation(cosz_x, cosz_y, extrapolation_bc=Flat())
+exposure_intp = linear_interpolation(cosz_x, cosz_y, extrapolation_bc=Flat())
 
 # Calculate normalization by integrating over the full zenith range
 lower_limit = cosz_bins.min  # Minimum cos(zenith) = -1 (upward-going)
@@ -44,7 +44,7 @@ upper_limit = cosz_bins.max  # Maximum cos(zenith) = 0 (horizontal)
 exposure_intp_int, _ = quadgk(exposure_intp, lower_limit, upper_limit)
 
 # Alternative: Create normalized interpolation function (currently commented)
-#exposure_intp_norm = LinearInterpolation(cosz_x, cosz_y / exposure_intp_int, extrapolation_bc=Flat())
+#exposure_intp_norm = linear_interpolation(cosz_x, cosz_y / exposure_intp_int, extrapolation_bc=Flat())
 
 # Calculate exposure weights for each zenith angle bin
 bin_edges = range(cosz_bins.min, cosz_bins.max, length=cosz_bins.bin_number+1)

@@ -107,7 +107,7 @@ if ES_mode
             # Systematic uncertainty present - create nuisance parameter
             push!(ES_bg_norms_true, norm)
             # Truncated normal prior: mean=norm, std=norm*sys, bounds=[0, 2*norm]
-            push!(ES_bg_norms_pars, Truncated(Normal(norm, norm * sys), 0.0, norm*2))
+            push!(ES_bg_norms_pars, truncated(Normal(norm, norm * sys), 0.0, norm*2))
             push!(ES_bg_par_counts, 1)
         end
     end
@@ -125,7 +125,7 @@ if CC_mode
             # Systematic uncertainty present - create nuisance parameter
             push!(CC_bg_norms_true, norm)
             # Truncated normal prior: mean=norm, std=norm*sys, bounds=[0, 2*norm]
-            push!(CC_bg_norms_pars, Truncated(Normal(norm, norm * sys), 0.0, norm*2))
+            push!(CC_bg_norms_pars, truncated(Normal(norm, norm * sys), 0.0, norm*2))
             push!(CC_bg_par_counts, 1)
         end
     end

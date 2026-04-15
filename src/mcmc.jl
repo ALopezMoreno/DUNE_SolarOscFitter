@@ -70,7 +70,7 @@ if earthUncertainty  if !isempty(CC_bg_norms_pars)
   covmat = cov(earth_normalisation_prior)
   n = length(means)
   for i in 1:n
-    priors[Symbol("earth_norm_$i")] = Truncated(Normal(means[i], sqrt(covmat[i, i])), 0.0, 2.0)
+    priors[Symbol("earth_norm_$i")] = truncated(Normal(means[i], sqrt(covmat[i, i])), 0.0, 2.0)
   end
   # param_bounds = Dict(:earth_norm => (0.0, 2.0)) # We want these to be fixed between 0 and 2
 end

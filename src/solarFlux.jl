@@ -36,8 +36,8 @@ if Etrue_bins.max > energies[end]
 end
 
 # Create interpolated flux functions (unnormalized)
-flux_8B_noNormalisation = LinearInterpolation(extended_energies, extended_flux8B)
-flux_hep_noNormalisation = LinearInterpolation(extended_energies, extended_fluxHep)
+flux_8B_noNormalisation = linear_interpolation(extended_energies, extended_flux8B)
+flux_hep_noNormalisation = linear_interpolation(extended_energies, extended_fluxHep)
 
 # Calculate normalization integrals
 lower_limit = extended_energies[1]    # Start from zero energy
@@ -49,5 +49,5 @@ integral_flux_hep, _ = quadgk(flux_hep_noNormalisation, lower_limit, upper_limit
 
 # Create normalized flux functions
 # These give flux per unit energy, normalized to unit integral
-flux_8B = LinearInterpolation(extended_energies, extended_flux8B / integral_flux_8B)
-flux_hep = LinearInterpolation(extended_energies, extended_fluxHep / integral_flux_hep)
+flux_8B = linear_interpolation(extended_energies, extended_flux8B / integral_flux_8B)
+flux_hep = linear_interpolation(extended_energies, extended_fluxHep / integral_flux_hep)
