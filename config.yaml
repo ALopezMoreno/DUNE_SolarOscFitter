@@ -73,7 +73,7 @@ true_sin2_th13: 0.0224   # Reactor mixing angle
 # The atmospheric mixing angle is also irrelevant and is fixed to 0.5
 
 # Mass-squared differences (eV²)
-true_dm2_21: 6e-5        # Solar mass-squared difference
+true_dm2_21: 5.113e-5        # Solar mass-squared difference
                          # PDG 2020: 7.53e-5, SNO: 5.113e-5
 
 # Solar neutrino flux normalizations (neutrinos/cm²/s)
@@ -95,7 +95,7 @@ prior_sin2_th12: Uniform(0.15, 0.5)
 #Uniform prior covering region of interest: Uniform(0.15, 0.5)
 
 # Reactor mixing angle squared sin²θ₁₃  
-prior_sin2_th13: Truncated(Normal(0.022, 0.0007), 0.005, 0.035)
+prior_sin2_th13: truncated(Normal(0.022, 0.0007), 0.005, 0.035)
 # Gaussian prior from reactor neutrino experiments: Truncated(Normal(0.022, 0.0007), 0.005, 0.035)
 # Alternative conservative constraint: Uniform(0.0, 0.1)
 
@@ -112,7 +112,7 @@ prior_dm2_21: Uniform(2e-5, 3e-4)
 # prior_8B_flux: Uniform(1e5, 2e7)
 
 # Option 2: SNO neutral current measurement (~5.3% uncertainty)
-prior_8B_flux: Truncated(Normal(5.25e6, 0.28e6), 1.5e6, 1e7)
+prior_8B_flux: truncated(Normal(5.25e6, 0.28e6), 1.5e6, 1e7)
 
 # Option 3: Future ES measurement constraint (4% uncertainty)
 # prior_8B_flux: Truncated(Normal(5.46e6, 0.218e6), 1.5e6, 1e7)
@@ -177,7 +177,7 @@ CC_background_systematics: [0.02, 0.02]   # 2% uncertainty on each CC background
 ##### Energy binning configuration #####
 
 # True neutrino energy binning (for oscillation calculations)
-nBins_Etrue: 25         # Number of true energy bins
+nBins_Etrue: 100         # Number of true energy bins
 range_Etrue: [2, 21]  # True energy range in MeV
 
 # Reconstructed energy binning (for detector response)
@@ -192,7 +192,7 @@ Ereco_min_ES: 3       # ES threshold in MeV
 Ereco_min_CC: 5       # CC threshold in MeV
 
 # Zenith angle binning (for Earth matter effects)
-nBins_cosz: 30         # Number of cos(zenith) bins from -1 (upward) to 0 (horizontal)
+nBins_cosz: 100         # Number of cos(zenith) bins from -1 (upward) to 0 (horizontal)
 
 # Scattering angle binning (for ES reconstruction)
 nBins_cos_scatter: 20

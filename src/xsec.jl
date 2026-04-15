@@ -49,7 +49,7 @@ CC_xsec_unique = CC_xsec_sorted[unique_indices]
 
 # Create interpolated CC cross-section function
 # Uses flat extrapolation beyond data range
-CC_xsec = LinearInterpolation(CC_xsec_energy_unique, CC_xsec_unique, extrapolation_bc=Flat())
+CC_xsec = linear_interpolation(CC_xsec_energy_unique, CC_xsec_unique, extrapolation_bc=Flat())
 
 # Elastic scattering cross-section calculations
 # These use analytical formulas for neutrino-electron scattering
