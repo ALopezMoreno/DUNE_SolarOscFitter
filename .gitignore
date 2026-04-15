@@ -357,3 +357,35 @@ utils/testScripts/plotPosteriorPredictive.py
 utils/testScripts/temp.jl
 utils/testScripts/test_reweighting.jl
 utils/testScripts/testOsc.jl
+
+# Input data (large simulation/physics data)
+inputs/
+
+# Julia lock file (auto-generated, large)
+Manifest.toml
+
+# Binary / compiled artifacts
+*.so
+*.sif
+*.tar.gz
+
+# Temporary files
+*.tmp
+tmp/
+
+# Profiling artifacts
+*.pb.gz
+*.gp
+profile_*.svg
+profile_*.pdf
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Test/scratch configs
+config[0-9].yaml
+config_test*.yaml
+
+# Contribution matrices (generated outputs)
+contribution_matrix_*.jl*
