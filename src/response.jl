@@ -127,7 +127,25 @@ angular_ES_response = create_response_matrix(angular_ES_sample, Ereco_bins_ES_ex
 
 CC_response = create_response_matrix(CC_sample, Etrue_bins, Ereco_bins_CC_extended)
 
+# Uniform angular response
 angular_BG_response = fill(1 / cos_scatter_bins.bin_number, size(angular_ES_response))
+
+# Angular cut ###############################################################################
+cos_cut = 0.                                                                               #
+                                                                                            #
+N = cos_scatter_bins.bin_number                                                             #
+edges = range(cos_scatter_bins.min,                                                         #
+              cos_scatter_bins.max,                                                         #
+              length = N + 1)                                                               #
+                                                                                            #
+centers = 0.5 .* (edges[1:end-1] .+ edges[2:end])                                           #
+                                                                                            #
+mask = centers .>= cos_cut          # length Ncos, Bool                                     #
+                                                                                            #
+n_allowed = count(mask)
+angular_BG_response = zeros(size(angular_ES_response))                                      #
+angular_BG_response[mask, :] .= 1.0 / n_allowed      # uniform over allowed bins only       #
+#############################################################################################
 
 # Save in named tuple
 ES_response = (nue=nue_ES_response, nuother=nuother_ES_response, angular=angular_ES_response)

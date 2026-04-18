@@ -223,7 +223,7 @@ function make_potential_for_integrand(cosz, earth_potential_function, n=3)
     jump_positions = [jump.x for jump in jumps]
 
     # create interpolated function for finding optimal integration points
-    f = LinearInterpolation(distances, matter_potential; extrapolation_bc=Flat())
+    f = linear_interpolation(distances, matter_potential; extrapolation_bc=Flat())
 
     segments = []
 
