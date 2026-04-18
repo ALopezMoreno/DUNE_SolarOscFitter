@@ -129,13 +129,13 @@ prior_HEP_flux: Uniform(0, 2e4)
 # Markov Chain Monte Carlo sampling configuration
 # More chains and steps = better statistics but longer runtime
 
-nChains: 10              # Number of parallel MCMC chains (recommended: number of available cores)
-nSteps: 500000           # Number of post-tuning steps per chain
+nChains: 10             # Number of parallel MCMC chains (recommended: number of available cores)
+nSteps: 200000          # Number of post-tuning steps per chain
                         # Total samples = nChains × nSteps
 
 # Adaptive step size tuning (improves sampling efficiency)
 maxTuningAttempts: 30   # Maximum tuning cycles (0 = no tuning, faster but less efficient)
-nTuning: 2000          # Steps per tuning cycle (recommended: O(1000))
+nTuning: 1000           # Steps per tuning cycle (recommended: O(1000))
 
 # Systematic uncertainty toggles (disabling speeds up computation)
 earth_potential_uncertainties: true  # Include Earth matter density uncertainties
@@ -177,7 +177,7 @@ CC_background_systematics: [0.02, 0.02]   # 2% uncertainty on each CC background
 ##### Energy binning configuration #####
 
 # True neutrino energy binning (for oscillation calculations)
-nBins_Etrue: 100         # Number of true energy bins
+nBins_Etrue: 30         # Number of true energy bins
 range_Etrue: [2, 21]  # True energy range in MeV
 
 # Reconstructed energy binning (for detector response)
@@ -192,7 +192,7 @@ Ereco_min_ES: 3       # ES threshold in MeV
 Ereco_min_CC: 5       # CC threshold in MeV
 
 # Zenith angle binning (for Earth matter effects)
-nBins_cosz: 100         # Number of cos(zenith) bins from -1 (upward) to 0 (horizontal)
+nBins_cosz: 30         # Number of cos(zenith) bins from -1 (upward) to 0 (horizontal)
 
 # Scattering angle binning (for ES reconstruction)
 nBins_cos_scatter: 20
