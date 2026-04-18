@@ -680,7 +680,6 @@ end
 using ProgressMeter
 using Printf
 using Measures
-using ColorTypes
 using ColorSchemes
 using LaTeXStrings
 using .Osc: nu4NumOsc
@@ -714,7 +713,7 @@ mixingPars_dict = (
     θ₁₂=asin(sqrt(0.303)),
     θ₂₃=asin(sqrt(0.5)), # Example value
     δCP=0.0,   # Example value
-    Δm²₂₁=7.5e-5,
+    Δm²₂₁=7.53e-5,
     Δm²₃₁=2.5e-3,
     m₀=1e-9 # Example value
 )
@@ -722,7 +721,7 @@ mixingPars_dict = (
 # mixingPars = nu4NumOsc.oscPars(mixingPars_dict.Δm²₂₁, asin(sqrt(mixingPars_dict.sin2_th12)), asin(sqrt(mixingPars_dict.sin2_th13)), 0, 0, 0, 1)
 mixingPars = oscPars(mixingPars_dict.Δm²₂₁, asin(sqrt(mixingPars_dict.sin2_th12)), asin(sqrt(mixingPars_dict.sin2_th13)))
 
-energies = collect(range(0.1, stop=18, length=300)) * 1e-3
+energies = collect(range(11, stop=15, length=300)) * 1e-3
 
 solarModel = (avgNeBoron = 100,)
 
@@ -836,10 +835,10 @@ Plots.histogram!(p1, filtered_times,
 
 
 display(p1)
-
 =#
-# -----------------------------------------------------------------------------#
 
+# -----------------------------------------------------------------------------#
+#=
 using .Osc: osc_prob_both_fast
 using .Osc.NumOsc: Fast
 
@@ -854,7 +853,9 @@ ProfileSVG.@profview for i in 1:num_runs
     p_1e_fast = Fast.osc_prob_earth(energies, mixingPars, earth_lookup, earth_paths, anti=false)[:, :, 1, 1] # Get the 1e element only
     prob_day, prob_num_fast_fast = osc_prob_both_fast(energies, p_1e_fast, mixingPars, solarModel, process="8B")
 end
+=#
 
+#=
 using BenchmarkTools
 
 result1 = @benchmark Fast.osc_prob_earth(energies, mixingPars, earth_lookup, earth_paths, anti=false)[:, :, 1, 1] # Get the 1e element only
@@ -880,7 +881,10 @@ println("  Allocations: $(result2.allocs)")
 println("Plotting profile data")
 ProfileSVG.save("profile_large_v2.svg"; width=2000, height=1000)
 println("saved data")
+=#
 
+
+#=
 n_paths = size(p_1e_fast, 1)
 y_coords = range(-1, stop=0, length=n_paths)
 
@@ -952,15 +956,15 @@ parulas = ColorScheme([RGB(0.2422, 0.1504, 0.6603),
     "Parula",
     "From MATLAB")
 
-
+A_DN = prob_num_fast_fast .- prob_day'
 
 p2 = heatmap(
     energies*1e3,
     y_coords,
-    prob_num_fast_fast,
+    A_DN,
     xlabel=L"E_{\nu} \, (\mathrm{MeV})",
     ylabel=L"\cos(z)",
-    title="Night-time probability",
+    title="Night-time probability excess",
     colormap=cgrad(parulas),
     #colormap=:berlin,
     size=(1200, 900),
@@ -971,5 +975,6 @@ p2 = heatmap(
 # Display the plot
 display(p2)
 sleep(100)
+=#
 ####################################################################
 =#
