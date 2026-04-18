@@ -27,12 +27,12 @@
 # Output file prefix for all generated files (chains, plots, etc.)
 # Results will be saved as: outFile_mcmc.bin, outFile_info.txt, etc.
 # outFile: "outputs/CC_10MeVthershold_Shielding_strongCuts_deltam6_HDonly"
-outFile: "outputs/ES_3MeVThr_shieldBG_SNOfluxPrior_AngleFull_v2_2"
+outFile: "outputs/CC_5MeVThr_shieldBG_SNOfluxPrior"
 
 # Previous file to continue MCMC chain from (optional)
 # Uncomment to resume a previous run from where it left off
 # REQUIRED when RunMode is "derived" to specify which chain to post-process
-prevFile: "outputs/ES_3MeVThr_shieldBG_SNOfluxPrior_AngleFull_v2"
+# prevFile: "outputs/ES_3MeVThr_shieldBG_SNOfluxPrior_AngleFull_v2"
 
 # Analysis mode selection:
 # "MCMC"   - Bayesian parameter estimation with Markov Chain Monte Carlo
@@ -73,7 +73,7 @@ true_sin2_th13: 0.0224   # Reactor mixing angle
 # The atmospheric mixing angle is also irrelevant and is fixed to 0.5
 
 # Mass-squared differences (eV²)
-true_dm2_21: 6e-5        # Solar mass-squared difference
+true_dm2_21: 5.113e-5        # Solar mass-squared difference
                          # PDG 2020: 7.53e-5, SNO: 5.113e-5
 
 # Solar neutrino flux normalizations (neutrinos/cm²/s)
@@ -95,7 +95,7 @@ prior_sin2_th12: Uniform(0.15, 0.5)
 #Uniform prior covering region of interest: Uniform(0.15, 0.5)
 
 # Reactor mixing angle squared sin²θ₁₃  
-prior_sin2_th13: Truncated(Normal(0.022, 0.0007), 0.005, 0.035)
+prior_sin2_th13: truncated(Normal(0.022, 0.0007), 0.005, 0.035)
 # Gaussian prior from reactor neutrino experiments: Truncated(Normal(0.022, 0.0007), 0.005, 0.035)
 # Alternative conservative constraint: Uniform(0.0, 0.1)
 
@@ -112,7 +112,7 @@ prior_dm2_21: Uniform(2e-5, 3e-4)
 # prior_8B_flux: Uniform(1e5, 2e7)
 
 # Option 2: SNO neutral current measurement (~5.3% uncertainty)
-prior_8B_flux: Truncated(Normal(5.25e6, 0.28e6), 1.5e6, 1e7)
+prior_8B_flux: truncated(Normal(5.25e6, 0.28e6), 1.5e6, 1e7)
 
 # Option 3: Future ES measurement constraint (4% uncertainty)
 # prior_8B_flux: Truncated(Normal(5.46e6, 0.218e6), 1.5e6, 1e7)
@@ -129,13 +129,13 @@ prior_HEP_flux: Uniform(0, 2e4)
 # Markov Chain Monte Carlo sampling configuration
 # More chains and steps = better statistics but longer runtime
 
-nChains: 10              # Number of parallel MCMC chains (recommended: number of available cores)
-nSteps: 300000           # Number of post-tuning steps per chain
+nChains: 10             # Number of parallel MCMC chains (recommended: number of available cores)
+nSteps: 200000          # Number of post-tuning steps per chain
                         # Total samples = nChains × nSteps
 
 # Adaptive step size tuning (improves sampling efficiency)
 maxTuningAttempts: 30   # Maximum tuning cycles (0 = no tuning, faster but less efficient)
-nTuning: 2000          # Steps per tuning cycle (recommended: O(1000))
+nTuning: 1000           # Steps per tuning cycle (recommended: O(1000))
 
 # Systematic uncertainty toggles (disabling speeds up computation)
 earth_potential_uncertainties: true  # Include Earth matter density uncertainties
@@ -164,7 +164,7 @@ ES_exposure: 10         # Elastic Scattering exposure in module-years
 ##### Background event rates #####
 
 # Background normalizations (events/second/module before cuts ---still after efficiency atm---)
-ES_background_normalisations: [2.2e-6, 2.2e-6, 2.2e-6]   # ES background fluxes in cm-2s-1 -- nominal: 2.2e-6 -- shielded: CHANGE BKG FILES
+ES_background_normalisations: [2.2e-26, 2.2e-26, 2.2e-26]   # ES background fluxes in cm-2s-1 -- nominal: 2.2e-6 -- shielded: CHANGE BKG FILES
 CC_background_normalisations: [8.8e-8, 8.8e-8]   # CC background fluxes in cm-2s-1 -- nominal: 2.2e-6 -- shielded: 4.4e-8
 
 # Background systematic uncertainties (fractional)
@@ -177,7 +177,7 @@ CC_background_systematics: [0.02, 0.02]   # 2% uncertainty on each CC background
 ##### Energy binning configuration #####
 
 # True neutrino energy binning (for oscillation calculations)
-nBins_Etrue: 25         # Number of true energy bins
+nBins_Etrue: 30         # Number of true energy bins
 range_Etrue: [2, 21]  # True energy range in MeV
 
 # Reconstructed energy binning (for detector response)

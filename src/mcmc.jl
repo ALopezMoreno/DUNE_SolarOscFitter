@@ -70,7 +70,7 @@ if earthUncertainty  if !isempty(CC_bg_norms_pars)
   covmat = cov(earth_normalisation_prior)
   n = length(means)
   for i in 1:n
-    priors[Symbol("earth_norm_$i")] = Truncated(Normal(means[i], sqrt(covmat[i, i])), 0.0, 2.0)
+    priors[Symbol("earth_norm_$i")] = truncated(Normal(means[i], sqrt(covmat[i, i])), 0.0, 2.0)
   end
   # param_bounds = Dict(:earth_norm => (0.0, 2.0)) # We want these to be fixed between 0 and 2
 end
@@ -108,7 +108,7 @@ posterior = PosteriorMeasure(likelihood_all_samples, prior)
 
 # Set chain parameters
 init = MCMCChainPoolInit(
-  init_tries_per_chain=IntervalSets.ClosedInterval(1, 180),  # Example interval
+  init_tries_per_chain=IntervalSets.ClosedInterval(4, 180),  # min>1 avoids BAT v4 bug in else-branch of chain selection
   nsteps_init=500,
   initval_alg=InitFromTarget()
 )
@@ -144,10 +144,10 @@ end
 
 # Skip tuning if desired
 if maxTuningAttempts == 0
-  proposal_algorithm = MetropolisHastings(proposal=proposal_distribution, tuning=AdaptiveMHTuning(α=ClosedInterval(0, 1)))
+  proposal_algorithm = RandomWalk(proposaldist=proposal_distribution)
   @logmsg MCMC "skipping the tuning stage."
 else
-  proposal_algorithm = MetropolisHastings(proposal=proposal_distribution)
+  proposal_algorithm = RandomWalk(proposaldist=proposal_distribution)
   @logmsg MCMC "tuning will be performed with $tuningSteps steps up to a maximum of $maxTuningAttempts times."
 end
 

@@ -124,6 +124,22 @@ function compute_ES_angular_event_rates(oscSamplesES, responseMatrices, BG_ES)
 
     eventRate_ES_night_angular = eventRate_ES_night_angular_signal .+ eventRate_ES_night_angular_background .* 0.5
 
+    # 3) make an angular cut ####################################################
+    cos_cut = 0.                                                               #
+                                                                                #
+    N = cos_scatter_bins.bin_number                                             #
+    edges = range(cos_scatter_bins.min,                                         #
+                  cos_scatter_bins.max,                                         #
+                  length = N + 1)                                               #
+                                                                                #
+    centers = 0.5 .* (edges[1:end-1] .+ edges[2:end])                           #
+                                                                                #
+    mask = centers .>= cos_cut  # Bool vector, length = Ncos                    #
+                                                                                #
+    eventRate_ES_day_angular .*= mask                                           #
+    eventRate_ES_night_angular .*= reshape(mask, :, 1, 1)                       #
+    #############################################################################
+
     #P1 = plot(eventRate_ES_day_angular[:, 10])
     #display(P1)
     #sleep(100)

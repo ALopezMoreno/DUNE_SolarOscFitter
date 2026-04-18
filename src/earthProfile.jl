@@ -67,7 +67,7 @@ function create_interpolated_model(earth_model::Dict)
     
     # Create linear interpolation function
     # extrapolation_bc=Throw() ensures error for out-of-range values
-    linear_interp = LinearInterpolation(x, y; extrapolation_bc=Throw())
+    linear_interp = linear_interpolation(x, y; extrapolation_bc=Throw())
     
     return linear_interp
 end

@@ -65,7 +65,7 @@ def _read_jld2_flat(h5file, keys):
     return {k: np.array(h5file[k][()]) if k in h5file else np.array([]) for k in keys}
 
 
-def load_posterior(mcmc_chains, parameters, burnin=20_000, test=None):
+def load_posterior(mcmc_chains, parameters, burnin=20_000, test=None, exclude_chains=None):
     valid_chains = []
     for mcmc_chain in mcmc_chains:
         if not os.path.exists(mcmc_chain + ".jld2"):
@@ -89,7 +89,12 @@ def load_posterior(mcmc_chains, parameters, burnin=20_000, test=None):
     # Handle test parameters if specified
     if test is not None:
         with h5py.File(valid_chains[0] + ".jld2", 'r') as f:
-            sample_keys = f["batch_0"].keys() if _is_batched_jld2(f) else f.keys()
+            if _is_batched_jld2(f):
+                first_batch = sorted([k for k in f.keys() if k.startswith("batch_")],
+                                     key=lambda x: int(x.split("_")[1]))[0]
+                sample_keys = f[first_batch].keys()
+            else:
+                sample_keys = f.keys()
             for v in test:
                 if v[0] in sample_keys and v[0] not in parameters:
                     parameters.append(v[0])
@@ -107,7 +112,8 @@ def load_posterior(mcmc_chains, parameters, burnin=20_000, test=None):
             # Detect all parameter names if requested
             if parameters == "all":
                 skip_keys = {'stepno', 'chainid', 'weights'}
-                sample_keys = f["batch_0"].keys() if batched else f.keys()
+                first_batch = sorted([k for k in f.keys() if k.startswith("batch_")], key=lambda x: int(x.split("_")[1]))[0]
+                sample_keys = f[first_batch].keys() if batched else f.keys()
                 parameters = [k for k in sample_keys if k not in skip_keys]
                 results.update({param: [] for param in parameters})
 
@@ -120,7 +126,8 @@ def load_posterior(mcmc_chains, parameters, burnin=20_000, test=None):
         chains  = raw['chainid']
         weights = raw.get('weights', np.array([]))
 
-        mask = (stepno > burnin) & (~np.isin(chains, [20]))
+        _excl = list(exclude_chains) if exclude_chains is not None else [20]
+        mask = (stepno > burnin) & (~np.isin(chains, _excl))
         max_steps = len(mask)
 
         results['chains'].append(chains[mask])
@@ -152,7 +159,7 @@ def load_posterior(mcmc_chains, parameters, burnin=20_000, test=None):
 
     chain_indexes = np.unique(results['chains'])
     print(f"Unique chain IDs: {chain_indexes}")
-    print("Number of effective steps in posterior:", np.sum(results['weights']))
+    print(f"Total MCMC steps in posterior (sum of weights): {np.sum(results['weights']):.0f}")
 
     return results
 
