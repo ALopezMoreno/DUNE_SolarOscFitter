@@ -28,7 +28,7 @@ include("../src/propagateSample.jl")
 
 # Load PREM uncertainty data
 # This contains oscillation probability uncertainties due to Earth density variations
-earth_uncertainty = JLD2.load("./inputs/prem_uncertainties_4.500e-5.jld2", "probabilities")
+earth_uncertainty = JLD2.load(earthUncertaintyFile, "probabilities")
 
 # Define coordinate extents for interpolation
 extent = [(-1, 0), (3, 20)]  # Original data extent: [cos(zenith), energy(MeV)]

@@ -140,7 +140,7 @@ end
 
 
 # Function for running the MCMC in batches
-function runMCMCbatch(currentBatch, args...)
+function runMCMCbatch(currentBatch, priors, args...)
   if currentBatch == 0
       if isnothing(prevFile)
           @logmsg MCMC "No previous MCMC file indicated. Starting chain from zero"

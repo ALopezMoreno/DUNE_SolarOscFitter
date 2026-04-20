@@ -41,7 +41,7 @@ function propagateSamples(unoscillatedSample, responseMatrices, params, solarMod
         setup_earth_propagation(E_calc, mixingPars, params)
 
     # 3) Backgrounds
-    backgrounds, BG_ES, BG_CC = normalize_backgrounds(raw_backgrounds, params)
+    BG_ES, BG_CC = normalize_backgrounds(raw_backgrounds, params)
 
     # 4) Oscillation probabilities (day/night, 8B/hep, ν_e/ν_other)
     oscProbs = compute_oscillation_probabilities(

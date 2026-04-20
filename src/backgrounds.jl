@@ -88,13 +88,13 @@ end
 # Setup systematic uncertainties for background normalizations
 # These will be treated as nuisance parameters in the MCMC fit
 
-global ES_bg_norms_true = []  # True normalization values for ES backgrounds
-global ES_bg_norms_pars = []  # Prior distributions for ES background systematics
-global ES_bg_par_counts = []  # Count of systematic parameters per ES background
+global ES_bg_norms_true = Float64[]       # True normalization values for ES backgrounds
+global ES_bg_norms_pars = Distribution[]  # Prior distributions for ES background systematics
+global ES_bg_par_counts = Int[]           # Count of systematic parameters per ES background
 
-global CC_bg_norms_true = []  # True normalization values for CC backgrounds
-global CC_bg_norms_pars = []  # Prior distributions for CC background systematics
-global CC_bg_par_counts = []  # Count of systematic parameters per CC background
+global CC_bg_norms_true = Float64[]       # True normalization values for CC backgrounds
+global CC_bg_norms_pars = Distribution[]  # Prior distributions for CC background systematics
+global CC_bg_par_counts = Int[]           # Count of systematic parameters per CC background
 
 # Apply normalizations and setup systematic parameters for ES backgrounds
 if ES_mode

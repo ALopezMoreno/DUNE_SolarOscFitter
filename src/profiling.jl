@@ -1,47 +1,75 @@
 using BenchmarkTools
 using Profile
 using PProf
+using ProfileSVG
 
 using LinearAlgebra, Statistics, Distributions, StatsBase, BAT, DensityInterface, IntervalSets
 
-include(joinpath(@__DIR__, "..", "src", "setup.jl"))
-include(joinpath(@__DIR__, "..", "src", "likelihoods", "likelihood_main.jl"))
+include(joinpath(@__DIR__, "setup.jl"))
+include(joinpath(@__DIR__, "likelihoods", "likelihood_main.jl"))
 
-@info "Running likelihood benchmark/profiling (RunMode = BENCH)"
+@info "Running likelihood profiling (RunMode = PROFILE)"
 
-# Parameters: use the NamedTuple, not the Dict
-params_prop = true_params   # for both total_llh and propagateSamples
+params_prof = true_params
 
-# ---------------- Warmup (avoid measuring compilation time) ----------------
+# --- Build partial likelihoods for ES-only and CC-only targets ----------------
+es_only_llh = make_likelihood(likelihood_inputs; use_ES = true,  use_CC = false)
+cc_only_llh = make_likelihood(likelihood_inputs; use_ES = false, use_CC = true)
 
-total_llh(params_prop)
-propagateSamples(unoscillatedSample, responseMatrices,
-                 params_prop, solarModel, bin_edges, backgrounds)
+# --- Prepare inputs for osc-only target ---------------------------------------
+mixingPars_prof = get_mixing_parameters(true_params)
 
+# --- Helper: warmup → clear → profile → save PProf + ProfileSVG --------------
+function profile_target(f, label; n_warmup = 3, n_profile = 500)
+    @info "Warming up: $label"
+    for _ in 1:n_warmup
+        f()
+    end
 
-# ---------------- CPU profiling → PProf format ----------------
+    pb_path  = label * ".pb.gz"
+    svg_path = label * ".svg"
 
-# Profile total_llh
-@info "Profiling total_llh(parameters) → profile_total_llh.pb.gz"
-Profile.clear()
-@profile for i in 1:3000
-    total_llh(params_prop)
+    t_ms = @belapsed($f()) * 1e3
+    @info "$label  wall time: $(round(t_ms, digits=2)) ms/call"
+
+    @info "Profiling: $label  →  $pb_path  /  $svg_path"
+    Profile.clear()
+    @profile for _ in 1:n_profile
+        f()
+    end
+    PProf.pprof(web = false, out = pb_path)
+    Logging.with_logger(Logging.SimpleLogger(stderr, Logging.Error)) do
+        ProfileSVG.save(svg_path; maxdepth = 200, width = 12000)
+    end
+    Profile.clear()
+
+    @info "Done: $label"
 end
-PProf.pprof(web = false, out = "profile_total_llh.pb.gz")
-@info "Wrote profile_total_llh.pb.gz (use `pprof` CLI to inspect)"
 
-# Profile propagateSamples
-@info "Profiling propagateSamples(...) → profile_propagateSamples.pb.gz"
-Profile.clear()
-@profile for i in 1:3000
-    propagateSamples(unoscillatedSample,
-                     responseMatrices,
-                     params_prop,
-                     solarModel,
-                     bin_edges,
-                     backgrounds)
-end
-PProf.pprof(web = false, out = "profile_propagateSamples.pb.gz")
-@info "Wrote profile_propagateSamples.pb.gz (use `pprof` CLI to inspect)"
+# --- Profile targets ----------------------------------------------------------
 
-@info "Benchmark/profiling complete. Exiting."
+profile_target(
+    () -> total_llh(params_prof),
+    "profile_total_llh";
+    n_profile = 500,
+)
+
+profile_target(
+    () -> es_only_llh(params_prof),
+    "profile_es_only_llh";
+    n_profile = 500,
+)
+
+profile_target(
+    () -> cc_only_llh(params_prof),
+    "profile_cc_only_llh";
+    n_profile = 500,
+)
+
+profile_target(
+    () -> osc_prob_earth(E_calc, mixingPars_prof, earth_lookup, earth_paths),
+    "profile_osc_earth";
+    n_profile = 1000,
+)
+
+@info "Profiling complete. Outputs written to the working directory."

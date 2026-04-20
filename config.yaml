@@ -27,7 +27,7 @@
 # Output file prefix for all generated files (chains, plots, etc.)
 # Results will be saved as: outFile_mcmc.bin, outFile_info.txt, etc.
 # outFile: "outputs/CC_10MeVthershold_Shielding_strongCuts_deltam6_HDonly"
-outFile: "outputs/CC_5MeVThr_shieldBG_SNOfluxPrior"
+outFile: "outputs/speedup_test"
 
 # Previous file to continue MCMC chain from (optional)
 # Uncomment to resume a previous run from where it left off
@@ -57,7 +57,7 @@ nuFast: false
 # false - Fit both ES (Elastic Scattering) and CC (Charged Current) channels
 # "ES"  - Fit only Elastic Scattering channel
 # "CC"  - Fit only Charged Current channel
-singleChannel: "ES"
+singleChannel: false
 
 ##############################
 ##### Asimov true values #####
@@ -130,7 +130,7 @@ prior_HEP_flux: Uniform(0, 2e4)
 # More chains and steps = better statistics but longer runtime
 
 nChains: 10             # Number of parallel MCMC chains (recommended: number of available cores)
-nSteps: 200000          # Number of post-tuning steps per chain
+nSteps: 30000           # Number of post-tuning steps per chain
                         # Total samples = nChains × nSteps
 
 # Adaptive step size tuning (improves sampling efficiency)

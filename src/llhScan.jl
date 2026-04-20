@@ -60,7 +60,7 @@ lim_dm21 = [4e-5, 1.5e-4]  # Δm²₂₁ range (eV²)
 vals_12 = range(lim_th12[1], stop=lim_th12[2], length=nbins)
 vals_13 = range(lim_th13[1], stop=lim_th13[2], length=nbins)
 vals_dm = range(lim_dm21[1], stop=lim_dm21[2], length=nbins)
-flux_8B = true_params.integrated_8B_flux  # Fixed 8B flux for scanning
+flux_8B_scan = true_params.integrated_8B_flux  # Fixed 8B flux for scanning
 
 
 
@@ -151,7 +151,7 @@ println("")
 @logmsg MCMC ("Scanning sin2th12 vs dm2_21")
 
 # Initialize a matrix to store the llh scans for sin2_th12 and dm2_21
-llh_sin2th12_dm2_21 = zeros(Float64, length(vals_12), length(vals_13))
+llh_sin2th12_dm2_21 = zeros(Float64, length(vals_12), length(vals_dm))
 temp_parameters = deepcopy(true_parameters)
 
 for (i, mode) in enumerate([ES_mode, CC_mode])
@@ -208,7 +208,7 @@ println("")
 @logmsg MCMC ("Scanning sin2th13 vs dm2_21")
 
 # Initialize a matrix to store the llh scans for sin2_th13 and dm2_21
-llh_sin2th13_dm2_21 = zeros(Float64, length(vals_12), length(vals_13))
+llh_sin2th13_dm2_21 = zeros(Float64, length(vals_13), length(vals_dm))
 
 temp_parameters = deepcopy(true_parameters)
 
