@@ -281,19 +281,6 @@ function make_perbin_likelihood(
         # - non-angular: ES_day is Vector, ES_night is Matrix
         # - angular:     ES_day is Matrix, ES_night is 3D Array
 
-        ###### THIS BLOCK IGNORES BINS BELOW THE THRESHOLD ######
-
-        #=
-        ES_day_shape   = angular_reco ? size(@view nObs.ES_day[:, idxES:end]) :
-                                        size(@view nObs.ES_day[idxES:end])
-        ES_night_shape = angular_reco ? size(@view nObs.ES_night[:, idxES:end, :]) :
-                                        size(@view nObs.ES_night[:, idxES:end])
-
-        CC_day_shape   = size(@view nObs.CC_day[idxCC:end])
-        CC_night_shape = size(@view nObs.CC_night[:, idxCC:end])
-        =#
-        ##########################################################
-
         ###### THIS BLOCK COUNTS BINS BELOW THE THRESHOLD ######
 
         ES_day_shape   = angular_reco ? size(nObs.ES_day) :
@@ -353,7 +340,7 @@ function make_perbin_likelihood(
             cc = if CC_llh === llh_CC_barlowBeeston
                 uncertainty_ratio_CC_night === nothing &&
                     error("uncertainty_ratio_CC_night must be provided for Barlow-Beeston systematics")
-                llh_CC_barlowBeeston_perbin(d, parameters, _rates, uncertainty_ratio_CC_night)
+                error("llh_CC_barlowBeeston_perbin is not yet implemented")
             else
                 # Default Poisson per-bin
                 llh_CC_poisson_perbin(d, parameters, _rates)

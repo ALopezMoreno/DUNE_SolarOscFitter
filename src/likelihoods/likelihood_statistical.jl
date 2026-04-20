@@ -1,4 +1,4 @@
-function poissonLogLikelihood(nExpected::Vector{Float64}, nMeasured::Vector{Float64})::Float64
+function poissonLogLikelihood(nExpected::AbstractVector{<:Real}, nMeasured::AbstractVector{<:Real})::Float64
     """
     Calculate the Poisson log likelihood given expected and measured counts (seen as a KL divergence)
 

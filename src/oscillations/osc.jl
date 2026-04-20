@@ -118,7 +118,7 @@ function osc_prob_day_fast(energy::Float64, params, solarModel; process="8B")
           process == "hep" ? solarModel.avgNeHep :
           error("Invalid process specified. Please use '8B' or 'hep'.")
 
-    enuOscProb = mswProb(params, energy, n_e)
+    enuOscProb = mswProb(energy, params, n_e)
 
     return enuOscProb
 end
@@ -419,14 +419,21 @@ module NumOsc
     module Fast
         using LinearAlgebra
         using ...Osc: oscPars, get_matrices
-        using ..NumOsc: get_H, osc_reduce
+        using ..NumOsc: get_H, osc_kernel
 
-        function matter_osc_per_e(lookup_density, Mix_dagger, H_eff, e, index_array, l_Array, anti)
-
-            lookup_matrices = map(rho_vec -> get_H.(Ref(H_eff), e, rho_vec, anti), lookup_density)
-            matter_matrices = map(indices -> lookup_matrices[indices], index_array)
-
-            stack(map((path, matter) -> osc_reduce(Mix_dagger, matter, path, e, anti), l_Array, matter_matrices))
+        # Like osc_reduce but indexes directly into a pre-allocated lookup buffer,
+        # avoiding the allocation from lookup_matrices[indices] in the original map path.
+        # Returns only the [1,1] element (ν_e→ν_e probability).
+        @inline function osc_reduce_from_lookup(Mix_dagger, lookup_buf, indices, path, e)
+            @inbounds begin
+                first_mn = lookup_buf[indices[end]]
+                X = osc_kernel(first_mn[1], first_mn[2], e, path[1])
+                for i in 2:length(path)
+                    mn = lookup_buf[indices[end - i + 1]]
+                    X = X * osc_kernel(mn[1], mn[2], e, path[i])
+                end
+                return abs2.(Mix_dagger * X)[1, 1]
+            end
         end
 
         function osc_prob_earth(E::AbstractVector{<:Real}, params::oscPars, lookup_density, paths; anti=false)
@@ -435,11 +442,29 @@ module NumOsc
             Uc = anti ? conj.(U) : U
             H_eff = Uc * Diagonal{Complex{eltype(H)}}(H) * adjoint(Uc)
 
-            # We reverse the indices here to avoid reversing in the computation of the amplitude
+            # Reverse here so osc_reduce_from_lookup can walk front-to-back
             index_array = [reverse([s.index for s in path.segments]) for path in paths]
-            l_Array = [reverse([s.length for s in path.segments]) for path in paths]
+            l_Array     = [reverse([s.length for s in path.segments]) for path in paths]
 
-            p1e = stack(map(e -> matter_osc_per_e(lookup_density, Udag, H_eff, e, index_array, l_Array, anti), E))[1, 1, :, :]
+            n_E      = length(E)
+            n_paths  = length(paths)
+            n_lookup = length(lookup_density)
+
+            # Pre-allocate output and reusable eigendecomposition buffer
+            p1e        = Matrix{Float64}(undef, n_paths, n_E)
+            lookup_buf = Vector{typeof(get_H(H_eff, E[1], lookup_density[1], anti))}(undef, n_lookup)
+
+            @inbounds for ie in eachindex(E)
+                e = E[ie]
+                for j in 1:n_lookup
+                    lookup_buf[j] = get_H(H_eff, e, lookup_density[j], anti)
+                end
+                for ip in 1:n_paths
+                    p1e[ip, ie] = osc_reduce_from_lookup(Udag, lookup_buf, index_array[ip], l_Array[ip], e)
+                end
+            end
+
+            return p1e
         end
 
     end
@@ -617,8 +642,6 @@ module nu4NumOsc
         
         n_n = n_e * 0.7
 
-        display(n_e)
-
         rho_e =  n_e .* 5.4489e-5 .* 2 .* sqrt(2)
         rho_n =  n_n .* 5.4489e-5 .* 2 .* sqrt(2)
 
@@ -671,310 +694,3 @@ end
 end
 ################
 
-
-####################################################
-#####################
-###### TESTING ######
-#####################
-#=
-using ProgressMeter
-using Printf
-using Measures
-using ColorSchemes
-using LaTeXStrings
-using .Osc: nu4NumOsc
-using .Osc: oscPars, osc_prob_night
-
-#theme(:dracula)
-scalefontsizes(1)
-
-# Helper functions for diagnostics
-function format_sig_figs(x, sig_figs)
-    if x == 0
-        return "0"
-    end
-    magnitude = floor(log10(abs(x)))
-    factor = 10^(sig_figs - 1 - magnitude)
-    rounded = round(x * factor) / factor
-    return string(rounded)
-end
-
-function remove_outliers(data, n_sigma=3)
-    μ = mean(data)
-    σ = std(data)
-    return filter(x -> abs(x - μ) <= n_sigma * σ, data)
-end
-
-
-mixingPars_dict = (
-    sin2_th12=0.303,
-    sin2_th13=0.022,
-    θ₁₃=asin(sqrt(0.022)),
-    θ₁₂=asin(sqrt(0.303)),
-    θ₂₃=asin(sqrt(0.5)), # Example value
-    δCP=0.0,   # Example value
-    Δm²₂₁=7.53e-5,
-    Δm²₃₁=2.5e-3,
-    m₀=1e-9 # Example value
-)
-
-# mixingPars = nu4NumOsc.oscPars(mixingPars_dict.Δm²₂₁, asin(sqrt(mixingPars_dict.sin2_th12)), asin(sqrt(mixingPars_dict.sin2_th13)), 0, 0, 0, 1)
-mixingPars = oscPars(mixingPars_dict.Δm²₂₁, asin(sqrt(mixingPars_dict.sin2_th12)), asin(sqrt(mixingPars_dict.sin2_th13)))
-
-energies = collect(range(11, stop=15, length=300)) * 1e-3
-
-solarModel = (avgNeBoron = 100,)
-
-# oscProbs = nu4NumOsc.osc_prob_day(energies, mixingPars, solarModel)
-# p1 = plot(energies, oscProbs)
-# display(p1)
-
-
-#=
-num_runs = 100
-
-elapsed_times = zeros(num_runs)
-
-# Run once to compile
-p_1e_num = osc_prob_earth_num_fast(energies, mixingPars, earth_lookup, earth_paths, anti=false)[:, :, 1, 1] # Get the 1e element only
-p_1e_bar = osc_prob_earth_barger_fast(energies, earth_paths, mixingPars_dict, anti=false)[:, :, 1, 1] # Get the 1e element only
-
-prob_num = osc_prob_night(energies, p_1e_num, mixingPars, solarModel.avgNeBoron)
-prob_bar = osc_prob_night(energies, p_1e_bar, mixingPars, solarModel.avgNeBoron)
-
-
-@showprogress 0.02 "Propagating num in loop..." for i in 1:num_runs
-    elapsed = @elapsed begin
-        p_1e_time = osc_prob_earth_num_fast(energies, mixingPars, earth_lookup, earth_paths, anti=false)[:, :, 1, 1] # Get the 1e element only
-        prob_time = osc_prob_night(energies, p_1e_time, mixingPars, solarModel.avgNeBoron)
-    end
-    elapsed_times[i] = elapsed
-    # println("Run $i: Time to generate probs_matrix of size $(size(prob_time)) was $(elapsed) seconds.")
-end
-
-filtered_times = remove_outliers(elapsed_times)
-
-average_time = mean(filtered_times)
-uncertainty = std(filtered_times)
-
-# Determine the number of significant figures based on the uncertainty
-num_sig_figs_base = max(1, floor(Int, -log10(uncertainty)))
-num_sig_figs = num_sig_figs_base + 1 # Request one more significant figure
-
-
-formatted_average = format_sig_figs(average_time * 1e3, num_sig_figs) 
-formatted_uncertainty = format_sig_figs(uncertainty * 1e3, num_sig_figs - 1)
-
-println("\nAverage time over $num_runs iterations was $(formatted_average) ± $(formatted_uncertainty) miliseconds.")
-println(" ")
-
-
-using Plots
-
-p1 = Plots.histogram(filtered_times,
-    bins=50, # Adjust the number of bins as needed
-    xlabel="Elapsed Time (seconds)",
-    ylabel="Frequency",
-    label="Numerical",
-    title="Distribution of Computation Times",
-    size=(1200, 900))
-
-display(p1)
-
-@showprogress 0.02 "Propagating num in loop..." for i in 1:num_runs
-    elapsed = @elapsed begin
-        p_1e_time = osc_prob_earth_barger_fast(energies, earth_paths, mixingPars_dict, anti=false)[:, :, 1, 1] # Get the 1e element only
-        prob_time = osc_prob_night(energies, p_1e_time, mixingPars, solarModel.avgNeBoron)
-    end
-    elapsed_times[i] = elapsed
-    # println("Run $i: Time to generate probs_matrix of size $(size(prob_time)) was $(elapsed) seconds.")
-end
-
-
-using Profile, ProfileSVG
-
-sleep(3)
-println(" beginning runs ")
-ProfileSVG.@profview for i in 1:num_runs
-    p_1e_time = osc_prob_earth_num_fast(energies, mixingPars, earth_lookup, earth_paths, anti=false)[:, :, 1, 1] # Get the 1e element only
-    prob_time = osc_prob_night(energies, p_1e_time, mixingPars, solarModel.avgNeBoron)
-end
-
-println("Plotting profile data")
-ProfileSVG.save("profile_large_v2.svg"; width=4000, height=1200)
-println("saved data")
-
-
-filtered_times = remove_outliers(elapsed_times)
-
-average_time = mean(filtered_times)
-uncertainty = std(filtered_times)
-
-# Determine the number of significant figures based on the uncertainty
-num_sig_figs_base = max(1, floor(Int, -log10(uncertainty)))
-num_sig_figs = num_sig_figs_base + 1 # Request one more significant figure
-
-
-formatted_average = format_sig_figs(average_time, num_sig_figs) * 1e3
-formatted_uncertainty = format_sig_figs(uncertainty, num_sig_figs - 1) * 1e3
-
-println("\nAverage time over $num_runs iterations was $(formatted_average) ± $(formatted_uncertainty) miliseconds.")
-println(" ")
-
-using Plots
-
-Plots.histogram!(p1, filtered_times,
-    bins=50, # Adjust the number of bins as needed
-    xlabel="Computation time (s)",
-    ylabel="Frequency",
-    label="Barger",
-    title="300x300 oscillogram. 12 layers",
-    size=(1200, 900),
-    margin=10mm,
-    xlim=(0, 1))
-
-
-display(p1)
-=#
-
-# -----------------------------------------------------------------------------#
-#=
-using .Osc: osc_prob_both_fast
-using .Osc.NumOsc: Fast
-
-using Profile, ProfileSVG
-num_runs = 1
-
-p_1e_fast = Fast.osc_prob_earth(energies, mixingPars, earth_lookup, earth_paths, anti=false)[:, :, 1, 1] # Get the 1e element only
-prob_day, prob_num_fast_fast = osc_prob_both_fast(energies, p_1e_fast, mixingPars, solarModel, process="8B")
-
-println(" beginning runs ")
-ProfileSVG.@profview for i in 1:num_runs
-    p_1e_fast = Fast.osc_prob_earth(energies, mixingPars, earth_lookup, earth_paths, anti=false)[:, :, 1, 1] # Get the 1e element only
-    prob_day, prob_num_fast_fast = osc_prob_both_fast(energies, p_1e_fast, mixingPars, solarModel, process="8B")
-end
-=#
-
-#=
-using BenchmarkTools
-
-result1 = @benchmark Fast.osc_prob_earth(energies, mixingPars, earth_lookup, earth_paths, anti=false)[:, :, 1, 1] # Get the 1e element only
-result2 = @benchmark osc_prob_both_fast(energies, p_1e_fast, mixingPars, solarModel, process="8B")
-
-# Extract specific timing information:
-println("Fast version:")
-println("  Minimum time: $(minimum(result1.times) / 1e6) ms")
-println("  Median time: $(median(result1.times) / 1e6) ms") 
-println("  Mean time: $(mean(result1.times) / 1e6) ms")
-println("  Maximum time: $(maximum(result1.times) / 1e6) ms")
-println("  Memory allocated: $(result1.memory) bytes")
-println("  Allocations: $(result1.allocs)")
-
-println("Solar propagation:")
-println("  Minimum time: $(minimum(result2.times) / 1e6) ms")
-println("  Median time: $(median(result2.times) / 1e6) ms") 
-println("  Mean time: $(mean(result2.times) / 1e6) ms")
-println("  Maximum time: $(maximum(result2.times) / 1e6) ms")
-println("  Memory allocated: $(result2.memory) bytes")
-println("  Allocations: $(result2.allocs)")
-
-println("Plotting profile data")
-ProfileSVG.save("profile_large_v2.svg"; width=2000, height=1000)
-println("saved data")
-=#
-
-
-#=
-n_paths = size(p_1e_fast, 1)
-y_coords = range(-1, stop=0, length=n_paths)
-
-
-parulas = ColorScheme([RGB(0.2422, 0.1504, 0.6603),
-        RGB(0.2504, 0.1650, 0.7076),
-        RGB(0.2578, 0.1818, 0.7511),
-        RGB(0.2647, 0.1978, 0.7952),
-        RGB(0.2706, 0.2147, 0.8364),
-        RGB(0.2751, 0.2342, 0.8710),
-        RGB(0.2783, 0.2559, 0.8991),
-        RGB(0.2803, 0.2782, 0.9221),
-        RGB(0.2813, 0.3006, 0.9414),
-        RGB(0.2810, 0.3228, 0.9579),
-        RGB(0.2795, 0.3447, 0.9717),
-        RGB(0.2760, 0.3667, 0.9829),
-        RGB(0.2699, 0.3892, 0.9906),
-        RGB(0.2602, 0.4123, 0.9952),
-        RGB(0.2440, 0.4358, 0.9988),
-        RGB(0.2206, 0.4603, 0.9973),
-        RGB(0.1963, 0.4847, 0.9892),
-        RGB(0.1834, 0.5074, 0.9798),
-        RGB(0.1786, 0.5289, 0.9682),
-        RGB(0.1764, 0.5499, 0.9520),
-        RGB(0.1687, 0.5703, 0.9359),
-        RGB(0.1540, 0.5902, 0.9218),
-        RGB(0.1460, 0.6091, 0.9079),
-        RGB(0.1380, 0.6276, 0.8973),
-        RGB(0.1248, 0.6459, 0.8883),
-        RGB(0.1113, 0.6635, 0.8763),
-        RGB(0.0952, 0.6798, 0.8598),
-        RGB(0.0689, 0.6948, 0.8394),
-        RGB(0.0297, 0.7082, 0.8163),
-        RGB(0.0036, 0.7203, 0.7917),
-        RGB(0.0067, 0.7312, 0.7660),
-        RGB(0.0433, 0.7411, 0.7394),
-        RGB(0.0964, 0.7500, 0.7120),
-        RGB(0.1408, 0.7584, 0.6842),
-        RGB(0.1717, 0.7670, 0.6554),
-        RGB(0.1938, 0.7758, 0.6251),
-        RGB(0.2161, 0.7843, 0.5923),
-        RGB(0.2470, 0.7918, 0.5567),
-        RGB(0.2906, 0.7973, 0.5188),
-        RGB(0.3406, 0.8008, 0.4789),
-        RGB(0.3909, 0.8029, 0.4354),
-        RGB(0.4456, 0.8024, 0.3909),
-        RGB(0.5044, 0.7993, 0.3480),
-        RGB(0.5616, 0.7942, 0.3045),
-        RGB(0.6174, 0.7876, 0.2612),
-        RGB(0.6720, 0.7793, 0.2227),
-        RGB(0.7242, 0.7698, 0.1910),
-        RGB(0.7738, 0.7598, 0.1646),
-        RGB(0.8203, 0.7498, 0.1535),
-        RGB(0.8634, 0.7406, 0.1596),
-        RGB(0.9035, 0.7330, 0.1774),
-        RGB(0.9393, 0.7288, 0.2100),
-        RGB(0.9728, 0.7298, 0.2394),
-        RGB(0.9956, 0.7434, 0.2371),
-        RGB(0.9970, 0.7659, 0.2199),
-        RGB(0.9952, 0.7893, 0.2028),
-        RGB(0.9892, 0.8136, 0.1885),
-        RGB(0.9786, 0.8386, 0.1766),
-        RGB(0.9676, 0.8639, 0.1643),
-        RGB(0.9610, 0.8890, 0.1537),
-        RGB(0.9597, 0.9135, 0.1423),
-        RGB(0.9628, 0.9373, 0.1265),
-        RGB(0.9691, 0.9606, 0.1064),
-        RGB(0.9769, 0.9839, 0.0805)],
-    "Parula",
-    "From MATLAB")
-
-A_DN = prob_num_fast_fast .- prob_day'
-
-p2 = heatmap(
-    energies*1e3,
-    y_coords,
-    A_DN,
-    xlabel=L"E_{\nu} \, (\mathrm{MeV})",
-    ylabel=L"\cos(z)",
-    title="Night-time probability excess",
-    colormap=cgrad(parulas),
-    #colormap=:berlin,
-    size=(1200, 900),
-    margin=10mm,
-    #clim=(0.20, 0.55)
-)
-
-# Display the plot
-display(p2)
-sleep(100)
-=#
-####################################################################
-=#

@@ -22,9 +22,9 @@ const G_f = 5.4489e-5                                               #
 # Atmospheric mass-squared difference (eV^2) - Normal Ordering     #
 const m32 = 2.43e-3                                                 #
 # Electron mass in GeV/c^2                                          #
-m_e = 5.11e-4                                                       #
+const m_e = 5.11e-4                                                 #
 # Weinberg angle (sin^2(θ_W))                                      #
-sin2nuW = 0.231                                                     #
+const sin2nuW = 0.231                                               #
                                                                     #
 #####################################################################
 
@@ -32,15 +32,15 @@ sin2nuW = 0.231                                                     #
 # These determine the interaction strength for different neutrino flavors
 
 # Coupling constants for electron neutrinos (ν_e + e^- scattering)
-g1_nue = 1/2 + sin2nuW      # Vector coupling for ν_e
-g2_nue = sin2nuW            # Axial coupling for ν_e
+const g1_nue = 1/2 + sin2nuW      # Vector coupling for ν_e
+const g2_nue = sin2nuW            # Axial coupling for ν_e
 
-# Coupling constants for other neutrino flavors (ν_μ,τ + e^- scattering)  
-g1_nuother = -1/2 + sin2nuW # Vector coupling for ν_μ,τ
-g2_nuother = sin2nuW        # Axial coupling for ν_μ,τ
+# Coupling constants for other neutrino flavors (ν_μ,τ + e^- scattering)
+const g1_nuother = -1/2 + sin2nuW # Vector coupling for ν_μ,τ
+const g2_nuother = sin2nuW        # Axial coupling for ν_μ,τ
 
 # Reference cross-section in cm^2
-sigma_0 = 88.06e-46 #1.939e-13 * (1.97e-16)^2 # in cm^-2
+const sigma_0 = 88.06e-46 #1.939e-13 * (1.97e-16)^2 # in cm^-2
 
 #=
 NuSpectrum: Mutable struct to store neutrino event spectra and oscillation weights

@@ -219,56 +219,7 @@ println(" ")
 include("../src/likelihoods/likelihood_main.jl")
 
 
-###################
-#### DEBUGGING ####
 #=
-
-using Plots
-
-
-# Get dimensions of the matrix
-nrows, ncols = size(ereco_data_mergedES.CC_night)
-
-# Calculate the adjusted CC_night by subtracting CC_day from each row.
-#### THIS DOESN'T WORK BECAUSE I AM NOT CALCULATING THE DAYTIME exposure
-adjusted_CC_night = 2 .* (ereco_data_mergedES.CC_night .- ereco_data_mergedES.CC_day ./ 40) ./ (ereco_data_mergedES.CC_night .+ ereco_data_mergedES.CC_day ./ 40)
-adjusted_CC_night = ereco_data_mergedES.CC_night
-# Define transformation functions for tick labels:
-# Define transformation functions for tick labels:
-# x automatic coordinates (1 to ncols) should appear as 5 to 30.
-xlab(x) = 5 + (30 - 5) * (x - 1) / (ncols - 1)
-# y automatic coordinates (1 to nrows) should appear as -1 to 0.
-ylab(y) = -1 + (0 - (-1)) * (y - 1) / (nrows - 1)
-
-# Choose how many ticks you would like (for example, 5 ticks along each axis)
-num_xticks = 5
-num_yticks = 5
-
-# Compute tick positions and corresponding labels
-xtick_positions = range(1, ncols; length = num_xticks)
-xtick_labels = string.(round.(xlab.(xtick_positions), digits=1))
-
-ytick_positions = range(1, nrows; length = num_yticks)
-ytick_labels = string.(round.(ylab.(ytick_positions), digits=1))
-
-# Ensure the data is strictly positive for logarithmic scaling
-adjusted_CC_night_pos = copy(adjusted_CC_night)
-# Replace non-positive values with a small fraction of the smallest positive value
-min_positive = minimum(adjusted_CC_night_pos[adjusted_CC_night_pos .> 0])
-adjusted_CC_night_pos[adjusted_CC_night_pos .<= 0] .= min_positive * 1e-3
-
-# Determine color limits based on the adjusted data
-clims = (minimum(adjusted_CC_night_pos), maximum(adjusted_CC_night_pos))
-# Manually compute logarithmic tick marks for the colorbar (5 ticks in this example)
-logticks = 10 .^ range(log10(clims[1]), log10(clims[2]), length=5)
-
-log_data = log10.(adjusted_CC_night_pos)
-diff_data = adjusted_CC_night_pos .- ereco_data_mergedES.CC_day' .* exposure_weights
-
-# Set color limits for log_data (should now be linear in log scale)
-clims_log = (minimum(log_data), maximum(log_data))
-
-using Plots
 using ColorSchemes
 
 parulas = ColorScheme([RGB(0.2422, 0.1504, 0.6603),
@@ -337,49 +288,4 @@ parulas = ColorScheme([RGB(0.2422, 0.1504, 0.6603),
         RGB(0.9769, 0.9839, 0.0805)],
     "Parula",
     "From MATLAB")
-
-
-myP = heatmap(
-    ereco_data.ES_angular,
-    color = cgrad(parulas),
-    # clim = (0, 50),
-    # colorbar_title = "log10(counts)",
-    title = "Angular dist",
-    xlabel = "Energy",
-    ylabel = "cos(s)")
-
-display(myP)
-sleep(100)
 =#
-#=
-    xticks = (collect(xtick_positions), xtick_labels),
-    yticks = (collect(ytick_positions), ytick_labels)
-)
-=#
-
-#=
-heatmap(
-    diff_data,
-    color = :inferno, #cgrad(parulas),
-    clim = (0, 50),
-    # colorbar_title = "log10(counts)",
-    title = "Night - Day",
-    xlabel = "Energy",
-    ylabel = "cos(z)",
-    xticks = (collect(xtick_positions), xtick_labels),
-    yticks = (collect(ytick_positions), ytick_labels)
-)
-
-
-# Optionally save the plot to a file
-savefig("cc_night_asymm_linear_heatmap.png")
-# Print the result to the console
-using Printf
-formatted_output = join([@sprintf("%.2f", x) for x in CC_combined], ", ")
-println(formatted_output)
-println(" ")
-sleep(100)
-exit()
-=#
-###################
-###################

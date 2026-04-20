@@ -221,38 +221,3 @@ global ES_nuother_eff = ES_nuother_selection_eff .* ES_nuother_reco_eff
 global CC_eff = CC_selection_eff .* CC_reco_eff
 
 
-#=
-myP = plot(CC_bin_centers.*1000, CC_eff, 
-    seriestype = :steppre,
-    linewidth = 2,
-    label = "CC Efficiency",
-    xlabel = "Recoil Energy (MeV)",
-    ylabel = "Efficiency",
-    title = "CC Selection Efficiency"
-)
-
-# --- Plot 2: Total vs. Selected Events (step histograms) ---
-plot_events = plot(CC_bin_centers.*1000, 
-    log10.(replace(CC_total, 0 => 1e-3)),  # Replace zeros for log scale
-    seriestype = :steppre, 
-    linewidth = 2,
-    label = "CC Total Events",
-    xlabel = "Recoil Energy (MeV)",
-    ylabel = "Counts (log scale)",
-    title = "CC Events: Total vs. Selected",
-    color = :blue,
-)
-
-plot!(plot_events, CC_selected_bin_centers.*1000, 
-    log10.(replace(CC_selection, 0 => 1e-3)),  # Replace zeros for log scale
-    seriestype = :steppre, 
-    linewidth = 2,
-    label = "CC Selected Events", ylims=[-2,6]
-)
-
-# --- Display both plots ---
-display(myP)  # Show efficiency plot
-sleep(1000)
-
-#display(plot_events)  # Show events plot
-=#

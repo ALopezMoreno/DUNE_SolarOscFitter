@@ -24,42 +24,51 @@ end
 """
     normalize_backgrounds(raw_backgrounds, params)
 
-Deep-copy and normalize ES/CC backgrounds according to the nuisance parameters
-in `params` and the behaviour arrays `ES_bg_par_counts` and `CC_bg_par_counts`.
+Compute the summed ES and CC background vectors by applying nuisance-parameter
+scale factors on-the-fly, without copying the raw arrays.
 
 Uses globals:
 - `ES_bg_par_counts`
 - `CC_bg_par_counts`
 
 Returns:
-- backgrounds (normalized)
-- BG_ES :: Vector
-- BG_CC :: Vector
+- BG_ES :: Vector{Float64}
+- BG_CC :: Vector{Float64}
 """
 function normalize_backgrounds(raw_backgrounds, params)
-    backgrounds = deepcopy(raw_backgrounds)
-
     # ES backgrounds
-    norm_index = 1
-    for (i, behaviour) in enumerate(ES_bg_par_counts)
-        if behaviour != 0
-            # The MC used 50M events, but only those that interacted are saved
-
-            backgrounds.ES[i] .*= ES_conversions(backgrounds.sides[i], params, norm_index)
+    if isempty(raw_backgrounds.ES)
+        BG_ES = Float64[]
+    else
+        BG_ES = zeros(length(raw_backgrounds.ES[1]))
+        norm_index = 1
+        for (i, behaviour) in enumerate(ES_bg_par_counts)
+            if behaviour != 0
+                factor = ES_conversions(raw_backgrounds.sides[i], params, norm_index)
+                @. BG_ES += raw_backgrounds.ES[i] * factor
+                norm_index += 1
+            else
+                BG_ES .+= raw_backgrounds.ES[i]
+            end
         end
     end
 
     # CC backgrounds
-    norm_index = 1
-    for (i, behaviour) in enumerate(CC_bg_par_counts)
-        if behaviour != 0
-            backgrounds.CC[i] .*= CC_conversions(params, norm_index)
-            norm_index += 1
+    if isempty(raw_backgrounds.CC)
+        BG_CC = Float64[]
+    else
+        BG_CC = zeros(length(raw_backgrounds.CC[1]))
+        norm_index = 1
+        for (i, behaviour) in enumerate(CC_bg_par_counts)
+            if behaviour != 0
+                factor = CC_conversions(params, norm_index)
+                @. BG_CC += raw_backgrounds.CC[i] * factor
+                norm_index += 1
+            else
+                BG_CC .+= raw_backgrounds.CC[i]
+            end
         end
     end
 
-    BG_ES = reduce(+, backgrounds.ES)
-    BG_CC = reduce(+, backgrounds.CC)
-
-    return backgrounds, BG_ES, BG_CC
+    return BG_ES, BG_CC
 end

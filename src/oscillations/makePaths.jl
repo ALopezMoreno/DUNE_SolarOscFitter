@@ -215,7 +215,7 @@ function make_potential_for_integrand(cosz, earth_potential_function, n=3)
     layers[end] = (collected_jumps[end], collected_jumps[end])
 
     # Check if the number of layers is equal to the length of the earth normalisation vector
-    if length(layers) != length(earth_normalisation_true)
+    if !isnothing(earth_normalisation_true) && length(layers) != length(earth_normalisation_true)
         error("Mismatch in length: layers has ", length(layers), " elements, but earth_normalisation_true has ", length(earth_normalisation_true), " elements. Check your earth matter potential uncertainties prior covariance file")
     end
 
