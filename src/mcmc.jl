@@ -35,6 +35,8 @@ using Logging
 
 using LinearAlgebra, Statistics, Distributions, StatsBase, BAT, DensityInterface, IntervalSets
 using Plots, JLD2
+using ForwardDiff, AdvancedHMC
+import AutoDiffOperators: ADSelector
 
 using Random
 # Random.seed!(1234)  # Set global seed once at startup if you want RNG reproducibility
@@ -105,7 +107,7 @@ posterior = PosteriorMeasure(likelihood_all_samples, prior)
 # Set chain parameters
 init = MCMCChainPoolInit(
   init_tries_per_chain=IntervalSets.ClosedInterval(4, 180),  # min>1 avoids BAT v4 bug in else-branch of chain selection
-  nsteps_init=500,
+  nsteps_init=15,
   initval_alg=InitFromTarget()
 )
 
@@ -113,7 +115,7 @@ if maxTuningAttempts != 0
   burnin = MCMCMultiCycleBurnin(
     nsteps_per_cycle=tuningSteps,
     max_ncycles=maxTuningAttempts,
-    nsteps_final=tuningSteps / 10
+    nsteps_final=tuningSteps ÷ 10
   )
 else
   burnin = MCMCNoBurnin()
@@ -121,63 +123,30 @@ end
 
 convergence = AssumeConvergence()
 
-# Check if there is a covariance matrix for the step proposal function
-if propMatrix !== nothing
-  # Use BAT's GenericMvTDist for a multivariate t-distribution proposal.
-  d = size(propMatrix, 1)
-  df = 1.5
-  proposal_distribution = TDist(df)
-  @logmsg MCMC "found proposal covariance matrix: using MvTDist with df = $df."
-else
-  # Default to a univariate T distribution if no covariance matrix is provided
-  proposal_distribution = TDist(1.0)
-  @logmsg MCMC "no proposal covariance matrix given. Running with default parameters"
-end
+@logmsg MCMC "running $mcmcChains chains with $mcmcSteps steps each (HMC)."
 
+hmc_context = BATContext(ad = ADSelector(:ForwardDiff))
 
-@logmsg MCMC "running $mcmcChains chains with $mcmcSteps steps each."
-
-
-# Skip tuning if desired
-if maxTuningAttempts == 0
-  proposal_algorithm = RandomWalk(proposaldist=proposal_distribution)
-  @logmsg MCMC "skipping the tuning stage."
-else
-  proposal_algorithm = RandomWalk(proposaldist=proposal_distribution)
-  @logmsg MCMC "tuning will be performed with $tuningSteps steps up to a maximum of $maxTuningAttempts times."
-end
+hmc_algorithm = MCMCSampling(
+    mcalg      = HamiltonianMC(termination = GeneralisedNoUTurn(max_depth = 4)),
+    nsteps     = mcmcSteps,
+    nchains    = mcmcChains,
+    init       = init,
+    burnin     = burnin,
+    convergence = convergence,
+)
 
 println(" ")
+samples = bat_sample(posterior, hmc_algorithm, hmc_context)
 
+saveBatch(samples.result, 0, priors, 1)
 
-# Run MCMC in batches to not overwhelm the RAM
-# Setting a batch size of 1K steps, count tuning as the zeroth batch
-batchSteps = 1_000
-nBatches = ceil(Int, mcmcSteps / batchSteps)
+mode_result = mode(samples.result)
+mean_result = mean(samples.result)
+std_result  = std(samples.result)
 
-currentBatch = 0
-chainState = nothing
-
-@logmsg MCMC "Running chains in $nBatches post-tuning batches of $batchSteps steps each."
-println(" ")
-
-# Main MCMC loop
-global currentBatch = 0
-global chain_state
-
-# Run the mcmc for the tuning stage
-chain_state = runMCMCbatch(currentBatch, priors)
-
-currentBatch += 1
-
-# Run MCMC in batches to prevent RAM overload
-while currentBatch <= nBatches
-  # Declare global scope for trans-loop variables
-  global currentBatch, chain_state
-
-  chain_state = runMCMCbatch(currentBatch, priors, chain_state)
-
-  GC.gc()
-
-  currentBatch += 1
-end
+@logmsg Setup ("Truth: $true_params")
+@logmsg Output "Mode: $(mode_result)"
+@logmsg Output "Mean: $(mean_result)"
+@logmsg Output "Stddev: $(std_result)"
+@logmsg Output "$(mcmcChains) output chain(s) saved to : $(outFile).jld2"

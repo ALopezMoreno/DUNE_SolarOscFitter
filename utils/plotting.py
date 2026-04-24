@@ -353,8 +353,8 @@ def plot_corner(variables, data_dict, externalContours=False, colorlist=['b', 'p
     _stab_cmap = mpl.colors.ListedColormap(_stab_colors, name='stab_diag')
     # Use zone-index [0,1,2] as the image data so the colorbar scale is uniform
     _stab_norm = mpl.colors.BoundaryNorm([0, 1, 2, 3], _stab_cmap.N)
-    # N_unique: total accepted positions — correct ESS base for MCMC multiplicities
-    _ess_total = float(len(weights))
+    # N_unique: total accepted positions — divided by tau below to get ESS
+    _n_samples = float(len(weights))
 
     # Plot contours from other experiments if desired (assumes the order of parameters is sin2th12, sin2th13, dm21)
     if externalContours:
@@ -525,12 +525,12 @@ def plot_corner(variables, data_dict, externalContours=False, colorlist=['b', 'p
                     _acf_str = "  ".join(
                         f"ρ({lag})={_pooled_acf[lag]:.3f}" for lag in _acf_lags if lag < len(_pooled_acf)
                     )
-                    print(f"[stab 1D] var={variables[i]!r:35s}  tau={_tau_1d:4d}  ESS≈{_ess_total / _tau_1d:.0f}  {_acf_str}")
+                    print(f"[stab 1D] var={variables[i]!r:35s}  tau={_tau_1d:4d}  ESS≈{_n_samples / _tau_1d:.0f}  {_acf_str}")
 
                     # N_eff-per-bin: effective independent samples per bin
                     _H_full_1d, _ = np.histogram(data[i], bins=_x_edges_1d, weights=weights)
                     _H_norm_1d = _H_full_1d.astype(float) / (_H_full_1d.sum() + 1e-300)
-                    _N_eff_1d = _ess_total * _H_norm_1d / _tau_1d
+                    _N_eff_1d = _n_samples * _H_norm_1d / _tau_1d
                     _y_max_1d = _H_full_1d.max() * 1.15
                     axes[i, j].set_ylim(0, _y_max_1d)
                     axes[i, j].set_facecolor('white')
@@ -718,7 +718,7 @@ def plot_corner(variables, data_dict, externalContours=False, colorlist=['b', 'p
                     _H_full_2d, _, _ = np.histogram2d(data[j], data[i],
                                                        bins=[_x_edges, _y_edges], weights=weights)
                     _H_norm_2d = _H_full_2d.astype(float) / (_H_full_2d.sum() + 1e-300)
-                    _N_eff_2d = (_ess_total * _H_norm_2d / _tau_2d).T  # (y, x)
+                    _N_eff_2d = (_n_samples * _H_norm_2d / _tau_2d).T  # (y, x)
                     # Upsample N_eff with bicubic interpolation — no pre-smoothing so peak values
                     # are not deflated (gaussian_filter would spread the peak and demote blue→amber)
                     _N_eff_2d_up = np.maximum(0, _ndimage_zoom(_N_eff_2d, 8, order=3))

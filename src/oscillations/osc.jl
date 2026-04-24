@@ -30,19 +30,21 @@ using StaticArrays
 # Struct and const Definitions
 #################################################################################
 
-struct oscPars
-    Δm²₂₁::Float64
-    θ₁₂::Float64
-    θ₁₃::Float64
-    Δm²₃₁::Float64
-    m₀::Float64
-    θ₂₃::Float64
-    δCP::Float64
+struct oscPars{T<:Real}
+    Δm²₂₁::T
+    θ₁₂::T
+    θ₁₃::T
+    Δm²₃₁::T
+    m₀::T
+    θ₂₃::T
+    δCP::T
 end
 
 # Constructor with default values
-oscPars(Δm²₂₁, θ₁₂, θ₁₃; Δm²₃₁=2.5e-3, m₀=1e-9, θ₂₃=asin(sqrt(0.5)), δCP=-1.611) = 
-    oscPars(Δm²₂₁, θ₁₂, θ₁₃, Δm²₃₁, m₀, θ₂₃, δCP)
+function oscPars(Δm²₂₁, θ₁₂, θ₁₃; Δm²₃₁=2.5e-3, m₀=1e-9, θ₂₃=asin(sqrt(0.5)), δCP=-1.611)
+    T = promote_type(typeof.((Δm²₂₁, θ₁₂, θ₁₃, Δm²₃₁, m₀, θ₂₃, δCP))...)
+    oscPars{T}(T(Δm²₂₁), T(θ₁₂), T(θ₁₃), T(Δm²₃₁), T(m₀), T(θ₂₃), T(δCP))
+end
 
 
 # Fermi constant in units of Ne/Na
@@ -128,14 +130,15 @@ end
 # DeltaP = c_13^2*cos(2th12_sol)*(P_1e - P_0) and
 # P_0 = c12^2cos^2th12
 
-function osc_prob_both_slow(E::Vector{Float64}, matrix_p_1e::Matrix{Float64}, mixingPars, solarModel; process="8B")
+function osc_prob_both_slow(E::AbstractVector{<:Real}, matrix_p_1e::AbstractMatrix, mixingPars, solarModel; process="8B")
     # Get daytime probability at each n_e over the production region
     results = mswProb.(E, Ref(mixingPars), solarModel.n_e')
     n_energies = length(E)
     n_densities = length(solarModel.n_e)
-    
-    prob_day = Matrix{Float64}(undef, n_energies, n_densities)
-    cos2θ₁₂_sol = Matrix{Float64}(undef, n_energies, n_densities)
+
+    T = typeof(real(one(typeof(mixingPars.θ₁₂))))
+    prob_day = Matrix{T}(undef, n_energies, n_densities)
+    cos2θ₁₂_sol = Matrix{T}(undef, n_energies, n_densities)
     
     @inbounds for i in 1:n_energies, j in 1:n_densities
         prob_day[i, j] = results[i, j][1]
@@ -153,7 +156,7 @@ function osc_prob_both_slow(E::Vector{Float64}, matrix_p_1e::Matrix{Float64}, mi
     n_paths = size(matrix_p_1e, 1)
     
     # Pre-allocate for the final integrated night probabilities (same shape as matrix_p_1e)
-    prob_night_integrated = zeros(Float64, n_paths, n_energies)
+    prob_night_integrated = zeros(T, n_paths, n_energies)
 
     @inbounds for i in 1:n_densities
         prob_day_i = @view prob_day[:, i]
@@ -173,7 +176,7 @@ function osc_prob_both_slow(E::Vector{Float64}, matrix_p_1e::Matrix{Float64}, mi
 end
 
 
-function osc_prob_both_fast(E::Vector{Float64}, matrix_p_1e::Matrix{Float64}, mixingPars, solarModel; process="8B")
+function osc_prob_both_fast(E::AbstractVector{<:Real}, matrix_p_1e::AbstractMatrix, mixingPars, solarModel; process="8B")
     # Get average density over production region
     n_e = process == "8B" ? solarModel.avgNeBoron :
           process == "hep" ? solarModel.avgNeHep :
@@ -214,7 +217,7 @@ end
 module BargerOsc
     using LinearAlgebra, StaticArrays
 
-    @inline function osc_kernel2(U::AbstractMatrix{<:Number}, P::AbstractVector, H::AbstractVector, e::Real, l::Real)
+    @inline function osc_kernel2(U::SMatrix{3,3,<:Complex}, H::SVector{3,<:Real}, e::Real, l::Real)
         phase_factors = exp.(2.5338653580781976 * 1im * (l / e) .* H)
         p = U * sum(P[i] * phase_factors[i] for i in eachindex(P)) * U'
     end
@@ -245,7 +248,7 @@ module BargerOsc
 
         arg = (2 * α^3 - 9 * α * β + 27 * γ) / (2 * brac^3)
 
-        θ⁰ = acos.(clamp(arg, -1.0, 1.0))
+        θ⁰ = acos.(clamp(arg, -1.0 + 1e-12, 1.0 - 1e-12)) # Clamp to avoid numerical issues with acos outside of [-1, 1]
         θ⁺ = θ⁰ + 2π
         θ⁻ = θ⁰ - 2π
 
@@ -348,13 +351,13 @@ end
 module NumOsc
     using LinearAlgebra, StaticArrays
 
-    @inline function osc_kernel(U::SMatrix{3,3,ComplexF64}, H::SVector{3,Float64}, e::Float64, l::Float64)
+    @inline function osc_kernel(U::SMatrix{3,3,<:Complex}, H::SVector{3,<:Real}, e::Real, l::Real)
         phase_factors = exp.(2.5338653580781976im * (l / e) .* H) 
         tmp = U .* phase_factors'  
         return tmp * adjoint(U)
     end
 
-    @inline function get_eigen(H::Hermitian{ComplexF64,SMatrix{3,3,ComplexF64,9}})
+    @inline function get_eigen(H::Hermitian{<:Complex, <:SMatrix{3,3}})
         tmp = eigen(H)
     end
 
@@ -378,7 +381,7 @@ module NumOsc
         tmp.vectors, tmp.values
     end
 
-    function osc_reduce(Mix_dagger::SMatrix{3,3,ComplexF64}, matter_matrices, path, e::Float64, anti::Bool)
+    function osc_reduce(Mix_dagger, matter_matrices, path, e, anti::Bool)
         @inbounds begin
             first_p, first_mn = path[1], matter_matrices[end]
             X = osc_kernel(first_mn[1], first_mn[2], e, first_p)  # 3x3 SMatrix
@@ -451,7 +454,7 @@ module NumOsc
             n_lookup = length(lookup_density)
 
             # Pre-allocate output and reusable eigendecomposition buffer
-            p1e        = Matrix{Float64}(undef, n_paths, n_E)
+            p1e        = Matrix{real(eltype(H_eff))}(undef, n_paths, n_E)
             lookup_buf = Vector{typeof(get_H(H_eff, E[1], lookup_density[1], anti))}(undef, n_lookup)
 
             @inbounds for ie in eachindex(E)
@@ -499,7 +502,7 @@ module nu4NumOsc
         oscPars(Δm²₂₁, θ₁₂, θ₁₃, Δm²₃₁, m₀, θ₂₃, δCP, Δm²₄₁, θ₁₄, θ₂₄, θ₃₄)
 
 
-    @inline function osc_kernel(U::Matrix{ComplexF64}, H::Vector{Float64}, e::Float64, l::Float64)
+    @inline function osc_kernel(U::SMatrix{4,4,<:Complex}, H::SVector{4,<:Real}, e::Real, l::Real)
         phase_factors = exp.(2.5338653580781976im * (l / e) .* H) 
         tmp = U .* phase_factors'  
         return tmp * adjoint(U)
@@ -509,7 +512,7 @@ module nu4NumOsc
         P_decoherent = abs2.(U)
     end
 
-    @inline function get_eigen(H::Hermitian{ComplexF64,SMatrix{4,4,ComplexF64,16}})
+    @inline function get_eigen(H::Hermitian{<:Complex, <:SMatrix{4,4}})
         eigen(H)
     end
     
@@ -551,9 +554,9 @@ module nu4NumOsc
     @inline function get_H(H_vac, e, rho, rho_n, massMatrix, anti::Bool=false)
         # Start from vacuum Hamiltonian and apply matter potentials only on the diagonal
         Hm = MMatrix{4,4}(H_vac)
-        ee = Float64(e)
-        rr = Float64(rho)
-        rn = Float64(rho_n)
+        ee = e
+        rr = rho
+        rn = rho_n
 
         @inbounds begin
             if anti
@@ -655,7 +658,7 @@ module nu4NumOsc
         return enuOscProb
     end
 
-    function osc_reduce(Mix::SMatrix{4,4,ComplexF64}, Mix_dagger::SMatrix{4,4,ComplexF64}, matter_matrices, path, e::Float64, anti::Bool)
+    function osc_reduce(Mix, Mix_dagger, matter_matrices, path, e, anti::Bool)
         @inbounds begin
             first_p, first_mn = path[1], matter_matrices[end]
             X = osc_kernel(first_mn[1], first_mn[2], e, first_p) 
