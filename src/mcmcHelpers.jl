@@ -146,7 +146,7 @@ function runMCMCbatch(currentBatch, priors, args...)
           @logmsg MCMC "No previous MCMC file indicated. Starting chain from zero"
           # First batch: Run the tuning phase (~500 steps) for stability
           samples = bat_sample(posterior, TransformedMCMC(proposal=proposal_algorithm,
-                              nsteps=2_500,
+                              nsteps=200,
                               nchains=mcmcChains,
                               init=init,
                               burnin=burnin,
