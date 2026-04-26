@@ -30,8 +30,8 @@ Convert oscillation parameters in `params` to the internal `oscPars` format.
 function get_mixing_parameters(params)
     return oscPars(
         params.dm2_21,
-        asin(sqrt(params.sin2_th12)),
-        asin(sqrt(params.sin2_th13)),
+        asin(sqrt(clamp(params.sin2_th12, 0.0, 1.0))),
+        asin(sqrt(clamp(params.sin2_th13, 0.0, 1.0))),
     )
 end
 
@@ -55,8 +55,8 @@ function setup_earth_propagation(E_calc, mixingPars, params)
     lookup = earth_lookup   # safe default
 
     if earthUncertainty
-        n = length(earth_lookup)
-        earth_norm_vector = [getfield(params, Symbol("earth_norm_", i)) for i in 1:n]
+        earth_norms = _params_by_prefix(params, Val(:earth_norm_))
+        earth_norm_vector = collect(earth_norms)
         lookup = earth_norm_vector .* earth_lookup
 
         if !nuFast

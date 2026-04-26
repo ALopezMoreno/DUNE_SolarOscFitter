@@ -2,7 +2,7 @@
 # --- ES sample contributions --- #
 ###################################
 
-function llh_ES_poisson(d::LikelihoodInputs, parameters, rates)::Float64
+function llh_ES_poisson(d::LikelihoodInputs, parameters, rates)
     idx  = d.index_ES
     nObs = d.nObserved
 
@@ -48,7 +48,7 @@ function llh_ES_poisson_perbin(d::LikelihoodInputs, parameters, rates;
     return (ES_day = llh_ES_day_bins, ES_night = llh_ES_night_bins)
 end
 
-function llh_ES_angle(d::LikelihoodInputs, parameters, rates)::Float64
+function llh_ES_angle(d::LikelihoodInputs, parameters, rates)
     idx  = d.index_ES
     nObs = d.nObserved
 
@@ -104,7 +104,7 @@ function llh_ES_angle_perbin(d::LikelihoodInputs, parameters, rates;
     return (ES_day = llh_ES_day_bins, ES_night = llh_ES_night_bins)
 end
 
-function llh_ES_angle_conditional(d::LikelihoodInputs, parameters, angle_rates)::Float64
+function llh_ES_angle_conditional(d::LikelihoodInputs, parameters, angle_rates)
     idx  = d.index_ES
     nObs = d.nObserved
 
@@ -124,7 +124,7 @@ end
 # --- CC sample contributions --- #
 ###################################
 
-function llh_CC_poisson(d::LikelihoodInputs, parameters, rates)::Float64
+function llh_CC_poisson(d::LikelihoodInputs, parameters, rates)
     idx  = d.index_CC
     nObs = d.nObserved
 
@@ -179,7 +179,7 @@ function llh_CC_barlowBeeston(
     parameters,
     rates,
     σ_matrix
-)::Float64
+)
 
     idx  = d.index_CC
     nObs = d.nObserved
