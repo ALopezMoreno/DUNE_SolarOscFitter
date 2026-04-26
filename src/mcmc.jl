@@ -125,28 +125,23 @@ convergence = AssumeConvergence()
 
 @logmsg MCMC "running $mcmcChains chains with $mcmcSteps steps each (HMC)."
 
-hmc_context = BATContext(ad = ADSelector(:ForwardDiff))
+proposal_algorithm = HamiltonianMC(termination=GeneralisedNoUTurn(max_depth=4))
+hmc_context        = BATContext(ad = ADSelector(:ForwardDiff))
 
-hmc_algorithm = MCMCSampling(
-    mcalg      = HamiltonianMC(termination = GeneralisedNoUTurn(max_depth = 4)),
-    nsteps     = mcmcSteps,
-    nchains    = mcmcChains,
-    init       = init,
-    burnin     = burnin,
-    convergence = convergence,
-)
+batchSteps = 50
+nBatches   = ceil(Int, mcmcSteps / batchSteps)
 
+@logmsg MCMC "Running chains in $nBatches post-tuning batches of $batchSteps steps each."
 println(" ")
-samples = bat_sample(posterior, hmc_algorithm, hmc_context)
 
-saveBatch(samples.result, 0, priors, 1)
+# Batch 0: init + tune (or load chain state from prevFile if resuming)
+chain_state  = runMCMCbatch(0, priors)
+currentBatch = 1
 
-mode_result = mode(samples.result)
-mean_result = mean(samples.result)
-std_result  = std(samples.result)
-
-@logmsg Setup ("Truth: $true_params")
-@logmsg Output "Mode: $(mode_result)"
-@logmsg Output "Mean: $(mean_result)"
-@logmsg Output "Stddev: $(std_result)"
-@logmsg Output "$(mcmcChains) output chain(s) saved to : $(outFile).jld2"
+# Sampling loop: all batches continue from the tuned chain state
+while currentBatch <= nBatches
+    global currentBatch, chain_state
+    chain_state = runMCMCbatch(currentBatch, priors, chain_state)
+    GC.gc()
+    currentBatch += 1
+end
