@@ -144,14 +144,18 @@ function runMCMCbatch(currentBatch, priors, args...)
   if currentBatch == 0
       if isnothing(prevFile)
           @logmsg MCMC "No previous MCMC file indicated. Starting chain from zero"
+          # Refuse to overwrite an existing output file
+          outputFile = outFile * ".jld2"
+          isfile(outputFile) && error("Output file $outputFile already exists. Delete it or choose a different outFile before starting a new run.")
           # First batch: Run the tuning phase (~500 steps) for stability
-          samples = bat_sample(posterior, TransformedMCMC(proposal=proposal_algorithm,
-                              nsteps=200,
+          samples = bat_sample(posterior, TransformedMCMC(
+                              proposal=proposal_algorithm,
+                              nsteps=batchSteps,
                               nchains=mcmcChains,
                               init=init,
                               burnin=burnin,
                               convergence=convergence
-                              ))
+                              ), hmc_context)
 
           # For debugging: print available keys in the samples named tuple (if needed)
           # println("Sample keys: ", collect(keys(samples)))
@@ -177,12 +181,13 @@ function runMCMCbatch(currentBatch, priors, args...)
       starting_step = chain_state.end_step
       # Regular batch: Run with batchSteps steps and skip burnin
       elapsed_time = @elapsed begin
-          samples = bat_sample(posterior, TransformedMCMC(proposal=proposal_algorithm,
+          samples = bat_sample(posterior, TransformedMCMC(
+                                                      proposal=proposal_algorithm,
                                                       nsteps=batchSteps,
                                                       nchains=mcmcChains,
                                                       init=ContinueChains(chain_state),
                                                       burnin=MCMCNoBurnin(),
-                                                      convergence=convergence))
+                                                      convergence=convergence), hmc_context)
           
           # Save batch
           saveBatch(samples.result, starting_step, priors, currentBatch)
@@ -206,13 +211,14 @@ function runMCMCbatch(currentBatch, priors, args...)
       remainder = mcmcSteps % batchSteps
       lastBatchSteps = (remainder == 0) ? batchSteps : remainder
     
-      samples = bat_sample(posterior, TransformedMCMC(proposal=proposal_algorithm,
+      samples = bat_sample(posterior, TransformedMCMC(
+                          proposal=proposal_algorithm,
                           nsteps=lastBatchSteps,
                           nchains=mcmcChains,
                           init=ContinueChains(chain_state),
                           burnin=MCMCNoBurnin(),
                           convergence=convergence
-                          ))
+                          ), hmc_context)
 
 
           
