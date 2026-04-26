@@ -13,6 +13,20 @@ Author: [Author name]
 
 using StaticArrays
 
+# Type-stable extraction of all NamedTuple fields whose names start with `pfx`.
+# Returns a Tuple, allowing ForwardDiff Dual numbers to flow through without
+# type inference breaking on Symbol("name_", i) runtime construction.
+@generated function _params_by_prefix(params, ::Val{pfx}) where {pfx}
+    prefix = string(pfx)
+    fnames = sort(
+        [f for f in fieldnames(params) if startswith(string(f), prefix)],
+        by = string,
+    )
+    isempty(fnames) && return :(())
+    exprs = [:(getfield(params, $(QuoteNode(f)))) for f in fnames]
+    return :(tuple($(exprs...)))
+end
+
 #####################################################################
 #### PHYSICS CONSTANTS FOR OSCILLATION CALCULATIONS ################
 #####################################################################

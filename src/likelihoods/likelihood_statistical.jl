@@ -1,17 +1,4 @@
-function poissonLogLikelihood(nExpected::AbstractVector{<:Real}, nMeasured::AbstractVector{<:Real})::Float64
-    """
-    Calculate the Poisson log likelihood given expected and measured counts (seen as a KL divergence)
-
-    # Arguments
-    - `nExpected::Vector{Float64}`: A vector of expected counts.
-    - `nMeasured::Vector{Float64}`: A vector of measured counts.
-
-    # Returns
-    - `Float64`: The calculated log-likelihood.
-
-    # Errors
-    - Throws an error if any input is negative or if the vectors have different lengths.
-    """
+function poissonLogLikelihood(nExpected::AbstractVector{<:Real}, nMeasured::AbstractVector{<:Real})
     if !all(x -> x >= 0, nExpected) || !all(x -> x >= 0, nMeasured)
         throw(ArgumentError("Inputs must be non-negative"))
     end
@@ -19,26 +6,37 @@ function poissonLogLikelihood(nExpected::AbstractVector{<:Real}, nMeasured::Abst
         throw(ArgumentError("Inputs must have the same length"))
     end
 
-    llh = 0.0
+    llh = zero(eltype(nExpected))
+    ε = 1e-12  # Small constant to avoid log(0)
     @inbounds for i in eachindex(nExpected)
         e = nExpected[i]
-        m = nMeasured[i]
-        if m > 0
-            if e > 0
-                llh += (e - m + m * log(m / e)) 
-            elseif e == 0
-                llh += 1e9
-            end
+        m = Float64(nMeasured[i])
 
-        elseif m == 0
-            if e == 0
-                llh += 0
-            elseif e > 0
-                llh += e 
-            end
-        end
+        # Regularize e and m to avoid log(0)
+        e_reg = max(e, ε)
+        m_reg = max(m, ε)
+
+        # Differentiable approximation of the original logic
+        # For m > 0:
+        #   if e > 0: e - m + m * log(m / e)
+        #   if e == 0: 1e9 (penalty)
+        # For m == 0:
+        #   if e == 0: 0
+        #   if e > 0: e
+        #
+        # We approximate the penalty for e == 0 and m > 0 as 1e9 * (1 - e / ε)^2
+        # This is smooth and large when e ≈ 0, but differentiable.
+        penalty = 1e9 * (1 - e / ε)^2  # Large when e ≈ 0, smooth everywhere
+
+        # Differentiable expression for all cases
+        term = ifelse(
+            m > 0,
+            ifelse(e > 0, e - m + m * (log(m_reg) - log(e_reg)), penalty),
+            ifelse(e > 0, e, 0.0)
+        )
+
+        llh += term
     end
-        
     return -llh
 end
 
@@ -48,24 +46,16 @@ function perbin_poissonLogLikelihood(nExpected::AbstractArray,
     size(nExpected) == size(nMeasured) ||
         throw(DimensionMismatch("Inputs must have the same size"))
 
-    out = Array{Float64}(undef, size(nExpected))
+    out = similar(nExpected)
 
     @inbounds for I in eachindex(nExpected)
-        e = Float64(nExpected[I])
+        e = nExpected[I]
         m = Float64(nMeasured[I])
 
         if m > 0
-            if e > 0
-                out[I] = - (e - m + m * log(m / e))
-            else
-                out[I] = -1e9
-            end
+            out[I] = -(e - m * log(max(e, 1e-300)))
         else
-            if e == 0
-                out[I] = 0.0
-            else
-                out[I] = -e
-            end
+            out[I] = -e
         end
     end
 
@@ -73,7 +63,7 @@ function perbin_poissonLogLikelihood(nExpected::AbstractArray,
 end
 
 
-function conditional_poissonLogLikelihood(nExpected::AbstractVector{<:Float64}, nMeasured::AbstractVector{<:Float64})::Float64
+function conditional_poissonLogLikelihood(nExpected::AbstractVector{<:Real}, nMeasured::AbstractVector{<:Real})
     """
     conditional_poissonLogLikelihood(nExpected, nMeasured) -> Float64
 
