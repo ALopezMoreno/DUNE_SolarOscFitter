@@ -66,17 +66,9 @@ function create_response_matrix(data, bin_info_x, bin_info_y)
     @inbounds for (x_val, y_val) in zip(x, y)
         # Check if values are within analysis bounds
         if min_val_x <= x_val <= max_val_x && min_val_y <= y_val <= max_val_y
-            # Find appropriate bins
-            true_bin = searchsortedfirst(bins_x, x_val)
-            reco_bin = searchsortedfirst(bins_y, y_val)
-
-            # Handle edge cases for bin indices
-            if true_bin > bin_number_x
-                true_bin = bin_number_x
-            end
-            if reco_bin > bin_number_y
-                reco_bin = bin_number_y
-            end
+            # Find appropriate bins (searchsortedlast gives left-inclusive bin index)
+            true_bin = min(searchsortedlast(bins_x, x_val), bin_number_x)
+            reco_bin = min(searchsortedlast(bins_y, y_val), bin_number_y)
 
             # Increment the response matrix element
             contribution_matrix[true_bin, reco_bin] += 1
@@ -130,8 +122,8 @@ CC_response = create_response_matrix(CC_sample, Etrue_bins, Ereco_bins_CC_extend
 # Uniform angular response
 angular_BG_response = fill(1 / cos_scatter_bins.bin_number, size(angular_ES_response))
 
-# Angular cut ###############################################################################
-cos_cut = 0.                                                                               #
+# Angular cut: mask background response bins below angular_cos_cut (set via ES_cos_cut in config).
+cos_cut = angular_cos_cut                                                                  #
                                                                                             #
 N = cos_scatter_bins.bin_number                                                             #
 edges = range(cos_scatter_bins.min,                                                         #
@@ -158,6 +150,26 @@ function get_weights(df, mask=nothing)
     else
         return nothing
     end
+end
+
+if inclusive_analysis
+    # CC response mapped onto ES Ereco bins so CC can be folded into the ES channel
+    CC_inclusive_response = create_response_matrix(CC_sample, Etrue_bins, Ereco_bins_ES_extended)
+
+    CC_incl_selection, _ = create_histogram(
+        df_CC.Ereco[df_CC.mask], Ereco_bins_ES_extended,
+        normalise=false, weights=get_weights(df_CC, df_CC.mask)
+    )
+    CC_incl_total, _ = create_histogram(
+        df_CC.Ereco, Ereco_bins_ES_extended,
+        normalise=false, weights=get_weights(df_CC)
+    )
+    CC_incl_sel_eff = @. ifelse(CC_incl_total == 0, 0.0, CC_incl_selection / CC_incl_total)
+    global CC_incl_eff = CC_incl_sel_eff .* fill(0.9, Ereco_bins_ES.bin_number)
+
+    responseMatrices = (ES=ES_response, CC=CC_response,
+                        CC_inclusive=CC_inclusive_response,
+                        BG=(angular=angular_BG_response,))
 end
 
 # Get selection efficiencies

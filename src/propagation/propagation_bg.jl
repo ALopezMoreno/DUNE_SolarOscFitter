@@ -4,13 +4,15 @@ function CC_conversions(norm_value)
 end
 
 function ES_conversions(side, norm_value)
-    # The MC is not normalised. We need to load metadata
+    # The ES background MC is not flux-normalised; convert by multiplying by the
+    # relevant detector face area (in cm²). Detector cross-section: 12 m × 64 m long
+    # faces (side=0) and 12 m × 12 m end caps (side=1); side=-1 (or other) uses total.
     if side == 0
-        area = 2 * 12e2*64e2
+        area = 2 * 12e2*64e2   # two 12 m × 64 m long faces [cm²]
     elseif side == 1
-        area = 2 * 12e2*12e2
+        area = 2 * 12e2*12e2   # two 12 m × 12 m end caps [cm²]
     else
-        area = 2 * 12e2*64e2 + 2 * 12e2*12e2
+        area = 2 * 12e2*64e2 + 2 * 12e2*12e2  # total exposed area [cm²]
     end
     return area * norm_value
 end

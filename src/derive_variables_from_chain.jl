@@ -61,11 +61,17 @@ end
 function saveDerivedChain(derived)
     # Write derived quantities as flat top-level keys into the source chain's JLD2 file.
     # load_bin_diagnostics reads these keys directly from the top level (no batch grouping).
+    # Delete before write: JLD2 throws DuplicateName if the key already exists (e.g. second derive run),
+    # which would abort the entire block and leave all keys stale.
     fileName = prevFile * ".jld2"
     try
         jldopen(fileName, "a+") do f
             for (k, v) in derived
-                f["derived_" * string(k)] = v
+                key = "derived_" * string(k)
+                if haskey(f, key)
+                    delete!(f, key)
+                end
+                f[key] = v
             end
         end
     catch err
@@ -146,6 +152,17 @@ CCnight_m2 = nothing
 ESday_m2 = nothing
 ESnight_m2 = nothing
 
+# Per-sample 1D signal-only day rates for quantile bands (bg subtracted per sample)
+ESday_sample_list = Vector{Vector{Float64}}()
+CCday_sample_list = Vector{Vector{Float64}}()
+pp_sample_weights = Vector{Float64}()
+
+# Weighted bg moments for background subtraction uncertainty in data error bars
+BGESday_mean = nothing
+BGESday_m2   = nothing
+BGCCday_mean = nothing
+BGCCday_m2   = nothing
+
 # Initialize progress bar
 p = Progress(n_total,
              dt = 0.1,              # Update time
@@ -166,18 +183,16 @@ for i in 1:n_total
 
     global CCday_mean, CCnight_mean, ESday_mean, ESnight_mean
     global CCday_m2,   CCnight_m2,   ESday_m2,   ESnight_m2
+    global BGESday_mean, BGESday_m2, BGCCday_mean, BGCCday_m2
 
     temp_pars = NamedTuple{Tuple(param_fields)}((param_data[field][i] for field in param_fields))
     expectedRate_ES_day, expectedRate_CC_day, expectedRate_ES_night, expectedRate_CC_night, BG_ES_tot, BG_CC_tot =
         propagateSamples(unoscillatedSample, responseMatrices, temp_pars, solarModel, bin_edges, backgrounds)
 
     #-- Get asymmetry --#
-    BG_CC_expected = sum(BG_CC_tot[index_CC:end])
     BG_ES_expected = sum(BG_ES_tot[index_ES:end])
 
-    temp_CC_Ntot = sum(@view expectedRate_CC_night[:, index_CC:end]) - 0.5 * BG_CC_expected
-    temp_CC_Dtot = sum(expectedRate_CC_day[index_CC:end]) - 0.5 * BG_CC_expected
-
+    # ES asymmetry (always computed; denominator-guarded)
     if angular_reco
         temp_ES_Ntot = sum(@view expectedRate_ES_night[:, index_ES:end, :]) - 0.5 * BG_ES_expected
         temp_ES_Dtot = sum(expectedRate_ES_day[:, index_ES:end]) - 0.5 * BG_ES_expected
@@ -185,13 +200,19 @@ for i in 1:n_total
         temp_ES_Ntot = sum(@view expectedRate_ES_night[:, index_ES:end]) - 0.5 * BG_ES_expected
         temp_ES_Dtot = sum(expectedRate_ES_day[index_ES:end]) - 0.5 * BG_ES_expected
     end
-
-    expected_asymm_CC = 2 * (temp_CC_Dtot - temp_CC_Ntot) / (temp_CC_Dtot + temp_CC_Ntot)
-    expected_asymm_ES = 2 * (temp_ES_Dtot - temp_ES_Ntot) / (temp_ES_Dtot + temp_ES_Ntot)
-
-    # Save the asymmetries
+    ES_denom = temp_ES_Dtot + temp_ES_Ntot
+    expected_asymm_ES = ES_denom == 0 ? 0.0 : 2 * (temp_ES_Dtot - temp_ES_Ntot) / ES_denom
     push!(ES_asymmetries, expected_asymm_ES)
-    push!(CC_asymmetries, expected_asymm_CC)
+
+    # CC asymmetry (only meaningful in non-inclusive mode; skip to avoid 0/0 NaN)
+    if !inclusive_analysis
+        BG_CC_expected = sum(BG_CC_tot[index_CC:end])
+        temp_CC_Ntot = sum(@view expectedRate_CC_night[:, index_CC:end]) - 0.5 * BG_CC_expected
+        temp_CC_Dtot = sum(expectedRate_CC_day[index_CC:end]) - 0.5 * BG_CC_expected
+        CC_denom = temp_CC_Dtot + temp_CC_Ntot
+        expected_asymm_CC = CC_denom == 0 ? 0.0 : 2 * (temp_CC_Dtot - temp_CC_Ntot) / CC_denom
+        push!(CC_asymmetries, expected_asymm_CC)
+    end
 
     (i % thinning == 0) || continue
 
@@ -202,31 +223,79 @@ for i in 1:n_total
     θ1 = temp_pars.sin2_th12
     θ2 = temp_pars.dm2_21
 
-    # Lazy allocation on first diagnostic iteration
-    if S1_CCnight === nothing
-        # Per-bin llh accumulators
-        # (allocate after we compute per-bin llh shapes below; but we also want PP shapes now)
-        CCday_mean   = zeros(Float64, size(expectedRate_CC_day))
-        CCnight_mean = zeros(Float64, size(expectedRate_CC_night))
+    # Lazy allocation — ES posterior predictives (always)
+    if ESday_mean === nothing
         ESday_mean   = zeros(Float64, size(expectedRate_ES_day))
         ESnight_mean = zeros(Float64, size(expectedRate_ES_night))
+        ESday_m2     = zeros(Float64, size(expectedRate_ES_day))
+        ESnight_m2   = zeros(Float64, size(expectedRate_ES_night))
+    end
 
-        CCday_m2   = zeros(Float64, size(expectedRate_CC_day))
-        CCnight_m2 = zeros(Float64, size(expectedRate_CC_night))
-        ESday_m2   = zeros(Float64, size(expectedRate_ES_day))
-        ESnight_m2 = zeros(Float64, size(expectedRate_ES_night))
+    # Lazy allocation — CC posterior predictives (non-inclusive only)
+    if !inclusive_analysis && CCday_mean === nothing
+        CCday_mean   = zeros(Float64, size(expectedRate_CC_day))
+        CCnight_mean = zeros(Float64, size(expectedRate_CC_night))
+        CCday_m2     = zeros(Float64, size(expectedRate_CC_day))
+        CCnight_m2   = zeros(Float64, size(expectedRate_CC_night))
     end
 
     # --- posterior predictive accumulation (weighted 1st/2nd moments) ---
-    CCday_mean   .+= w .* expectedRate_CC_day
-    CCnight_mean .+= w .* expectedRate_CC_night
-    ESday_mean   .+= w .* expectedRate_ES_day
-    ESnight_mean .+= w .* expectedRate_ES_night
+    # Only accumulate bins at or above the energy threshold (index_ES/index_CC).
+    # Below-threshold bins stay zero; the array is allocated full-size for de-serialisation.
+    if angular_reco
+        # day: (n_cos, n_E); night: (n_cos, n_E, n_night) — energy is 2nd dimension
+        @views begin
+            ESday_mean[:,   index_ES:end]    .+= w .* expectedRate_ES_day[:,   index_ES:end]
+            ESnight_mean[:, index_ES:end, :] .+= w .* expectedRate_ES_night[:, index_ES:end, :]
+            ESday_m2[:,   index_ES:end]      .+= w .* (expectedRate_ES_day[:,   index_ES:end] .^ 2)
+            ESnight_m2[:, index_ES:end, :]   .+= w .* (expectedRate_ES_night[:, index_ES:end, :] .^ 2)
+        end
+    else
+        # day: (n_E,) vector; night: (n_night, n_E) matrix — energy is last dimension
+        @views begin
+            ESday_mean[index_ES:end]      .+= w .* expectedRate_ES_day[index_ES:end]
+            ESnight_mean[:, index_ES:end] .+= w .* expectedRate_ES_night[:, index_ES:end]
+            ESday_m2[index_ES:end]        .+= w .* (expectedRate_ES_day[index_ES:end] .^ 2)
+            ESnight_m2[:, index_ES:end]   .+= w .* (expectedRate_ES_night[:, index_ES:end] .^ 2)
+        end
+    end
 
-    CCday_m2   .+= w .* (expectedRate_CC_day   .^ 2)
-    CCnight_m2 .+= w .* (expectedRate_CC_night .^ 2)
-    ESday_m2   .+= w .* (expectedRate_ES_day   .^ 2)
-    ESnight_m2 .+= w .* (expectedRate_ES_night .^ 2)
+    if !inclusive_analysis
+        @views begin
+            CCday_mean[index_CC:end]      .+= w .* expectedRate_CC_day[index_CC:end]
+            CCnight_mean[:, index_CC:end] .+= w .* expectedRate_CC_night[:, index_CC:end]
+            CCday_m2[index_CC:end]        .+= w .* (expectedRate_CC_day[index_CC:end] .^ 2)
+            CCnight_m2[:, index_CC:end]   .+= w .* (expectedRate_CC_night[:, index_CC:end] .^ 2)
+        end
+    end
+
+    # Store total rates above threshold; bg subtraction happens after loop using posterior
+    # mean bg so that bg_norm deviation from the mean contributes to the quantile band width.
+    es_total_above = angular_reco ?
+        vec(sum(@view(expectedRate_ES_day[:, index_ES:end]), dims=1)) :
+        expectedRate_ES_day[index_ES:end]
+    push!(ESday_sample_list, es_total_above)
+
+    bg_es_full = 0.5 .* BG_ES_tot
+    if BGESday_mean === nothing
+        BGESday_mean = zeros(Float64, length(bg_es_full))
+        BGESday_m2   = zeros(Float64, length(bg_es_full))
+    end
+    @. BGESday_mean += w * bg_es_full
+    @. BGESday_m2   += w * bg_es_full^2
+
+    push!(pp_sample_weights, w)
+    if !inclusive_analysis
+        push!(CCday_sample_list, expectedRate_CC_day[index_CC:end])
+
+        bg_cc_full = 0.5 .* BG_CC_tot
+        if BGCCday_mean === nothing
+            BGCCday_mean = zeros(Float64, length(bg_cc_full))
+            BGCCday_m2   = zeros(Float64, length(bg_cc_full))
+        end
+        @. BGCCday_mean += w * bg_cc_full
+        @. BGCCday_m2   += w * bg_cc_full^2
+    end
 
     # Update scalar sums (parameters)
     N += w
@@ -252,18 +321,8 @@ for i in 1:n_total
     ℓ_ESnight = perbin.ES_night
     ℓ_ESday   = perbin.ES_day
 
-    # Allocate per-bin accumulators on first time we see ℓ shapes
-    if S1_CCnight === nothing
-        S1_CCnight = zeros(Float64, size(ℓ_CCnight))
-        S2_CCnight = zeros(Float64, size(ℓ_CCnight))
-        Ssin2_CCnight = zeros(Float64, size(ℓ_CCnight))
-        Sdm2_CCnight  = zeros(Float64, size(ℓ_CCnight))
-
-        S1_CCday = zeros(Float64, length(ℓ_CCday))
-        S2_CCday = zeros(Float64, length(ℓ_CCday))
-        Ssin2_CCday = zeros(Float64, length(ℓ_CCday))
-        Sdm2_CCday  = zeros(Float64, length(ℓ_CCday))
-
+    # Allocate ES per-bin accumulators on first thinned sample
+    if S1_ESnight === nothing
         S1_ESnight = zeros(Float64, size(ℓ_ESnight))
         S2_ESnight = zeros(Float64, size(ℓ_ESnight))
         Ssin2_ESnight = zeros(Float64, size(ℓ_ESnight))
@@ -275,22 +334,22 @@ for i in 1:n_total
         Sdm2_ESday  = zeros(Float64, size(ℓ_ESday))
     end
 
-    # --- per-sample total llh for this draw ---
-    ℓtot_CCnight = sum(ℓ_CCnight)
-    ℓtot_CCday   = sum(ℓ_CCday)
+    # Allocate CC per-bin accumulators (non-inclusive only)
+    if !inclusive_analysis && S1_CCnight === nothing
+        S1_CCnight = zeros(Float64, size(ℓ_CCnight))
+        S2_CCnight = zeros(Float64, size(ℓ_CCnight))
+        Ssin2_CCnight = zeros(Float64, size(ℓ_CCnight))
+        Sdm2_CCnight  = zeros(Float64, size(ℓ_CCnight))
+
+        S1_CCday = zeros(Float64, length(ℓ_CCday))
+        S2_CCday = zeros(Float64, length(ℓ_CCday))
+        Ssin2_CCday = zeros(Float64, length(ℓ_CCday))
+        Sdm2_CCday  = zeros(Float64, length(ℓ_CCday))
+    end
+
+    # --- per-sample total llh for this draw (ES always, CC non-inclusive only) ---
     ℓtot_ESnight = sum(ℓ_ESnight)
     ℓtot_ESday   = sum(ℓ_ESday)
-
-    # Accumulate per-sample total llh moments
-    S1_CCnight_tot += w * ℓtot_CCnight
-    S2_CCnight_tot += w * ℓtot_CCnight^2
-    Ssin2_CCnight_tot += w * (ℓtot_CCnight * θ1)
-    Sdm2_CCnight_tot  += w * (ℓtot_CCnight * θ2)
-
-    S1_CCday_tot += w * ℓtot_CCday
-    S2_CCday_tot += w * ℓtot_CCday^2
-    Ssin2_CCday_tot += w * (ℓtot_CCday * θ1)
-    Sdm2_CCday_tot  += w * (ℓtot_CCday * θ2)
 
     S1_ESnight_tot += w * ℓtot_ESnight
     S2_ESnight_tot += w * ℓtot_ESnight^2
@@ -302,17 +361,22 @@ for i in 1:n_total
     Ssin2_ESday_tot += w * (ℓtot_ESday * θ1)
     Sdm2_ESday_tot  += w * (ℓtot_ESday * θ2)
 
-    # --- per-bin accumulation (broadcasted) ---
-    S1_CCnight .+= w .* ℓ_CCnight
-    S2_CCnight .+= w .* (ℓ_CCnight .^ 2)
-    Ssin2_CCnight .+= w .* (ℓ_CCnight .* θ1)
-    Sdm2_CCnight  .+= w .* (ℓ_CCnight .* θ2)
+    if !inclusive_analysis
+        ℓtot_CCnight = sum(ℓ_CCnight)
+        ℓtot_CCday   = sum(ℓ_CCday)
 
-    S1_CCday .+= w .* ℓ_CCday
-    S2_CCday .+= w .* (ℓ_CCday .^ 2)
-    Ssin2_CCday .+= w .* (ℓ_CCday .* θ1)
-    Sdm2_CCday  .+= w .* (ℓ_CCday .* θ2)
+        S1_CCnight_tot += w * ℓtot_CCnight
+        S2_CCnight_tot += w * ℓtot_CCnight^2
+        Ssin2_CCnight_tot += w * (ℓtot_CCnight * θ1)
+        Sdm2_CCnight_tot  += w * (ℓtot_CCnight * θ2)
 
+        S1_CCday_tot += w * ℓtot_CCday
+        S2_CCday_tot += w * ℓtot_CCday^2
+        Ssin2_CCday_tot += w * (ℓtot_CCday * θ1)
+        Sdm2_CCday_tot  += w * (ℓtot_CCday * θ2)
+    end
+
+    # --- per-bin accumulation: ES always, CC non-inclusive only ---
     S1_ESnight .+= w .* ℓ_ESnight
     S2_ESnight .+= w .* (ℓ_ESnight .^ 2)
     Ssin2_ESnight .+= w .* (ℓ_ESnight .* θ1)
@@ -322,6 +386,18 @@ for i in 1:n_total
     S2_ESday .+= w .* (ℓ_ESday .^ 2)
     Ssin2_ESday .+= w .* (ℓ_ESday .* θ1)
     Sdm2_ESday  .+= w .* (ℓ_ESday .* θ2)
+
+    if !inclusive_analysis
+        S1_CCnight .+= w .* ℓ_CCnight
+        S2_CCnight .+= w .* (ℓ_CCnight .^ 2)
+        Ssin2_CCnight .+= w .* (ℓ_CCnight .* θ1)
+        Sdm2_CCnight  .+= w .* (ℓ_CCnight .* θ2)
+
+        S1_CCday .+= w .* ℓ_CCday
+        S2_CCday .+= w .* (ℓ_CCday .^ 2)
+        Ssin2_CCday .+= w .* (ℓ_CCday .* θ1)
+        Sdm2_CCday  .+= w .* (ℓ_CCday .* θ2)
+    end
 
     ProgressMeter.update!(p, i, showvalues = [(:Progress, @sprintf("%.2f%%", 100*i/n_total))])
 end
@@ -333,15 +409,23 @@ var_sin2  = sum_sin2_2 / N - mean_sin2^2
 mean_dm2 = sum_dm2 / N
 var_dm2  = sum_dm2_2 / N - mean_dm2^2
 
+function _wquantile(vals::AbstractVector{Float64}, weights::AbstractVector{Float64}, q::Float64)
+    idx  = sortperm(vals)
+    cumw = cumsum(weights[idx])
+    cumw ./= cumw[end]
+    k = searchsortedfirst(cumw, q)
+    return vals[idx[clamp(k, 1, length(vals))]]
+end
+
 function finalize_bin_stats(S1, S2, Sθ; N, meanθ, varθ)
     Eℓ   = S1 ./ N
     Varℓ = S2 ./ N .- (Eℓ .^ 2)
 
-    Varℓ = max.(Varℓ, 0.0) # Clamp for statistics
-    varθ = max.(varθ, 0.0) # Clamp for statistics
+    Varℓ = max.(Varℓ, 0.0)
+    varθ = max(varθ, 0.0)
 
     Cov  = Sθ ./ N .- Eℓ .* meanθ
-    Corr = Cov ./ sqrt.(Varℓ .* varθ)
+    Corr = Cov ./ sqrt.(max.(Varℓ, 1e-30) .* max(varθ, 1e-30))
     return (mean=Eℓ, var=Varℓ, cov=Cov, corr=Corr)
 end
 
@@ -354,30 +438,57 @@ function finalize_scalar_stats(S1, S2, Sθ; N, meanθ, varθ)
     varθ = max(varθ, 0.0)
 
     Cov  = Sθ / N - Eℓ * meanθ
-    Corr = Cov / sqrt(Varℓ * varθ)
+    Corr = Cov / sqrt(max(Varℓ, 1e-30) * max(varθ, 1e-30))
     return (mean=Eℓ, var=Varℓ, cov=Cov, corr=Corr)
 end
 
-# CC night/day per-bin
-ccnight_sin2 = finalize_bin_stats(S1_CCnight, S2_CCnight, Ssin2_CCnight; N=N, meanθ=mean_sin2, varθ=var_sin2)
-ccnight_dm2  = finalize_bin_stats(S1_CCnight, S2_CCnight, Sdm2_CCnight;  N=N, meanθ=mean_dm2,  varθ=var_dm2)
+# CC finalization (non-inclusive only)
+if !inclusive_analysis
+    ccnight_sin2 = finalize_bin_stats(S1_CCnight, S2_CCnight, Ssin2_CCnight; N=N, meanθ=mean_sin2, varθ=var_sin2)
+    ccnight_dm2  = finalize_bin_stats(S1_CCnight, S2_CCnight, Sdm2_CCnight;  N=N, meanθ=mean_dm2,  varθ=var_dm2)
 
-ccday_sin2 = finalize_bin_stats(S1_CCday, S2_CCday, Ssin2_CCday; N=N, meanθ=mean_sin2, varθ=var_sin2)
-ccday_dm2  = finalize_bin_stats(S1_CCday, S2_CCday, Sdm2_CCday;  N=N, meanθ=mean_dm2,  varθ=var_dm2)
+    ccday_sin2 = finalize_bin_stats(S1_CCday, S2_CCday, Ssin2_CCday; N=N, meanθ=mean_sin2, varθ=var_sin2)
+    ccday_dm2  = finalize_bin_stats(S1_CCday, S2_CCday, Sdm2_CCday;  N=N, meanθ=mean_dm2,  varθ=var_dm2)
 
-# ES night/day per-bin
+    ccnight_tot_sin2 = finalize_scalar_stats(S1_CCnight_tot, S2_CCnight_tot, Ssin2_CCnight_tot; N=N, meanθ=mean_sin2, varθ=var_sin2)
+    ccnight_tot_dm2  = finalize_scalar_stats(S1_CCnight_tot, S2_CCnight_tot, Sdm2_CCnight_tot;  N=N, meanθ=mean_dm2,  varθ=var_dm2)
+
+    ccday_tot_sin2 = finalize_scalar_stats(S1_CCday_tot, S2_CCday_tot, Ssin2_CCday_tot; N=N, meanθ=mean_sin2, varθ=var_sin2)
+    ccday_tot_dm2  = finalize_scalar_stats(S1_CCday_tot, S2_CCday_tot, Sdm2_CCday_tot;  N=N, meanθ=mean_dm2,  varθ=var_dm2)
+
+    CCday_pp_mean   = CCday_mean   ./ N
+    CCnight_pp_mean = CCnight_mean ./ N
+    CCday_pp_var    = max.(CCday_m2   ./ N .- CCday_pp_mean.^2,   0.0)
+    CCnight_pp_var  = max.(CCnight_m2 ./ N .- CCnight_pp_mean.^2, 0.0)
+
+    BGCCday_pp_mean = BGCCday_mean ./ N
+    BGCCday_pp_var  = max.(BGCCday_m2 ./ N .- BGCCday_pp_mean.^2, 0.0)
+
+    n_E_CC = length(CCday_mean)
+    CCday_pp_lo  = zeros(Float64, n_E_CC); CCday_pp_hi  = zeros(Float64, n_E_CC)
+    CCday_pp_lo2 = zeros(Float64, n_E_CC); CCday_pp_hi2 = zeros(Float64, n_E_CC)
+    CCday_pp_lo3 = zeros(Float64, n_E_CC); CCday_pp_hi3 = zeros(Float64, n_E_CC)
+    if !isempty(CCday_sample_list)
+        bg_mean_cc_above = BGCCday_pp_mean[index_CC:end]
+        mat_cc = reduce(hcat, CCday_sample_list)   # (n_E_above, n_samples) — total rates
+        for j in axes(mat_cc, 1)
+            col = mat_cc[j, :] .- bg_mean_cc_above[j]
+            CCday_pp_lo[ index_CC + j - 1] = _wquantile(col, pp_sample_weights, 0.1587)
+            CCday_pp_hi[ index_CC + j - 1] = _wquantile(col, pp_sample_weights, 0.8413)
+            CCday_pp_lo2[index_CC + j - 1] = _wquantile(col, pp_sample_weights, 0.0228)
+            CCday_pp_hi2[index_CC + j - 1] = _wquantile(col, pp_sample_weights, 0.9772)
+            CCday_pp_lo3[index_CC + j - 1] = _wquantile(col, pp_sample_weights, 0.0013)
+            CCday_pp_hi3[index_CC + j - 1] = _wquantile(col, pp_sample_weights, 0.9987)
+        end
+    end
+end
+
+# ES finalization (always)
 esnight_sin2 = finalize_bin_stats(S1_ESnight, S2_ESnight, Ssin2_ESnight; N=N, meanθ=mean_sin2, varθ=var_sin2)
 esnight_dm2  = finalize_bin_stats(S1_ESnight, S2_ESnight, Sdm2_ESnight;  N=N, meanθ=mean_dm2,  varθ=var_dm2)
 
 esday_sin2 = finalize_bin_stats(S1_ESday, S2_ESday, Ssin2_ESday; N=N, meanθ=mean_sin2, varθ=var_sin2)
 esday_dm2  = finalize_bin_stats(S1_ESday, S2_ESday, Sdm2_ESday;  N=N, meanθ=mean_dm2,  varθ=var_dm2)
-
-# --- CC/ES day/night TOTAL sample llh stats (scalar) ---
-ccnight_tot_sin2 = finalize_scalar_stats(S1_CCnight_tot, S2_CCnight_tot, Ssin2_CCnight_tot; N=N, meanθ=mean_sin2, varθ=var_sin2)
-ccnight_tot_dm2  = finalize_scalar_stats(S1_CCnight_tot, S2_CCnight_tot, Sdm2_CCnight_tot;  N=N, meanθ=mean_dm2,  varθ=var_dm2)
-
-ccday_tot_sin2 = finalize_scalar_stats(S1_CCday_tot, S2_CCday_tot, Ssin2_CCday_tot; N=N, meanθ=mean_sin2, varθ=var_sin2)
-ccday_tot_dm2  = finalize_scalar_stats(S1_CCday_tot, S2_CCday_tot, Sdm2_CCday_tot;  N=N, meanθ=mean_dm2,  varθ=var_dm2)
 
 esnight_tot_sin2 = finalize_scalar_stats(S1_ESnight_tot, S2_ESnight_tot, Ssin2_ESnight_tot; N=N, meanθ=mean_sin2, varθ=var_sin2)
 esnight_tot_dm2  = finalize_scalar_stats(S1_ESnight_tot, S2_ESnight_tot, Sdm2_ESnight_tot;  N=N, meanθ=mean_dm2,  varθ=var_dm2)
@@ -385,33 +496,38 @@ esnight_tot_dm2  = finalize_scalar_stats(S1_ESnight_tot, S2_ESnight_tot, Sdm2_ES
 esday_tot_sin2 = finalize_scalar_stats(S1_ESday_tot, S2_ESday_tot, Ssin2_ESday_tot; N=N, meanθ=mean_sin2, varθ=var_sin2)
 esday_tot_dm2  = finalize_scalar_stats(S1_ESday_tot, S2_ESday_tot, Sdm2_ESday_tot;  N=N, meanθ=mean_dm2,  varθ=var_dm2)
 
-# --- posterior predictive finalize ---
-CCday_pp_mean   = CCday_mean   ./ N
-CCnight_pp_mean = CCnight_mean ./ N
 ESday_pp_mean   = ESday_mean   ./ N
 ESnight_pp_mean = ESnight_mean ./ N
+ESday_pp_var    = max.(ESday_m2   ./ N .- ESday_pp_mean.^2,   0.0)
+ESnight_pp_var  = max.(ESnight_m2 ./ N .- ESnight_pp_mean.^2, 0.0)
 
-CCday_pp_var   = max.(CCday_m2   ./ N .- CCday_pp_mean.^2,   0.0)
-CCnight_pp_var = max.(CCnight_m2 ./ N .- CCnight_pp_mean.^2, 0.0)
-ESday_pp_var   = max.(ESday_m2   ./ N .- ESday_pp_mean.^2,   0.0)
-ESnight_pp_var = max.(ESnight_m2 ./ N .- ESnight_pp_mean.^2, 0.0)
+BGESday_pp_mean = BGESday_mean ./ N
+BGESday_pp_var  = max.(BGESday_m2 ./ N .- BGESday_pp_mean.^2, 0.0)
 
-# Save output
+n_E_ES = angular_reco ? size(ESday_mean, 2) : length(ESday_mean)
+ESday_pp_lo  = zeros(Float64, n_E_ES); ESday_pp_hi  = zeros(Float64, n_E_ES)
+ESday_pp_lo2 = zeros(Float64, n_E_ES); ESday_pp_hi2 = zeros(Float64, n_E_ES)
+ESday_pp_lo3 = zeros(Float64, n_E_ES); ESday_pp_hi3 = zeros(Float64, n_E_ES)
+if !isempty(ESday_sample_list)
+    bg_mean_above = BGESday_pp_mean[index_ES:end]
+    mat = reduce(hcat, ESday_sample_list)   # (n_E_above, n_samples) — total rates
+    for j in axes(mat, 1)
+        col = mat[j, :] .- bg_mean_above[j]  # signal = total − mean bg (bg_norm contributes)
+        ESday_pp_lo[ index_ES + j - 1] = _wquantile(col, pp_sample_weights, 0.1587)
+        ESday_pp_hi[ index_ES + j - 1] = _wquantile(col, pp_sample_weights, 0.8413)
+        ESday_pp_lo2[index_ES + j - 1] = _wquantile(col, pp_sample_weights, 0.0228)
+        ESday_pp_hi2[index_ES + j - 1] = _wquantile(col, pp_sample_weights, 0.9772)
+        ESday_pp_lo3[index_ES + j - 1] = _wquantile(col, pp_sample_weights, 0.0013)
+        ESday_pp_hi3[index_ES + j - 1] = _wquantile(col, pp_sample_weights, 0.9987)
+    end
+end
+
+# Save output — ES always present; CC only in non-inclusive mode
 derived = Dict(
-    :ES_asymmetry => ES_asymmetries,
-    :CC_asymmetry => CC_asymmetries,
+    :ES_asymmetry  => ES_asymmetries,
+    :inclusive_mode => inclusive_analysis,  # flag for Python utilities
 
-    # --- per-bin llh stats (existing) ---
-    :CCnight_mean_llh => ccnight_sin2.mean,
-    :CCnight_var_llh  => ccnight_sin2.var,
-    :CCnight_corr_llh_sin2_th12 => ccnight_sin2.corr,
-    :CCnight_corr_llh_dm2_21    => ccnight_dm2.corr,
-
-    :CCday_mean_llh => ccday_sin2.mean,
-    :CCday_var_llh  => ccday_sin2.var,
-    :CCday_corr_llh_sin2_th12 => ccday_sin2.corr,
-    :CCday_corr_llh_dm2_21    => ccday_dm2.corr,
-
+    # --- ES per-bin llh stats ---
     :ESnight_mean_llh => esnight_sin2.mean,
     :ESnight_var_llh  => esnight_sin2.var,
     :ESnight_corr_llh_sin2_th12 => esnight_sin2.corr,
@@ -422,17 +538,7 @@ derived = Dict(
     :ESday_corr_llh_sin2_th12 => esday_sin2.corr,
     :ESday_corr_llh_dm2_21    => esday_dm2.corr,
 
-    # --- per-sample TOTAL llh stats (scalars) ---
-    :CCnight_tot_mean_llh => [ccnight_tot_sin2.mean],
-    :CCnight_tot_var_llh  => [ccnight_tot_sin2.var],
-    :CCnight_tot_corr_llh_sin2_th12 => [ccnight_tot_sin2.corr],
-    :CCnight_tot_corr_llh_dm2_21    => [ccnight_tot_dm2.corr],
-
-    :CCday_tot_mean_llh => [ccday_tot_sin2.mean],
-    :CCday_tot_var_llh  => [ccday_tot_sin2.var],
-    :CCday_tot_corr_llh_sin2_th12 => [ccday_tot_sin2.corr],
-    :CCday_tot_corr_llh_dm2_21    => [ccday_tot_dm2.corr],
-
+    # --- ES per-sample TOTAL llh stats ---
     :ESnight_tot_mean_llh => [esnight_tot_sin2.mean],
     :ESnight_tot_var_llh  => [esnight_tot_sin2.var],
     :ESnight_tot_corr_llh_sin2_th12 => [esnight_tot_sin2.corr],
@@ -443,32 +549,97 @@ derived = Dict(
     :ESday_tot_corr_llh_sin2_th12 => [esday_tot_sin2.corr],
     :ESday_tot_corr_llh_dm2_21    => [esday_tot_dm2.corr],
 
-    # --- posterior predictive moments for rates ---
-    :CCday_pp_mean   => CCday_pp_mean,
-    :CCday_pp_var    => CCday_pp_var,
-    :CCnight_pp_mean => CCnight_pp_mean,
-    :CCnight_pp_var  => CCnight_pp_var,
-
+    # --- ES posterior predictive moments and 1σ quantile bands for rates ---
     :ESday_pp_mean   => ESday_pp_mean,
     :ESday_pp_var    => ESday_pp_var,
+    :ESday_pp_lo     => ESday_pp_lo,
+    :ESday_pp_hi     => ESday_pp_hi,
+    :ESday_pp_lo2    => ESday_pp_lo2,
+    :ESday_pp_hi2    => ESday_pp_hi2,
+    :ESday_pp_lo3    => ESday_pp_lo3,
+    :ESday_pp_hi3    => ESday_pp_hi3,
     :ESnight_pp_mean => ESnight_pp_mean,
     :ESnight_pp_var  => ESnight_pp_var,
 
-    ## SAVE SHAPES FOR DE-SERIALISATION
-    :CCnight_shape => collect(size(ccnight_sin2.mean)),
-    :ESnight_shape => collect(size(esnight_sin2.mean)),
-    :CCday_shape   => collect(size(ccday_sin2.mean)),
-    :ESday_shape   => collect(size(esday_sin2.mean)),
+    # --- ES background moments for signal-only display and data error bars ---
+    :BGESday_pp_mean => BGESday_pp_mean,
+    :BGESday_pp_var  => BGESday_pp_var,
 
-    :CCday_pp_shape   => collect(size(CCday_pp_mean)),
-    :CCnight_pp_shape => collect(size(CCnight_pp_mean)),
+    # --- ES shapes for de-serialisation ---
+    :ESnight_shape    => collect(size(esnight_sin2.mean)),
+    :ESday_shape      => collect(size(esday_sin2.mean)),
     :ESday_pp_shape   => collect(size(ESday_pp_mean)),
     :ESnight_pp_shape => collect(size(ESnight_pp_mean)),
+
+    # --- Asimov data and threshold indices for P-predictive plots ---
+    :data_ESday   => measuredRate_ES_day,
+    :data_ESnight => measuredRate_ES_night,
+    :index_ES     => index_ES,
+    :index_CC     => index_CC,
 )
+
+# CC entries only in non-inclusive mode
+if !inclusive_analysis
+    merge!(derived, Dict(
+        :CC_asymmetry => CC_asymmetries,
+
+        # --- CC per-bin llh stats ---
+        :CCnight_mean_llh => ccnight_sin2.mean,
+        :CCnight_var_llh  => ccnight_sin2.var,
+        :CCnight_corr_llh_sin2_th12 => ccnight_sin2.corr,
+        :CCnight_corr_llh_dm2_21    => ccnight_dm2.corr,
+
+        :CCday_mean_llh => ccday_sin2.mean,
+        :CCday_var_llh  => ccday_sin2.var,
+        :CCday_corr_llh_sin2_th12 => ccday_sin2.corr,
+        :CCday_corr_llh_dm2_21    => ccday_dm2.corr,
+
+        # --- CC per-sample TOTAL llh stats ---
+        :CCnight_tot_mean_llh => [ccnight_tot_sin2.mean],
+        :CCnight_tot_var_llh  => [ccnight_tot_sin2.var],
+        :CCnight_tot_corr_llh_sin2_th12 => [ccnight_tot_sin2.corr],
+        :CCnight_tot_corr_llh_dm2_21    => [ccnight_tot_dm2.corr],
+
+        :CCday_tot_mean_llh => [ccday_tot_sin2.mean],
+        :CCday_tot_var_llh  => [ccday_tot_sin2.var],
+        :CCday_tot_corr_llh_sin2_th12 => [ccday_tot_sin2.corr],
+        :CCday_tot_corr_llh_dm2_21    => [ccday_tot_dm2.corr],
+
+        # --- CC posterior predictive moments and 1σ quantile bands for rates ---
+        :CCday_pp_mean   => CCday_pp_mean,
+        :CCday_pp_var    => CCday_pp_var,
+        :CCday_pp_lo     => CCday_pp_lo,
+        :CCday_pp_hi     => CCday_pp_hi,
+        :CCday_pp_lo2    => CCday_pp_lo2,
+        :CCday_pp_hi2    => CCday_pp_hi2,
+        :CCday_pp_lo3    => CCday_pp_lo3,
+        :CCday_pp_hi3    => CCday_pp_hi3,
+        :CCnight_pp_mean => CCnight_pp_mean,
+        :CCnight_pp_var  => CCnight_pp_var,
+
+        # --- CC background moments for signal-only display and data error bars ---
+        :BGCCday_pp_mean => BGCCday_pp_mean,
+        :BGCCday_pp_var  => BGCCday_pp_var,
+
+        # --- CC shapes for de-serialisation ---
+        :CCnight_shape    => collect(size(ccnight_sin2.mean)),
+        :CCday_shape      => collect(size(ccday_sin2.mean)),
+        :CCday_pp_shape   => collect(size(CCday_pp_mean)),
+        :CCnight_pp_shape => collect(size(CCnight_pp_mean)),
+
+        # --- Asimov data for P-predictive plots ---
+        :data_CCday   => measuredRate_CC_day,
+        :data_CCnight => measuredRate_CC_night,
+    ))
+end
 
 
 println(" ")
-@logmsg Output ("True derived values: $(true_parameters[:ES_asymmetry]), $(true_parameters[:CC_asymmetry])")
+if inclusive_analysis
+    @logmsg Output ("True ES asymmetry: $(true_parameters[:ES_asymmetry]) (CC not applicable in inclusive mode)")
+else
+    @logmsg Output ("True derived values: $(true_parameters[:ES_asymmetry]), $(true_parameters[:CC_asymmetry])")
+end
 println(" ")
 
 saveDerivedChain(derived)

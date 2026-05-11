@@ -31,7 +31,9 @@ function llh_ES_poisson_perbin(d::LikelihoodInputs, parameters, rates;
     llh_ES_day_bins   = zeros(n_bins)               # same length as ES_day
     llh_ES_night_bins = zeros(size(nObs.ES_night))  # same shape as ES_night
 
-    mask = below_threshold ? (1:n_bins) : (idx:n_bins)
+    # Exclude the overflow bin (last bin, extended to +Inf) from the diagnostic mask;
+    # it has near-zero signal and dominates driver scores when included.
+    mask = below_threshold ? (1:n_bins) : (idx:n_bins-1)
 
     @views begin
         llh_ES_day_bins[mask] .= perbin_poissonLogLikelihood(
@@ -87,7 +89,7 @@ function llh_ES_angle_perbin(d::LikelihoodInputs, parameters, rates;
     llh_ES_day_bins   = zeros(size(nObs.ES_day))        # same shape as ES_day
     llh_ES_night_bins = zeros(size(nObs.ES_night))      # same shape as ES_night
 
-    mask = below_threshold ? (1:n_bins) : (idx:n_bins)
+    mask = below_threshold ? (1:n_bins) : (idx:n_bins-1)
 
     @views begin
         llh_ES_day_bins[:, mask] .= perbin_poissonLogLikelihood(
@@ -153,8 +155,8 @@ function llh_CC_poisson_perbin(d::LikelihoodInputs, parameters, rates;
     llh_CC_day_bins   = zeros(n_bins)
     llh_CC_night_bins = zeros(size(nObs.CC_night))
 
-    # Decide which bins to compute
-    mask = below_threshold ? (1:n_bins) : (idx:n_bins)
+    # Decide which bins to compute; exclude overflow bin (last, extended to +Inf).
+    mask = below_threshold ? (1:n_bins) : (idx:n_bins-1)
 
     @views begin
         llh_CC_day_bins[mask] .= perbin_poissonLogLikelihood(
@@ -270,34 +272,15 @@ function make_perbin_likelihood(
     uncertainty_ratio_CC_night = nothing,           # needed only for Barlow-Beeston
     debug::Bool = false
 )
-    # Helper: build a fixed-shape zero/-Inf template based on current data shapes.
-    # Uses d.nObserved because it defines the binning/shape of the likelihood terms.
+    # Build a fixed-shape array template filled with `fillval`, matching the shape of
+    # d.nObserved. Used to pre-allocate zero / -Inf arrays for disabled channels
+    # without recomputing shapes on every likelihood call.
     function _template(fillval::Float64)
-        idxES = d.index_ES
-        idxCC = d.index_CC
-        nObs  = d.nObserved
-
-        # ES shapes depend on whether angular reco is enabled.
-        # - non-angular: ES_day is Vector, ES_night is Matrix
-        # - angular:     ES_day is Matrix, ES_night is 3D Array
-
-        ###### THIS BLOCK COUNTS BINS BELOW THE THRESHOLD ######
-
-        ES_day_shape   = angular_reco ? size(nObs.ES_day) :
-                                        size(nObs.ES_day)
-        ES_night_shape = angular_reco ? size(nObs.ES_night) :
-                                        size(nObs.ES_night)
-
-        CC_day_shape   = size(nObs.CC_day)
-        CC_night_shape = size(nObs.CC_night)
-
-        #########################################################
-
-        ES_day   = fill(fillval, ES_day_shape...)
-        ES_night = fill(fillval, ES_night_shape...)
-        CC_day   = fill(fillval, CC_day_shape...)
-        CC_night = fill(fillval, CC_night_shape...)
-
+        nObs = d.nObserved
+        ES_day   = fill(fillval, size(nObs.ES_day)...)
+        ES_night = fill(fillval, size(nObs.ES_night)...)
+        CC_day   = fill(fillval, size(nObs.CC_day)...)
+        CC_night = fill(fillval, size(nObs.CC_night)...)
         return (ES_day=ES_day, ES_night=ES_night, CC_day=CC_day, CC_night=CC_night)
     end
 

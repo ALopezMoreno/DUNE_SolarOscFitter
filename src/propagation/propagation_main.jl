@@ -31,7 +31,7 @@ Returns:
 - BG_CC
 """
 
-function propagateSamples(unoscillatedSample, responseMatrices, params, solarModel, bin_edges, raw_backgrounds)
+function propagateSamples(unoscillatedSample, responseMatrices, params, solarModel, bin_edges, raw_backgrounds; verbose=false)
 
     # 1) Mixing parameters
     mixingPars = get_mixing_parameters(params)
@@ -55,7 +55,36 @@ function propagateSamples(unoscillatedSample, responseMatrices, params, solarMod
     )
 
     # 5) Oscillated event rates
+    if verbose
+        println()
+        @logmsg Setup "── Unoscillated event rates (true-E, pre-efficiency) ──"
+        if ES_mode
+            es_nue_8B   = sum(unoscillatedSample.ES_nue_8B)   * params.integrated_8B_flux
+            es_nue_hep  = sum(unoscillatedSample.ES_nue_hep)  * params.integrated_HEP_flux
+            es_numu_8B  = sum(unoscillatedSample.ES_nuother_8B)  * params.integrated_8B_flux
+            es_numu_hep = sum(unoscillatedSample.ES_nuother_hep) * params.integrated_HEP_flux
+            @logmsg Setup "  ES  νe   8B : $(sci_notation(es_nue_8B))"
+            @logmsg Setup "  ES  νe   hep: $(sci_notation(es_nue_hep))"
+            @logmsg Setup "  ES  νμτ  8B : $(sci_notation(es_numu_8B))"
+            @logmsg Setup "  ES  νμτ  hep: $(sci_notation(es_numu_hep))"
+            @logmsg Setup "  ES  total   : $(sci_notation(es_nue_8B + es_nue_hep + es_numu_8B + es_numu_hep))"
+        end
+        if CC_mode
+            cc_8B  = sum(unoscillatedSample.CC_8B)  * params.integrated_8B_flux
+            cc_hep = sum(unoscillatedSample.CC_hep) * params.integrated_HEP_flux
+            @logmsg Setup "  CC  νe   8B : $(sci_notation(cc_8B))"
+            @logmsg Setup "  CC  νe   hep: $(sci_notation(cc_hep))"
+            @logmsg Setup "  CC  total   : $(sci_notation(cc_8B + cc_hep))"
+        end
+        println()
+    end
+
     oscillatedSample = compute_oscillated_samples(unoscillatedSample, params, oscProbs)
+
+    if ES_mode
+        unosc_nue_total = sum(unoscillatedSample.ES_nue_8B) * params.integrated_8B_flux
+        osc_total_day   = sum(oscillatedSample.ES.nue_day) + sum(oscillatedSample.ES.nuother_day)
+    end
 
     # 6) ES reco event rates
     if angular_reco
@@ -67,8 +96,23 @@ function propagateSamples(unoscillatedSample, responseMatrices, params, solarMod
     end
 
     # 7) CC reco event rates
-    eventRate_CC_day, eventRate_CC_night =
-        compute_CC_event_rates(oscillatedSample.CC, responseMatrices, BG_CC)
+    if inclusive_analysis
+        cc_incl_day, cc_incl_night =
+            compute_CC_inclusive_event_rates(oscillatedSample.CC, responseMatrices)
+        # Collapse to 1D Ereco_ES spectrum for diagnostic logging (sum over angle and cosz)
+        global CC_incl_spectrum = if angular_reco
+            vec(sum(cc_incl_day, dims=1)) .+ vec(sum(cc_incl_night, dims=(1, 3)))
+        else
+            cc_incl_day .+ vec(sum(cc_incl_night, dims=1))
+        end
+        eventRate_ES_day   .+= cc_incl_day
+        eventRate_ES_night .+= cc_incl_night
+        eventRate_CC_day   = fill(eltype(cc_incl_day)(0), Ereco_bins_CC.bin_number)
+        eventRate_CC_night = fill(eltype(cc_incl_night)(0), (cosz_bins.bin_number, Ereco_bins_CC.bin_number))
+    else
+        eventRate_CC_day, eventRate_CC_night =
+            compute_CC_event_rates(oscillatedSample.CC, responseMatrices, BG_CC)
+    end
 
     # 8) Debug plots (optional) --- HARD CODED FLAG
     DEBUG_PLOTS = false  

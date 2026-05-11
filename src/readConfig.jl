@@ -322,6 +322,9 @@ function main()
 
     # Angular likelihood info?
     global angular_reco = config["use_scattering_info"]
+    global angular_cos_cut = get(config, "ES_cos_cut", -1.0)
+    # Inclusive (ES+CC combined) fit?
+    global inclusive_analysis = get(config, "inclusiveMode", false)
 
     # Uncertainties?
     global earthUncertainty = config["earth_potential_uncertainties"]

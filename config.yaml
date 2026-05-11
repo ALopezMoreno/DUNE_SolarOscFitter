@@ -27,12 +27,12 @@
 # Output file prefix for all generated files (chains, plots, etc.)
 # Results will be saved as: outFile_mcmc.bin, outFile_info.txt, etc.
 # outFile: "outputs/CC_10MeVthershold_Shielding_strongCuts_deltam6_HDonly"
-outFile: "outputs/speedup_test"
+outFile: "outputs/inclusive_VD_only_100kTyr_3D_100cmFidu_wShielding_forwardCut"
 
 # Previous file to continue MCMC chain from (optional)
 # Uncomment to resume a previous run from where it left off
 # REQUIRED when RunMode is "derived" to specify which chain to post-process
-# prevFile: "outputs/ES_3MeVThr_shieldBG_SNOfluxPrior_AngleFull_v2"
+# prevFile: "outputs/inclusive_v1_shielding"
 
 # Analysis mode selection:
 # "MCMC"   - Bayesian parameter estimation with Markov Chain Monte Carlo
@@ -59,6 +59,9 @@ nuFast: false
 # "CC"  - Fit only Charged Current channel
 singleChannel: false
 
+# Channel tagging approach:
+inclusiveMode: true
+
 ##############################
 ##### Asimov true values #####
 
@@ -73,7 +76,7 @@ true_sin2_th13: 0.0224   # Reactor mixing angle
 # The atmospheric mixing angle is also irrelevant and is fixed to 0.5
 
 # Mass-squared differences (eV²)
-true_dm2_21: 5.113e-5        # Solar mass-squared difference
+true_dm2_21: 6e-5        # Solar mass-squared difference
                          # PDG 2020: 7.53e-5, SNO: 5.113e-5
 
 # Solar neutrino flux normalizations (neutrinos/cm²/s)
@@ -130,12 +133,12 @@ prior_HEP_flux: Uniform(0, 2e4)
 # More chains and steps = better statistics but longer runtime
 
 nChains: 10             # Number of parallel MCMC chains (recommended: number of available cores)
-nSteps: 30000           # Number of post-tuning steps per chain
+nSteps: 1000            # Number of post-tuning steps per chain
                         # Total samples = nChains × nSteps
 
 # Adaptive step size tuning (improves sampling efficiency)
 maxTuningAttempts: 30   # Maximum tuning cycles (0 = no tuning, faster but less efficient)
-nTuning: 1000           # Steps per tuning cycle (recommended: O(1000))
+nTuning: 200            # Steps per tuning cycle (recommended: O(1000))
 
 # Systematic uncertainty toggles (disabling speeds up computation)
 earth_potential_uncertainties: true  # Include Earth matter density uncertainties
@@ -157,14 +160,14 @@ thinning: 1 # Thinning factor for the bin-importance diagnostic calculations. 1 
 ##### Detector configuration #####
 
 # Detector exposure (determines event statistics)
-CC_exposure: 30         # Charged Current exposure in module-years
+CC_exposure: 10         # Charged Current exposure in module-years
 ES_exposure: 10         # Elastic Scattering exposure in module-years
                         # 1 module-year ≈ 10 kton-year for DUNE
 
 ##### Background event rates #####
 
 # Background normalizations (events/second/module before cuts ---still after efficiency atm---)
-ES_background_normalisations: [2.2e-26, 2.2e-26, 2.2e-26]   # ES background fluxes in cm-2s-1 -- nominal: 2.2e-6 -- shielded: CHANGE BKG FILES
+ES_background_normalisations: [2.2e-6, 2.2e-6, 2.2e-6]   # ES background fluxes in cm-2s-1 -- nominal: 2.2e-6 -- shielded: CHANGE BKG FILES
 CC_background_normalisations: [8.8e-8, 8.8e-8]   # CC background fluxes in cm-2s-1 -- nominal: 2.2e-6 -- shielded: 4.4e-8
 
 # Background systematic uncertainties (fractional)
@@ -185,11 +188,11 @@ nBins_Ereco_ES: 20      # ES reconstructed energy bins
 nBins_Ereco_CC: 20      # CC reconstructed energy bins
 
 range_Ereco_ES: [2, 20]  # ES energy range in MeV
-range_Ereco_CC: [4, 20]    # CC energy range in MeV
+range_Ereco_CC: [2, 20]    # CC energy range in MeV
 
 # Analysis energy thresholds (events below these energies are excluded)
 Ereco_min_ES: 3       # ES threshold in MeV
-Ereco_min_CC: 5       # CC threshold in MeV
+Ereco_min_CC: 3       # CC threshold in MeV
 
 # Zenith angle binning (for Earth matter effects)
 nBins_cosz: 30         # Number of cos(zenith) bins from -1 (upward) to 0 (horizontal)
@@ -198,6 +201,9 @@ nBins_cosz: 30         # Number of cos(zenith) bins from -1 (upward) to 0 (horiz
 nBins_cos_scatter: 20
 # Use ES scattering?
 use_scattering_info: true
+# Forward-hemisphere cut on cos(scatter angle): events with cos(θ_scatter) < ES_cos_cut are masked.
+# -1.0 = no cut (full range); 0.0 = keep only forward hemisphere (θ < 90°).
+ES_cos_cut: 0.0
 
 #######################
 ##### Input files #####
@@ -226,9 +232,10 @@ solar_exposure_file: "inputs/solarExposure.csv"   # Detector exposure vs zenith 
 
 # Monte Carlo samples for detector response matrices
 # CSV files with columns: Etrue, Ereco, mask (selection), weights (optional)
-reconstruction_sample_CC: "inputs/sergio_reco_CC_withFullCuts.csv"
-reconstruction_sample_ES_nue: "inputs/Enu_Ereco_ES_nue_smeared.csv"      # ES ν_e interactions
-reconstruction_sample_ES_nuother: "inputs/Enu_Ereco_ES_nuother_smeared.csv"  # ES ν_μ,τ interactions
+# reconstruction_sample_CC: "inputs/sergio_reco_CC_withFullCuts.csv"
+reconstruction_sample_CC: "inputs/inputs_neutronOnly_may2026/Nu/3D/data_file_CC_1mFidu_discri_100Emin.csv"  # CC interactions
+reconstruction_sample_ES_nue:     "inputs/inputs_neutronOnly_may2026/Nu/3D/data_file_ES_nue_1mFidu_discri_100Emin.csv"      # ES ν_e interactions
+reconstruction_sample_ES_nuother: "inputs/inputs_neutronOnly_may2026/Nu/3D/data_file_ES_numutau_1mFidu_discri_100Emin.csv"  # ES ν_μ,τ interactions
 reconstruction_sample_ES_angle: "inputs/ES_angular_reco.csv"
 
 ##### Background Monte Carlo files #####
@@ -236,9 +243,9 @@ reconstruction_sample_ES_angle: "inputs/ES_angular_reco.csv"
 # Background event samples (must match number of components in normalisations above)
 CC_background_files: ["inputs/neutron_bg_CC_sergio_withFullCuts.csv", 
                       "inputs/gamma_bg_CC_sergio_withFullCuts.csv"]
-ES_background_files: ["inputs/ES_neutron_background_wShielding_1mFidu_discri_100Emin_longW.csv",
-                      "inputs/ES_neutron_background_wShielding_1mFidu_discri_100Emin_Bottom.csv",
-                      "inputs/ES_neutron_background_wShielding_1mFidu_discri_100Emin_shortW.csv"]
+ES_background_files: ["inputs/inputs_neutronOnly_may2026/Nbkg/3D/data_file_Nbkg_1mFidu_discri_100Emin_longW.csv",
+                      "inputs/inputs_neutronOnly_may2026/Nbkg/3D/data_file_Nbkg_1mFidu_discri_100Emin_Bottom.csv",
+                      "inputs/inputs_neutronOnly_may2026/Nbkg/3D/data_file_Nbkg_1mFidu_discri_100Emin_shortW.csv"]
 
 ##### Real data file (only used when Asimov == false) #####
 

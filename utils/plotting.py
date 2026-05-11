@@ -1277,6 +1277,106 @@ def plot_binmap(ax, Z, x_edges=None, y_edges=None, title=None,
 
 
 
+def plot_predictive_spectrum(ax, pp_mean, bands=None, x_centers=None,
+                             pp_lo=None, pp_hi=None,
+                             data=None, data_err=None,
+                             total_rate=None,
+                             bg_var=None,
+                             title=None, ylabel="Events"):
+    """
+    T2K-style posterior predictive plot for a 1D energy spectrum.
+
+    - Blue filled step histogram  : posterior predictive mean
+    - Nested red bands            : 1σ/2σ/3σ PPD credible intervals (Poisson-inflated)
+    - Black dots with error bars  : Asimov / observed data (background subtracted)
+
+    Parameters
+    ----------
+    bands : list of (lo, hi) array pairs, outermost first (3σ → 1σ)
+    pp_lo, pp_hi : legacy single-band fallback
+    total_rate : total expected rate μ_total per bin (signal + bg); adds Poisson shot noise
+                 to the PPD: half-width² = rate_hw² + n²·(μ_total + bg_var)
+    bg_var : posterior variance of the background mean per bin; propagates background
+             normalisation uncertainty into the PPD.  Data error bars should be Poisson-only
+             (√data) so that the PPD is visibly wider — the difference reveals the size of
+             the parameter + systematic uncertainty relative to the statistical floor.
+    """
+    # Legacy single-band compat
+    if bands is None and pp_lo is not None and pp_hi is not None:
+        bands = [(pp_lo, pp_hi)]
+
+    pp_mean = np.asarray(pp_mean, dtype=float)
+    above   = pp_mean > 0
+
+    n = len(pp_mean)
+    if n < 2:
+        return
+
+    step  = x_centers[1] - x_centers[0]
+    edges = np.empty(n + 1)
+    edges[:-1] = x_centers - step / 2.0
+    edges[-1]  = x_centers[-1] + step / 2.0
+
+    # Inflate bands to convert rate credible intervals into PPD count intervals.
+    # For the n-sigma band: half-width² = half-width_rate² + n²·(μ_total + bg_var)
+    # μ_total adds Poisson shot noise; bg_var adds background-subtraction uncertainty.
+    # Together they guarantee PPD band ≥ data error bars (= sqrt(data + bg_var)) everywhere.
+    # Bands are stored outermost-first so sigma levels are [nb, nb-1, ..., 1].
+    if bands and total_rate is not None:
+        μ = np.maximum(np.asarray(total_rate, dtype=float), 0.0)
+        bv = np.maximum(np.asarray(bg_var, dtype=float), 0.0) if bg_var is not None else 0.0
+        nb_bands = len(bands)
+        inflated = []
+        for k, (lo, hi) in enumerate(bands):
+            nsig = nb_bands - k        # 3, 2, 1 for outermost→innermost
+            lo  = np.asarray(lo,  dtype=float)
+            hi  = np.asarray(hi,  dtype=float)
+            hlo = np.maximum(pp_mean - lo, 0.0)
+            hhi = np.maximum(hi - pp_mean, 0.0)
+            extra_var = (nsig ** 2) * (μ + bv)
+            inflated.append((
+                pp_mean - np.sqrt(hlo**2 + extra_var),
+                pp_mean + np.sqrt(hhi**2 + extra_var),
+            ))
+        bands = inflated
+
+    # Nested credible bands — drawn outermost first so inner bands paint over them
+    # ALPHAS indexed from outermost: 3σ=0.15, 2σ=0.25, 1σ=0.40
+    _ALPHAS = [0.15, 0.25, 0.40]
+    _LABELS = [r"$3\sigma$", r"$2\sigma$", r"$1\sigma$"]
+    if bands:
+        nb = len(bands)
+        x_rep = np.repeat(edges, 2)[1:-1]
+        for i, (lo, hi) in enumerate(bands):
+            alpha = _ALPHAS[-(nb - i)]
+            label = _LABELS[-(nb - i)]
+            lo = np.asarray(lo, dtype=float)
+            hi = np.asarray(hi, dtype=float)
+            lo_step = np.where(above, lo, np.nan)
+            hi_step = np.where(above, hi, np.nan)
+            ax.fill_between(x_rep, np.repeat(lo_step, 2), np.repeat(hi_step, 2),
+                            color="tab:red", alpha=alpha, linewidth=0, label=label)
+
+    mean_plot = np.where(above, pp_mean, np.nan)
+    ax.step(edges, np.r_[mean_plot, mean_plot[-1]], where="post",
+            color="royalblue", lw=1.8, label="P-pred. mean")
+
+    if data is not None:
+        data = np.asarray(data, dtype=float)
+        err  = data_err if data_err is not None else np.sqrt(np.maximum(data, 0.0))
+        ax.errorbar(x_centers[above], data[above], yerr=err[above],
+                    fmt="k.", ms=5, capsize=2, lw=1.0,
+                    label="Data (Asimov)", zorder=5)
+
+    if title:
+        ax.set_title(title)
+    ax.set_ylabel(ylabel, fontsize=16)
+    ax.set_xlabel(r"$E_{reco}$ (MeV)", fontsize=20)
+    ax.legend(fontsize=10, framealpha=0.8)
+    ax.tick_params(axis="both", which="major", labelsize=20)
+    ax.set_xlim(edges[0], edges[-1])
+
+
 def plot_binseries(ax, y, x_edges=None, title=None, ylabel=None,
                    kind="step", marker=None, mask=None,
                    topk_idx=None, topk_style=None, ylim=None):
@@ -1598,7 +1698,8 @@ def add_sidebar_totals_in_margin(fig, totals, which="dm2",
     # show x labels only on bottom panel
     ax_sin2.tick_params(labelbottom=False)
 
-    labels = ["CC-night", "CC-day", "ES-night", "ES-day"]
+    _fmt = {"CCnight": "CC-night", "CCday": "CC-day", "ESnight": "ES-night", "ESday": "ES-day"}
+    labels = [_fmt.get(s, s) for s in order]
 
     for ax in (ax_dm2, ax_sin2):
         ax.minorticks_off()

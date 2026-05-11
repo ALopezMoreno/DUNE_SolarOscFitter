@@ -38,6 +38,10 @@ elseif singleChannel == "CC"
     @logmsg Setup ("Fitting CC channel only. ES event rates will appear as zero.\n")
 end
 
+if inclusive_analysis
+    @logmsg Setup ("Inclusive mode: CC signal folded into ES channel with uniform angular distribution. CC backgrounds disabled.\n")
+end
+
 #############################
 ######## LOAD INPUTS ########
 #############################
@@ -121,7 +125,7 @@ backgrounds = (ES=ES_bg, CC=CC_bg, sides=ES_sides)
 # Propagate Asimov point to generate Asimov event rates
 include(joinpath(@__DIR__, "propagation", "propagation_main.jl"))
 
-measuredRate_ES_day, measuredRate_CC_day, measuredRate_ES_night, measuredRate_CC_night, BG_ES_tot_true, BG_CC_tot_true = propagateSamples(unoscillatedSample, responseMatrices, true_params, solarModel, bin_edges, backgrounds)
+measuredRate_ES_day, measuredRate_CC_day, measuredRate_ES_night, measuredRate_CC_night, BG_ES_tot_true, BG_CC_tot_true = propagateSamples(unoscillatedSample, responseMatrices, true_params, solarModel, bin_edges, backgrounds; verbose=true)
 
 # Find the first index where energy is greater than Emin
 global index_ES = findfirst(x -> x > E_threshold.ES, Ereco_bins_ES_extended.bins)
@@ -129,15 +133,15 @@ global index_CC = findfirst(x -> x > E_threshold.CC, Ereco_bins_CC_extended.bins
 
 # Check if indices were found 
 if isnothing(index_ES)
-    @logmsg Setup ("No energy bins above the threshold for ES.")
+    error("E_threshold.ES = $(E_threshold.ES) exceeds all ES reco-energy bins. Lower the threshold or extend the binning.")
 end
-
-if isnothing(index_CC)
-    @logmsg Setup ("No energy bins above the threshold for CC.")
+if isnothing(index_CC) && CC_mode && !inclusive_analysis
+    error("E_threshold.CC = $(E_threshold.CC) exceeds all CC reco-energy bins. Lower the threshold or extend the binning.")
 end
 
 ### -- Calculate D-N asymmetry -- ###
-CC_bg_aboveThreshold = sum(BG_CC_tot_true[index_CC:end])
+CC_bg_aboveThreshold = (inclusive_analysis || isempty(BG_CC_tot_true)) ?
+                       0.0 : sum(BG_CC_tot_true[index_CC:end])
 ES_bg_aboveThreshold = sum(BG_ES_tot_true[index_ES:end])
 
 CC_Ntot = sum(@view measuredRate_CC_night[:, index_CC:end]) - 0.5 * CC_bg_aboveThreshold
@@ -209,11 +213,33 @@ else
 end
 
 
-@logmsg Setup "Total number of ES data above threshold: $(sci_notation(sum(ES_combined[index_ES:end])))" 
-@logmsg Setup "Total number of CC data above threshold: $(sci_notation(sum(CC_combined[index_CC:end])))" 
+if inclusive_analysis
+    incl_total = sum(ES_combined[index_ES:end])
+    CC_above   = sum(CC_incl_spectrum[index_ES:end])
+    BG_above   = ES_bg_aboveThreshold
+    ES_above   = incl_total - CC_above - BG_above
+    @logmsg Setup "Total number of inclusive (ES+CC) data above threshold: $(sci_notation(incl_total))"
+    @logmsg Setup "  of which ES signal: $(sci_notation(ES_above))"
+    @logmsg Setup "  of which CC signal: $(sci_notation(CC_above))"
+    @logmsg Setup "  of which BG: $(sci_notation(BG_above))"
+else
+    @logmsg Setup "Total number of ES data above threshold: $(sci_notation(sum(ES_combined[index_ES:end])))"
+    @logmsg Setup "Total number of CC data above threshold: $(sci_notation(sum(CC_combined[index_CC:end])))"
+end
 @logmsg Setup @sprintf("Data day-night asymmetry for ES channel: %.4f%%", eff_asymm_ES * 100)
 @logmsg Setup @sprintf("Data day-night asymmetry for CC channel: %.4f%%", eff_asymm_CC * 100)
 println(" ")
+
+# ── Inclusive angular diagnostics ── set DEBUG_ANGULAR_STACKS = true to produce plot
+DEBUG_ANGULAR_STACKS = true
+if DEBUG_ANGULAR_STACKS && inclusive_analysis && angular_reco
+    plot_inclusive_angular_diagnostics(
+        unoscillatedSample, responseMatrices, true_params,
+        solarModel, bin_edges, backgrounds;
+        n_panels  = 6,
+        save_path = "$(outFile)_angular_stacks.pdf",
+    )
+end
 
 # load likelihood
 include("../src/likelihoods/likelihood_main.jl")
