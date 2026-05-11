@@ -19,14 +19,14 @@ likelihood_inputs = LikelihoodInputs(
 
 total_llh = make_likelihood(likelihood_inputs;
     use_ES = ES_mode,
-    use_CC = CC_mode,
+    use_CC = CC_mode && !inclusive_analysis,
     ES_llh = llh_ES_poisson,
     CC_llh = llh_CC_poisson,
 )
 
 per_bin_llh = make_perbin_likelihood(likelihood_inputs;
     use_ES = ES_mode,
-    use_CC = CC_mode,
+    use_CC = CC_mode && !inclusive_analysis,
     ES_llh = llh_ES_poisson_perbin,
     CC_llh = llh_CC_poisson_perbin,
 )

@@ -27,8 +27,8 @@ function sci_notation(x; digits=4)
     if x == 0
         return "0"
     else
-        exponent = floor(Int, log10(abs(x)))  
-        mantissa = x / 10^exponent  
+        exponent = floor(Int, log10(abs(x)))
+        mantissa = x / 10.0^exponent
         return "$(round(mantissa, digits=digits)) × 10^$exponent" 
     end
 end  

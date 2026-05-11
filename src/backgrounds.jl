@@ -61,7 +61,9 @@ end
 
 
 # Process CC background samples
+# In inclusive mode CC backgrounds are absorbed into ES_BG — no separate CC BG needed
 CC_bg = []
+if !inclusive_analysis
 for df in df_CC_list
     # Create histograms with or without MC weights
     if "weights" in names(df)
@@ -79,11 +81,11 @@ for df in df_CC_list
     # Calculate detection efficiency: selected events / total events
     CC_eff_bg = @. ifelse(CC_temp_total == 0, 0.0, CC_temp_selec / CC_temp_total)
     
-    # Scale by detection time, efficiency, and exposure normalization
-    # push!(CC_bg, CC_temp .* detection_time .* CC_eff_bg .* CC_normalisation)
-    ## MC IS ALREADY NORMALISED TO 1 KT YEAR!
+    # CC MC is already normalised to 1 kt-year; ×10 scales to the 10 kt-year analysis exposure.
+    # NOTE: intentional — update if the target exposure changes.
     push!(CC_bg, CC_temp_selec .* 10 .* CC_normalisation)
 end
+end  # !inclusive_analysis
 
 # Setup systematic uncertainties for background normalizations
 # These will be treated as nuisance parameters in the MCMC fit

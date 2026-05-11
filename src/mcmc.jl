@@ -8,7 +8,7 @@ This script performs posterior sampling from the likelihood function defined by 
 solar neutrino data and prior distributions over oscillation parameters.
 
 Key Features:
-- Metropolis-Hastings MCMC sampling with adaptive tuning
+- Hamiltonian Monte Carlo (HMC) sampling via BAT.jl with NUTS termination
 - Support for systematic uncertainties (Earth matter, backgrounds)
 - Batch processing to manage memory usage
 - Configurable proposal distributions and covariance matrices

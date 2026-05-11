@@ -71,6 +71,9 @@ function get_matrices(params)
 end
 
 
+# MSW survival probability P(νe→νe) averaged over the solar production region.
+# Wolfenstein (1978), Mikheyev & Smirnov (1985); adiabatic two-flavour approximation
+# with θ₁₃ correction from Barger et al. See also eq. (2) of SNO solar analysis.
 function mswProb(energy, mixingPars, n_e)
     s2th13 = sin(mixingPars.θ₁₃)^2
     @inbounds begin
@@ -87,11 +90,14 @@ function mswProb(energy, mixingPars, n_e)
 end
 
 
+# Effective mixing angle θ₁₂ in matter (LMA solution).
+# β = 2√2 G_F N_e E cos²θ₁₃ / Δm²₂₁ is the ratio of matter to vacuum potential.
+# cos(2θ_m) = (cos2θ₁₂ - β) / √((cos2θ₁₂ - β)² + sin²2θ₁₂).
 function LMA_angle(energy, mixingPars, N_e)
     th12 = mixingPars.θ₁₂
     beta = (2 .* sqrt(2) .* 5.4489e-5 .* cos(mixingPars.θ₁₃)^2 .* N_e .* energy) ./ mixingPars.Δm²₂₁
     matterAngle = (cos(2 * th12) .- beta) ./ sqrt.((cos(2 * th12) .- beta) .^ 2 .+ sin(2 * th12)^2)
-    return 0.5 .* acos.(matterAngle)
+    return 0.5 .* acos.(clamp.(matterAngle, -1.0, 1.0))
 end
 
 
@@ -120,7 +126,7 @@ function osc_prob_day_fast(energy::Float64, params, solarModel; process="8B")
           process == "hep" ? solarModel.avgNeHep :
           error("Invalid process specified. Please use '8B' or 'hep'.")
 
-    enuOscProb = mswProb(energy, params, n_e)
+    enuOscProb, _ = mswProb(energy, params, n_e)
 
     return enuOscProb
 end

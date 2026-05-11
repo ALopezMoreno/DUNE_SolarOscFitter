@@ -389,3 +389,6 @@ config_test*.yaml
 
 # Contribution matrices (generated outputs)
 contribution_matrix_*.jl*
+
+# One-off gallery/presentation scripts
+utils/cbar_gallery.py

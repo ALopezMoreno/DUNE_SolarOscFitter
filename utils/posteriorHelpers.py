@@ -166,19 +166,7 @@ def load_posterior(mcmc_chains, parameters, burnin=20_000, test=None, exclude_ch
 
 
 def load_bin_diagnostics(mcmc_chains, require_all=True, verbose=True):
-    keys = [
-        # --- CC night (per-bin) ---
-        "derived_CCnight_mean_llh",
-        "derived_CCnight_var_llh",
-        "derived_CCnight_corr_llh_sin2_th12",
-        "derived_CCnight_corr_llh_dm2_21",
-
-        # --- CC day (per-bin) ---
-        "derived_CCday_mean_llh",
-        "derived_CCday_var_llh",
-        "derived_CCday_corr_llh_sin2_th12",
-        "derived_CCday_corr_llh_dm2_21",
-
+    es_keys = [
         # --- ES night (per-bin) ---
         "derived_ESnight_mean_llh",
         "derived_ESnight_var_llh",
@@ -191,17 +179,7 @@ def load_bin_diagnostics(mcmc_chains, require_all=True, verbose=True):
         "derived_ESday_corr_llh_sin2_th12",
         "derived_ESday_corr_llh_dm2_21",
 
-        # --- Sample totals (scalars) ---
-        "derived_CCnight_tot_mean_llh",
-        "derived_CCnight_tot_var_llh",
-        "derived_CCnight_tot_corr_llh_sin2_th12",
-        "derived_CCnight_tot_corr_llh_dm2_21",
-
-        "derived_CCday_tot_mean_llh",
-        "derived_CCday_tot_var_llh",
-        "derived_CCday_tot_corr_llh_sin2_th12",
-        "derived_CCday_tot_corr_llh_dm2_21",
-
+        # --- ES sample totals (scalars) ---
         "derived_ESnight_tot_mean_llh",
         "derived_ESnight_tot_var_llh",
         "derived_ESnight_tot_corr_llh_sin2_th12",
@@ -212,27 +190,80 @@ def load_bin_diagnostics(mcmc_chains, require_all=True, verbose=True):
         "derived_ESday_tot_corr_llh_sin2_th12",
         "derived_ESday_tot_corr_llh_dm2_21",
 
-        # --- Posterior predictive moments (rates) ---
-        "derived_CCday_pp_mean",
-        "derived_CCday_pp_var",
-        "derived_CCnight_pp_mean",
-        "derived_CCnight_pp_var",
-
+        # --- ES posterior predictive moments and 1σ/2σ/3σ quantile bands (rates) ---
         "derived_ESday_pp_mean",
         "derived_ESday_pp_var",
+        "derived_ESday_pp_lo",
+        "derived_ESday_pp_hi",
+        "derived_ESday_pp_lo2",
+        "derived_ESday_pp_hi2",
+        "derived_ESday_pp_lo3",
+        "derived_ESday_pp_hi3",
         "derived_ESnight_pp_mean",
         "derived_ESnight_pp_var",
 
-        # --- Shapes (for de-serialisation / sanity checks) ---
-        "derived_CCnight_shape",
-        "derived_ESnight_shape",
-        "derived_CCday_shape",
-        "derived_ESday_shape",
+        # --- ES background moments for signal-only display and data error bars ---
+        "derived_BGESday_pp_mean",
+        "derived_BGESday_pp_var",
 
-        "derived_CCday_pp_shape",
-        "derived_CCnight_pp_shape",
+        # --- ES shapes (for de-serialisation / sanity checks) ---
+        "derived_ESnight_shape",
+        "derived_ESday_shape",
         "derived_ESday_pp_shape",
         "derived_ESnight_pp_shape",
+
+        # --- Asimov data and threshold indices (optional: present after re-derive) ---
+        "derived_data_ESday",
+        "derived_data_ESnight",
+        "derived_index_ES",
+        "derived_index_CC",
+    ]
+
+    cc_keys = [
+        # --- CC night (per-bin) ---
+        "derived_CCnight_mean_llh",
+        "derived_CCnight_var_llh",
+        "derived_CCnight_corr_llh_sin2_th12",
+        "derived_CCnight_corr_llh_dm2_21",
+
+        # --- CC day (per-bin) ---
+        "derived_CCday_mean_llh",
+        "derived_CCday_var_llh",
+        "derived_CCday_corr_llh_sin2_th12",
+        "derived_CCday_corr_llh_dm2_21",
+
+        # --- CC sample totals (scalars) ---
+        "derived_CCnight_tot_mean_llh",
+        "derived_CCnight_tot_var_llh",
+        "derived_CCnight_tot_corr_llh_sin2_th12",
+        "derived_CCnight_tot_corr_llh_dm2_21",
+
+        "derived_CCday_tot_mean_llh",
+        "derived_CCday_tot_var_llh",
+        "derived_CCday_tot_corr_llh_sin2_th12",
+        "derived_CCday_tot_corr_llh_dm2_21",
+
+        # --- CC posterior predictive moments and 1σ/2σ/3σ quantile bands (rates) ---
+        "derived_CCday_pp_mean",
+        "derived_CCday_pp_var",
+        "derived_CCday_pp_lo",
+        "derived_CCday_pp_hi",
+        "derived_CCday_pp_lo2",
+        "derived_CCday_pp_hi2",
+        "derived_CCday_pp_lo3",
+        "derived_CCday_pp_hi3",
+
+        # --- CC background moments for signal-only display and data error bars ---
+        "derived_BGCCday_pp_mean",
+        "derived_BGCCday_pp_var",
+        "derived_CCnight_pp_mean",
+        "derived_CCnight_pp_var",
+
+        # --- CC shapes (for de-serialisation / sanity checks) ---
+        "derived_CCnight_shape",
+        "derived_CCday_shape",
+        "derived_CCday_pp_shape",
+        "derived_CCnight_pp_shape",
     ]
 
     chains = []
@@ -250,6 +281,20 @@ def load_bin_diagnostics(mcmc_chains, require_all=True, verbose=True):
         chains.append(c)
     if not chains:
         raise ValueError("No valid MCMC chains found")
+
+    # Detect inclusive mode from the first chain.
+    # Fall back to inferring from key presence for pre-fix JLD2 files.
+    inclusive_mode = False
+    with h5py.File(chains[0] + ".jld2", "r") as f:
+        if "derived_inclusive_mode" in f:
+            inclusive_mode = bool(f["derived_inclusive_mode"][()])
+        elif "derived_CCnight_mean_llh" not in f:
+            inclusive_mode = True  # backward compat: CC keys absent => inclusive
+
+    if verbose and inclusive_mode:
+        print("Inclusive mode detected: CC diagnostics not present in chain.")
+
+    keys = es_keys + ([] if inclusive_mode else cc_keys)
 
     per_chain = {k: [] for k in keys}
     missing = {k: [] for k in keys}
@@ -282,6 +327,8 @@ def load_bin_diagnostics(mcmc_chains, require_all=True, verbose=True):
         out[k] = base if same else arrs
         if verbose and len(arrs) > 1:
             print(f"{k}: {'consistent' if same else 'DIFF'} across {len(arrs)} chains")
+
+    out["inclusive_mode"] = inclusive_mode  # propagate flag to callers
 
     if verbose:
         print("Loaded diagnostics from:", ", ".join(chains))

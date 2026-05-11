@@ -1,38 +1,25 @@
 function poissonLogLikelihood(nExpected::AbstractVector{<:Real}, nMeasured::AbstractVector{<:Real})
-    if !all(x -> x >= 0, nExpected) || !all(x -> x >= 0, nMeasured)
-        throw(ArgumentError("Inputs must be non-negative"))
-    end
     if length(nExpected) != length(nMeasured)
         throw(ArgumentError("Inputs must have the same length"))
     end
 
     llh = zero(eltype(nExpected))
-    ε = 1e-12  # Small constant to avoid log(0)
     @inbounds for i in eachindex(nExpected)
-        e = nExpected[i]
+        raw_e = nExpected[i]
+        if raw_e < 0
+            if raw_e > -1e-3
+                @warn "poissonLogLikelihood: bin $i negative within numerical noise (e=$raw_e)"
+            else
+                error("poissonLogLikelihood: bin $i significantly negative (e=$raw_e)")
+            end
+        end
+        e = max(raw_e, 1e-9)
         m = Float64(nMeasured[i])
 
-        # Regularize e and m to avoid log(0)
-        e_reg = max(e, ε)
-        m_reg = max(m, ε)
-
-        # Differentiable approximation of the original logic
-        # For m > 0:
-        #   if e > 0: e - m + m * log(m / e)
-        #   if e == 0: 1e9 (penalty)
-        # For m == 0:
-        #   if e == 0: 0
-        #   if e > 0: e
-        #
-        # We approximate the penalty for e == 0 and m > 0 as 1e9 * (1 - e / ε)^2
-        # This is smooth and large when e ≈ 0, but differentiable.
-        penalty = 1e9 * (1 - e / ε)^2  # Large when e ≈ 0, smooth everywhere
-
-        # Differentiable expression for all cases
         term = ifelse(
             m > 0,
-            ifelse(e > 0, e - m + m * (log(m_reg) - log(e_reg)), penalty),
-            ifelse(e > 0, e, 0.0)
+            e - m + m * (log(m) - log(e)),
+            e
         )
 
         llh += term
@@ -53,7 +40,13 @@ function perbin_poissonLogLikelihood(nExpected::AbstractArray,
         m = Float64(nMeasured[I])
 
         if m > 0
-            out[I] = -(e - m * log(max(e, 1e-300)))
+            # Use the same floor as poissonLogLikelihood so the per-bin diagnostic
+            # is consistent with what the aggregate LLH gradient exposes to the sampler.
+            # A 1e-300 floor (vs 1e-12 in the aggregate) lets the sampler roam freely
+            # below 1e-12 (flat aggregate gradient) while the per-bin formula assigns
+            # wildly different log values there — producing spurious variance/score,
+            # especially in low-count overflow bins.
+            out[I] = -(e - m * log(max(e, 1e-12)))
         else
             out[I] = -e
         end
@@ -180,12 +173,14 @@ function barlowBeestonLogLikelihood(nExpected, nMeasured, sigmaVar)
                     llh += beta * e - m + m * log(m / (beta*e)) + (beta - 1)^2 / (2*s^2) 
                 end
             elseif e == 0
+                # BB formula is undefined at e=0; substitute half a count (Wald lower bound).
+                # NOTE: intentional regularisation — revisit once a proper background floor is added.
                 e = 0.5
                 if s == 0
-                    llh += (e - m + m * log(m / e)) 
+                    llh += (e - m + m * log(m / e))
                 else
                     beta = 0.5 * ( 1 - e*s^2 + sqrt( (e*s^2 - 1)^2 + 4*m*s^2 ) )
-                    llh += beta * e - m + m * log(m / (beta*e)) + (beta - 1)^2 / (2*s^2) 
+                    llh += beta * e - m + m * log(m / (beta*e)) + (beta - 1)^2 / (2*s^2)
                 end
             end
 
@@ -193,12 +188,14 @@ function barlowBeestonLogLikelihood(nExpected, nMeasured, sigmaVar)
             if e == 0
                 llh += 0
             else
+                # BB formula is undefined at m=0; substitute half a count (Wald lower bound).
+                # NOTE: intentional regularisation — revisit once a proper background floor is added.
                 m = 0.5
                 if s == 0
-                    llh += (e - m + m * log(m / e)) 
+                    llh += (e - m + m * log(m / e))
                 else
                     beta = 0.5 * ( 1 - e*s^2 + sqrt( (e*s^2 - 1)^2 + 4*m*s^2 ) )
-                    llh += beta * e - m + m * log(m / (beta*e)) + (beta - 1)^2 / (2*s^2) 
+                    llh += beta * e - m + m * log(m / (beta*e)) + (beta - 1)^2 / (2*s^2)
                 end
             end
         end
