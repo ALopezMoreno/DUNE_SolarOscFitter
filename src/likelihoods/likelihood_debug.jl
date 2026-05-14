@@ -1,16 +1,6 @@
 function check_earth_norm_bounds(parameters)::Bool
-    earth_norm_keys = filter(k -> startswith(String(k), "earth_norm"), keys(parameters))
-
-    if !isempty(earth_norm_keys)
-        earth_norms = [parameters[k] for k in earth_norm_keys]
-        out_of_bounds = filter(x -> x < 0 || x > 2, earth_norms)
-        if !isempty(out_of_bounds)
-            @warn "Earth normalisation trying to leave bounds"
-            return false
-        end
-    end
-
-    return true
+    earth_norms = _params_by_prefix(parameters, Val(:earth_norm_))
+    return all(x -> 0 ≤ x ≤ 2, earth_norms)
 end
 
 function print_negatives_1d(arr, parameters)

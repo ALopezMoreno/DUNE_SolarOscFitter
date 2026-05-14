@@ -41,8 +41,8 @@ import AutoDiffOperators: ADSelector
 using Random
 # Random.seed!(1234)  # Set global seed once at startup if you want RNG reproducibility
 
-include("../src/setup.jl")
-include("../src/mcmcHelpers.jl")
+include(joinpath(@__DIR__, "setup.jl"))
+include(joinpath(@__DIR__, "mcmcHelpers.jl"))
 
 
 # Set prior distributions from config
@@ -73,20 +73,19 @@ if earthUncertainty
   # param_bounds = Dict(:earth_norm => (0.0, 2.0)) # We want these to be fixed between 0 and 2
 end
 
-if ES_mode
-  if !isempty(ES_bg_norms_pars)
-    for (i, norm) in enumerate(ES_bg_norms_pars)
-        priors[Symbol("ES_bg_norm_$i")] = norm
+# Add per-detector background nuisance parameters (names prefixed by detector name)
+for (dname, out) in detector_outputs
+    det = detector_configs[dname]
+    if det.ES_mode
+        for (i, dist) in enumerate(out.ES_bg_norms_pars)
+            priors[Symbol("$(dname)_ES_bg_norm_$i")] = dist
+        end
     end
-  end
-end
-
-if CC_mode
-  if !isempty(CC_bg_norms_pars)
-    for (i, norm) in enumerate(CC_bg_norms_pars)
-        priors[Symbol("CC_bg_norm_$i")] = norm
+    if det.CC_mode && !det.inclusive_analysis
+        for (i, dist) in enumerate(out.CC_bg_norms_pars)
+            priors[Symbol("$(dname)_CC_bg_norm_$i")] = dist
+        end
     end
-  end
 end
 
 # Use splatting to pass the priors to distprod

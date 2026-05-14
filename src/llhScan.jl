@@ -27,7 +27,7 @@ using LinearAlgebra, Statistics, Distributions, StatsBase, BAT, DensityInterface
 using DelimitedFiles  # For CSV output
 
 # Set up the analysis environment
-include("../src/setup.jl")
+include(joinpath(@__DIR__, "setup.jl"))
 
 function get_n_freedom(index)
     """
@@ -69,10 +69,11 @@ flux_8B_scan = true_params.integrated_8B_flux  # Fixed 8B flux for scanning
     :integrated_8B_flux => sqrt(2 * log(2)) * std(prior_8B_flux),
 )
 
+_llh_det_name = first(keys(detector_configs))
 if !isempty(ES_bg_norms_pars)
     for (i, norm) in enumerate(ES_bg_norms_pars)
         if std(norm) > 0
-            Δ_FWHM[Symbol("ES_bg_norm_$i")] = sqrt(2 * log(2)) * std(norm)
+            Δ_FWHM[Symbol("$(_llh_det_name)_ES_bg_norm_$i")] = sqrt(2 * log(2)) * std(norm)
         end
     end
 end
@@ -80,7 +81,7 @@ end
 if !isempty(CC_bg_norms_pars)
     for (i, norm) in enumerate(CC_bg_norms_pars)
         if std(norm) > 0
-            Δ_FWHM[Symbol("CC_bg_norm_$i")] = sqrt(2 * log(2)) * std(norm)
+            Δ_FWHM[Symbol("$(_llh_det_name)_CC_bg_norm_$i")] = sqrt(2 * log(2)) * std(norm)
         end
     end
 end

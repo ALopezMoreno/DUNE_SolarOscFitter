@@ -22,7 +22,7 @@ using ElasticArrays    # For dynamic array handling
 using ProgressMeter    # For progress tracking
 using JLD2            # For data file operations
 
-include("../src/setup.jl")
+include(joinpath(@__DIR__, "setup.jl"))
 
 
 

@@ -24,7 +24,7 @@ using Interpolations # For uncertainty matrix interpolation
 using Plots          # For diagnostic plotting (optional)
 using Statistics     # For statistical calculations
 
-include("../src/propagateSample.jl")
+include(joinpath(@__DIR__, "propagateSample.jl"))
 
 # Load PREM uncertainty data
 # This contains oscillation probability uncertainties due to Earth density variations

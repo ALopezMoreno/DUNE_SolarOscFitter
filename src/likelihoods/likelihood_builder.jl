@@ -217,17 +217,17 @@ function make_likelihood(
     d::LikelihoodInputs;
     use_ES::Bool = true,
     use_CC::Bool = true,
-    ES_llh::Function = llh_ES_poisson,
-    CC_llh::Function = llh_CC_poisson,
+    ES_llh = llh_ES_poisson,
+    CC_llh = llh_CC_poisson,
     uncertainty_ratio_CC_night = nothing,   # needed only for Barlow-Beeston
     debug::Bool = false
 )
-    return function (parameters)
+    return function (parameters; precomputed_osc=nothing)
         # bounds
         check_earth_norm_bounds(parameters) || return -Inf
 
         # propagate MC once
-        rates = expected_rates(d, parameters)
+        rates = expected_rates(d, parameters; precomputed_osc=precomputed_osc)
 
         # optional debugging
         if debug
@@ -239,11 +239,7 @@ function make_likelihood(
 
         # === ES contribution ==========================================
         if use_ES
-            if angular_reco
-                loglh += llh_ES_angle(d, parameters, rates)
-            else
-                loglh += ES_llh(d, parameters, rates)
-            end
+            loglh += ES_llh(d, parameters, rates)
         end
 
         # === CC contribution ==========================================
@@ -267,8 +263,8 @@ function make_perbin_likelihood(
     rates = nothing,
     use_ES::Bool = true,
     use_CC::Bool = true,
-    ES_llh::Function = llh_ES_poisson,              # kept for signature parity
-    CC_llh::Function = llh_CC_poisson,              # kept for signature parity
+    ES_llh = llh_ES_poisson,
+    CC_llh = llh_CC_poisson,
     uncertainty_ratio_CC_night = nothing,           # needed only for Barlow-Beeston
     debug::Bool = false
 )
@@ -310,8 +306,7 @@ function make_perbin_likelihood(
 
         # === ES contribution ==========================================
         if use_ES
-            es = angular_reco ? llh_ES_angle_perbin(d, parameters, _rates) :
-                                llh_ES_poisson_perbin(d, parameters, _rates)
+            es = ES_llh(d, parameters, _rates)
 
             # Add into output (ensures fixed fields are always present)
             out.ES_day   .+= es.ES_day

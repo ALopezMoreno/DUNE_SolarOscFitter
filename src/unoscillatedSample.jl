@@ -22,8 +22,8 @@ Author: [Author name]
 using QuadGK
 
 # Load solar flux and cross-section data
-include("../src/solarFlux.jl")
-include("../src/xsec.jl")
+include(joinpath(@__DIR__, "solarFlux.jl"))
+include(joinpath(@__DIR__, "xsec.jl"))
 
 # Detector specifications
 global detector_ne = 10 * 2.7e32      # Number of electrons (10 kT LAr, 2.7e32 e-/kT)
@@ -94,36 +94,37 @@ function integrate_over_bins(f, bin_edges)
     return averages
 end
 
-# Calculate unoscillated event rates by integrating over energy bins
+"""
+    build_unoscillated_sample(det) -> (unoscillatedSample, bin_edges, energies_GeV)
 
-# Set up energy binning
-bin_edges, energies_GeV = calculate_bins(Etrue_bins)
-# Higher resolution binning for calculations (doubled bin number)
-global bin_edges_calc, energies_calc = calculate_bins((max=Etrue_bins.max, min=Etrue_bins.min, bin_number=Etrue_bins.bin_number*2))
+Compute unoscillated event rates for detector `det` (a named tuple from `detector_configs`).
+Uses shared global `Etrue_bins`. Returns:
+- `unoscillatedSample`: named tuple with per-channel, per-process event rate vectors
+- `bin_edges`: Etrue bin edges (GeV)
+- `energies_GeV`: Etrue bin centres (GeV)
+"""
+function build_unoscillated_sample(det)
+    global E_threshold = det.E_threshold   # read by ES_xsec_nue / ES_xsec_nuother in xsec.jl
+    ES_normalisation = det.ES_normalisation
+    CC_normalisation = det.CC_normalisation
 
-# Calculate unoscillated event rates for 8B neutrinos
-# ES channel: electron neutrinos
-unoscillated_ES_nue_sample_8B = integrate_over_bins(unoscillatedRate_ES_nue_8B, bin_edges) * detector_ne * detection_time * ES_normalisation
-# ES channel: other neutrino flavors (after oscillation)
-unoscillated_ES_nuother_sample_8B = integrate_over_bins(unoscillatedRate_ES_nuother_8B, bin_edges) * detector_ne * detection_time * ES_normalisation
-# CC channel: charged current interactions
-unoscillated_CC_sample_8B = integrate_over_bins(unoscillatedRate_CC_8B, bin_edges) * detector_nAr40 * detection_time * CC_normalisation
+    bin_edges, energies_GeV = calculate_bins(Etrue_bins)
 
-# Calculate unoscillated event rates for HEP neutrinos
-# ES channel: electron neutrinos
-unoscillated_ES_nue_sample_hep = integrate_over_bins(unoscillatedRate_ES_nue_hep, bin_edges) * detector_ne * detection_time * ES_normalisation
-# ES channel: other neutrino flavors (after oscillation)
-unoscillated_ES_nuother_sample_hep = integrate_over_bins(unoscillatedRate_ES_nuother_hep, bin_edges) * detector_ne * detection_time * ES_normalisation
-# CC channel: charged current interactions
-unoscillated_CC_sample_hep = integrate_over_bins(unoscillatedRate_CC_hep, bin_edges) * detector_nAr40 * detection_time * CC_normalisation
+    unosc_ES_nue_8B     = integrate_over_bins(unoscillatedRate_ES_nue_8B,     bin_edges) .* (detector_ne   * detection_time * ES_normalisation)
+    unosc_ES_nuother_8B = integrate_over_bins(unoscillatedRate_ES_nuother_8B, bin_edges) .* (detector_ne   * detection_time * ES_normalisation)
+    unosc_CC_8B         = integrate_over_bins(unoscillatedRate_CC_8B,         bin_edges) .* (detector_nAr40 * detection_time * CC_normalisation)
+    unosc_ES_nue_hep     = integrate_over_bins(unoscillatedRate_ES_nue_hep,     bin_edges) .* (detector_ne   * detection_time * ES_normalisation)
+    unosc_ES_nuother_hep = integrate_over_bins(unoscillatedRate_ES_nuother_hep, bin_edges) .* (detector_ne   * detection_time * ES_normalisation)
+    unosc_CC_hep         = integrate_over_bins(unoscillatedRate_CC_hep,         bin_edges) .* (detector_nAr40 * detection_time * CC_normalisation)
 
-# Package all unoscillated samples into a named tuple for easy access
-unoscillatedSample = (ES_nue_8B = unoscillated_ES_nue_sample_8B,
-                      ES_nuother_8B = unoscillated_ES_nuother_sample_8B,
-                      CC_8B = unoscillated_CC_sample_8B,
-                      ES_nue_hep = unoscillated_ES_nue_sample_hep,
-                      ES_nuother_hep = unoscillated_ES_nuother_sample_hep,
-                      CC_hep = unoscillated_CC_sample_hep)
+    unoscillatedSample = (
+        ES_nue_8B    = unosc_ES_nue_8B,
+        ES_nuother_8B = unosc_ES_nuother_8B,
+        CC_8B        = unosc_CC_8B,
+        ES_nue_hep   = unosc_ES_nue_hep,
+        ES_nuother_hep = unosc_ES_nuother_hep,
+        CC_hep       = unosc_CC_hep,
+    )
 
-# Optional: Save unoscillated samples to file for later use
-# @save "outputs/unoscillatedSamples.jld2" unoscillated_ES_nue_sample_8B unoscillated_ES_nuother_sample_8B unoscillated_CC_sample_8B unoscillated_ES_nue_sample_hep unoscillated_ES_nuother_sample_hep unoscillated_CC_sample_hep energies_GeV
+    return unoscillatedSample, bin_edges, energies_GeV
+end

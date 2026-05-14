@@ -18,7 +18,7 @@ response systematics like detector purity and reconstruction efficiency.
 Author: [Author name]
 =#
 
-include("../src/histHelpers.jl")
+include(joinpath(@__DIR__, "histHelpers.jl"))
 
 # Energy scale systematic uncertainty
 # Note: This implementation is currently under development

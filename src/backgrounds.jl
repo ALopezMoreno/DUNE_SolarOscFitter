@@ -19,116 +19,109 @@ with optional systematic uncertainties treated as nuisance parameters.
 Author: [Author name]
 =#
 
-include("../src/histHelpers.jl")
+include(joinpath(@__DIR__, "histHelpers.jl"))
 
-# Load background Monte Carlo samples as dataframes
-df_ES_list = extract_dataframes(ES_filepaths_BG)  # ES background samples
-df_CC_list = extract_dataframes(CC_filepaths_BG)  # CC background samples
+"""
+    build_backgrounds(det, Ereco_bins_ES_extended, Ereco_bins_CC_extended)
+        -> (backgrounds, ES_bg_norms_true, CC_bg_norms_true, ES_bg_norms_pars, CC_bg_norms_pars)
 
+Load and process background MC for detector `det`. Returns:
+- `backgrounds`: named tuple `(ES, CC, sides, ES_par_counts, CC_par_counts)` passed to
+  `propagateSamples` at every likelihood evaluation.
+- `ES/CC_bg_norms_true`: true (Asimov) normalization values for nuisance parameters.
+- `ES/CC_bg_norms_pars`: prior `Distribution` objects, one per nuisance parameter.
 
-# Process ES background samples
-ES_bg = []
-ES_sides = []
-for df in df_ES_list
-    # Create histograms with or without MC weights
-    if "weights" in names(df)
-        # Weighted MC samples
-        ES_temp, ES_temp_etrue = create_histogram(df.Ereco[df.mask], Ereco_bins_ES_extended, weights=df.weights[df.mask], normalise=true)
-        ES_temp_selec, _ = create_histogram(df.Ereco[df.mask], Ereco_bins_ES_extended, weights=df.weights[df.mask], normalise=false)
-        ES_temp_total, _ = create_histogram(df.Ereco, Ereco_bins_ES_extended, weights=df.weights, normalise=false)
-    else
-        # Unweighted MC samples
-        ES_temp, ES_temp_etrue = create_histogram(df.Ereco, Ereco_bins_ES_extended, normalise=true)
-        ES_temp_selec, _ = create_histogram(df.Ereco[df.mask], Ereco_bins_ES_extended, normalise=false)
-        ES_temp_total, _ = create_histogram(df.Ereco, Ereco_bins_ES_extended, normalise=false)
-    end
+The par_counts arrays are embedded in `backgrounds` so `normalize_backgrounds` does not
+need separate globals when running multiple detectors concurrently.
+"""
+function build_backgrounds(det, Ereco_bins_ES_extended, Ereco_bins_CC_extended)
+    ES_normalisation   = det.ES_normalisation
+    CC_normalisation   = det.CC_normalisation
+    inclusive_analysis = det.inclusive_analysis
+    ES_mode            = det.ES_mode
+    CC_mode            = det.CC_mode
+    ES_bg_norms        = det.ES_bg_norms
+    CC_bg_norms        = det.CC_bg_norms
+    ES_bg_sys          = det.ES_bg_sys
+    CC_bg_sys          = det.CC_bg_sys
 
-    if "side" in names(df)
-        side = df.side
-    else
-        side = -1
-    end
+    df_ES_list = extract_dataframes(det.ES_filepaths_BG)
+    df_CC_list = extract_dataframes(det.CC_filepaths_BG)
 
-    # Calculate detection efficiency: selected events / total events
-    ES_eff_bg =  @. ifelse(ES_temp_total == 0, 0.0, ES_temp_selec / ES_temp_total)
-    
-    # Scale by detection time, efficiency, and exposure normalization and attenuation ratio over the 50M events of the MC
-    attenuation = sum(ES_temp_total) / 50e6
-
-    push!(ES_bg, ES_temp .* detection_time .* ES_eff_bg .* ES_normalisation .* attenuation)
-    push!(ES_sides, side)
-end
-
-
-# Process CC background samples
-# In inclusive mode CC backgrounds are absorbed into ES_BG — no separate CC BG needed
-CC_bg = []
-if !inclusive_analysis
-for df in df_CC_list
-    # Create histograms with or without MC weights
-    if "weights" in names(df)
-        # Weighted MC samples
-        CC_temp, CC_temp_etrue = create_histogram(df.Ereco, Ereco_bins_CC_extended, weights=df.weights, normalise=true)
-        CC_temp_selec, _ = create_histogram(df.Ereco[df.mask], Ereco_bins_CC_extended, weights=df.weights[df.mask], normalise=false)
-        CC_temp_total, _ = create_histogram(df.Ereco, Ereco_bins_CC_extended, weights=df.weights, normalise=false)
-    else
-        # Unweighted MC samples
-        CC_temp, CC_temp_etrue = create_histogram(df.Ereco, Ereco_bins_CC_extended, normalise=true)
-        CC_temp_selec, _ = create_histogram(df.Ereco[df.mask], Ereco_bins_CC_extended, normalise=false)
-        CC_temp_total, _ = create_histogram(df.Ereco, Ereco_bins_CC_extended, normalise=false)        
-    end
-
-    # Calculate detection efficiency: selected events / total events
-    CC_eff_bg = @. ifelse(CC_temp_total == 0, 0.0, CC_temp_selec / CC_temp_total)
-    
-    # CC MC is already normalised to 1 kt-year; ×10 scales to the 10 kt-year analysis exposure.
-    # NOTE: intentional — update if the target exposure changes.
-    push!(CC_bg, CC_temp_selec .* 10 .* CC_normalisation)
-end
-end  # !inclusive_analysis
-
-# Setup systematic uncertainties for background normalizations
-# These will be treated as nuisance parameters in the MCMC fit
-
-global ES_bg_norms_true = Float64[]       # True normalization values for ES backgrounds
-global ES_bg_norms_pars = Distribution[]  # Prior distributions for ES background systematics
-global ES_bg_par_counts = Int[]           # Count of systematic parameters per ES background
-
-global CC_bg_norms_true = Float64[]       # True normalization values for CC backgrounds
-global CC_bg_norms_pars = Distribution[]  # Prior distributions for CC background systematics
-global CC_bg_par_counts = Int[]           # Count of systematic parameters per CC background
-
-# Apply normalizations and setup systematic parameters for ES backgrounds
-if ES_mode
-    for (bg, norm, sys) in zip(ES_bg, ES_bg_norms, ES_bg_sys)
-        if sys == 0
-            # No systematic uncertainty - apply fixed normalization
-            bg .*= norm
-            push!(ES_bg_par_counts, 0)
+    # ── ES backgrounds ──────────────────────────────────────────────────────
+    ES_bg    = []
+    ES_sides = []
+    for df in df_ES_list
+        if "weights" in names(df)
+            ES_temp, _      = create_histogram(df.Ereco[df.mask], Ereco_bins_ES_extended, weights=df.weights[df.mask], normalise=true)
+            ES_temp_selec, _ = create_histogram(df.Ereco[df.mask], Ereco_bins_ES_extended, weights=df.weights[df.mask], normalise=false)
+            ES_temp_total, _ = create_histogram(df.Ereco,           Ereco_bins_ES_extended, weights=df.weights,          normalise=false)
         else
-            # Systematic uncertainty present - create nuisance parameter
-            push!(ES_bg_norms_true, norm)
-            # Truncated normal prior: mean=norm, std=norm*sys, bounds=[0, 2*norm]
-            push!(ES_bg_norms_pars, truncated(Normal(norm, norm * sys), 0.0, norm*2))
-            push!(ES_bg_par_counts, 1)
+            ES_temp, _      = create_histogram(df.Ereco,            Ereco_bins_ES_extended, normalise=true)
+            ES_temp_selec, _ = create_histogram(df.Ereco[df.mask],  Ereco_bins_ES_extended, normalise=false)
+            ES_temp_total, _ = create_histogram(df.Ereco,            Ereco_bins_ES_extended, normalise=false)
+        end
+        side = "side" in names(df) ? df.side : -1
+        ES_eff_bg   = @. ifelse(ES_temp_total == 0, 0.0, ES_temp_selec / ES_temp_total)
+        attenuation = sum(ES_temp_total) / 50e6
+        push!(ES_bg,    ES_temp .* detection_time .* ES_eff_bg .* ES_normalisation .* attenuation)
+        push!(ES_sides, side)
+    end
+
+    # ── CC backgrounds (disabled in inclusive mode) ──────────────────────────
+    CC_bg = []
+    if !inclusive_analysis
+        for df in df_CC_list
+            if "weights" in names(df)
+                CC_temp_selec, _ = create_histogram(df.Ereco[df.mask], Ereco_bins_CC_extended, weights=df.weights[df.mask], normalise=false)
+                CC_temp_total, _ = create_histogram(df.Ereco,           Ereco_bins_CC_extended, weights=df.weights,          normalise=false)
+            else
+                CC_temp_selec, _ = create_histogram(df.Ereco[df.mask], Ereco_bins_CC_extended, normalise=false)
+                CC_temp_total, _ = create_histogram(df.Ereco,           Ereco_bins_CC_extended, normalise=false)
+            end
+            # CC BG MC is normalised to 1 kt-year; signal MC uses detector_nAr40 = 10 kT,
+            # so total signal scaling is 10 kT × CC_normalisation. Match with ×10 here.
+            push!(CC_bg, CC_temp_selec .* 10 .* CC_normalisation)
         end
     end
-end
 
-# Apply normalizations and setup systematic parameters for CC backgrounds
-if CC_mode
-    for (bg, norm, sys) in zip(CC_bg, CC_bg_norms, CC_bg_sys)
-        if sys == 0
-            # No systematic uncertainty - apply fixed normalization
-            # The MC for CC was created using a 4pi flux of 9.86e-8 n/cm2/s, which corresponds to a flux on the wall of 2.2e-6 n/cm2/s
-            bg .*= norm / 2.2e-6
-            push!(CC_bg_par_counts, 0)
-        else
-            # Systematic uncertainty present - create nuisance parameter
-            push!(CC_bg_norms_true, norm)
-            # Truncated normal prior: mean=norm, std=norm*sys, bounds=[0, 2*norm]
-            push!(CC_bg_norms_pars, truncated(Normal(norm, norm * sys), 0.0, norm*2))
-            push!(CC_bg_par_counts, 1)
+    # ── Systematic uncertainties ──────────────────────────────────────────────
+    ES_bg_norms_true = Float64[]
+    ES_bg_norms_pars = Distribution[]
+    ES_bg_par_counts = Int[]
+
+    CC_bg_norms_true = Float64[]
+    CC_bg_norms_pars = Distribution[]
+    CC_bg_par_counts = Int[]
+
+    if ES_mode
+        for (bg, norm, sys) in zip(ES_bg, ES_bg_norms, ES_bg_sys)
+            if sys == 0
+                bg .*= norm
+                push!(ES_bg_par_counts, 0)
+            else
+                push!(ES_bg_norms_true, norm)
+                push!(ES_bg_norms_pars, truncated(Normal(norm, norm * sys), 0.0, norm * 2))
+                push!(ES_bg_par_counts, 1)
+            end
         end
     end
+
+    if CC_mode && !inclusive_analysis
+        for (bg, norm, sys) in zip(CC_bg, CC_bg_norms, CC_bg_sys)
+            if sys == 0
+                bg .*= norm / 2.2e-6
+                push!(CC_bg_par_counts, 0)
+            else
+                push!(CC_bg_norms_true, norm)
+                push!(CC_bg_norms_pars, truncated(Normal(norm, norm * sys), 0.0, norm * 2))
+                push!(CC_bg_par_counts, 1)
+            end
+        end
+    end
+
+    backgrounds = (ES=ES_bg, CC=CC_bg, sides=ES_sides,
+                   ES_par_counts=ES_bg_par_counts, CC_par_counts=CC_bg_par_counts)
+
+    return backgrounds, ES_bg_norms_true, CC_bg_norms_true, ES_bg_norms_pars, CC_bg_norms_pars
 end

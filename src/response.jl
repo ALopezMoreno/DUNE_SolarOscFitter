@@ -19,7 +19,7 @@ at true energy into observable distributions at reconstructed energy.
 Author: [Author name]
 =#
 
-include("../src/histHelpers.jl")
+include(joinpath(@__DIR__, "histHelpers.jl"))
 
 function create_response_matrix(data, bin_info_x, bin_info_y)
     """
@@ -87,62 +87,6 @@ function create_response_matrix(data, bin_info_x, bin_info_y)
     return contribution_matrix
 end
 
-# Load simulations and create response matrices
-df_nue = CSV.File(nue_filepath) |> DataFrame
-df_nuother = CSV.File(other_filepath) |> DataFrame
-df_ES_angular = CSV.File(angular_filepath) |> DataFrame
-df_CC = CSV.File(CC_filepath) |> DataFrame
-
-# Extend ereco bins from -inf to +inf:
-bins_ES = collect(range(Ereco_bins_ES.min, stop=Ereco_bins_ES.max, length=Ereco_bins_ES.bin_number + 1))
-bins_CC = collect(range(Ereco_bins_CC.min, stop=Ereco_bins_CC.max, length=Ereco_bins_CC.bin_number + 1))
-
-bins_ES[1] = -Inf
-bins_ES[end] = Inf
-
-bins_CC[1] = -Inf
-bins_CC[end] = Inf
-
-global Ereco_bins_ES_extended = (bin_number=Ereco_bins_ES.bin_number, min=Ereco_bins_ES.min, max=Ereco_bins_ES.max, bins=bins_ES)
-global Ereco_bins_CC_extended = (bin_number=Ereco_bins_CC.bin_number, min=Ereco_bins_CC.min, max=Ereco_bins_CC.max, bins=bins_CC)
-
-nue_ES_sample = (x=df_nue.Etrue, y=df_nue.Ereco)
-other_ES_sample = (x=df_nuother.Etrue, y=df_nuother.Ereco)
-angular_ES_sample = (x=df_ES_angular.Ereco, y=df_ES_angular.cos_scatter)
-CC_sample = (x=df_CC.Etrue, y=df_CC.Ereco)
-
-nue_ES_response = create_response_matrix(nue_ES_sample, Etrue_bins, Ereco_bins_ES_extended)
-nuother_ES_response = create_response_matrix(other_ES_sample, Etrue_bins, Ereco_bins_ES_extended)
-
-# transpose angular response because we want Ereco always on the same axis
-angular_ES_response = create_response_matrix(angular_ES_sample, Ereco_bins_ES_extended, cos_scatter_bins)'
-
-CC_response = create_response_matrix(CC_sample, Etrue_bins, Ereco_bins_CC_extended)
-
-# Uniform angular response
-angular_BG_response = fill(1 / cos_scatter_bins.bin_number, size(angular_ES_response))
-
-# Angular cut: mask background response bins below angular_cos_cut (set via ES_cos_cut in config).
-cos_cut = angular_cos_cut                                                                  #
-                                                                                            #
-N = cos_scatter_bins.bin_number                                                             #
-edges = range(cos_scatter_bins.min,                                                         #
-              cos_scatter_bins.max,                                                         #
-              length = N + 1)                                                               #
-                                                                                            #
-centers = 0.5 .* (edges[1:end-1] .+ edges[2:end])                                           #
-                                                                                            #
-mask = centers .>= cos_cut          # length Ncos, Bool                                     #
-                                                                                            #
-n_allowed = count(mask)
-angular_BG_response = zeros(size(angular_ES_response))                                      #
-angular_BG_response[mask, :] .= 1.0 / n_allowed      # uniform over allowed bins only       #
-#############################################################################################
-
-# Save in named tuple
-ES_response = (nue=nue_ES_response, nuother=nuother_ES_response, angular=angular_ES_response)
-responseMatrices = (ES=ES_response, CC=CC_response, BG=(angular=angular_BG_response,))
-
 # Helper function to safely get weights if they exist
 function get_weights(df, mask=nothing)
     if hasproperty(df, :Weights)
@@ -152,84 +96,93 @@ function get_weights(df, mask=nothing)
     end
 end
 
-if inclusive_analysis
-    # CC response mapped onto ES Ereco bins so CC can be folded into the ES channel
-    CC_inclusive_response = create_response_matrix(CC_sample, Etrue_bins, Ereco_bins_ES_extended)
+"""
+    build_response_matrices(det) -> (responseMatrices, Ereco_bins_ES_extended, Ereco_bins_CC_extended)
 
-    CC_incl_selection, _ = create_histogram(
-        df_CC.Ereco[df_CC.mask], Ereco_bins_ES_extended,
-        normalise=false, weights=get_weights(df_CC, df_CC.mask)
-    )
-    CC_incl_total, _ = create_histogram(
-        df_CC.Ereco, Ereco_bins_ES_extended,
-        normalise=false, weights=get_weights(df_CC)
-    )
-    CC_incl_sel_eff = @. ifelse(CC_incl_total == 0, 0.0, CC_incl_selection / CC_incl_total)
-    global CC_incl_eff = CC_incl_sel_eff .* fill(0.9, Ereco_bins_ES.bin_number)
+Build detector response matrices for detector `det`. Uses shared global `Etrue_bins`.
+`responseMatrices` includes `.eff` (selection×reco efficiencies) and `.bins`
+(Ereco/cos-scatter bin specs) so propagation functions need no separate globals.
+"""
+function build_response_matrices(det)
+    Ereco_bins_ES    = det.Ereco_bins_ES
+    Ereco_bins_CC    = det.Ereco_bins_CC
+    cos_scatter_bins = det.cos_scatter_bins
+    angular_cos_cut  = det.angular_cos_cut
+    inclusive_analysis = det.inclusive_analysis
 
-    responseMatrices = (ES=ES_response, CC=CC_response,
-                        CC_inclusive=CC_inclusive_response,
-                        BG=(angular=angular_BG_response,))
+    df_nue      = CSV.File(det.nue_filepath)      |> DataFrame
+    df_nuother  = CSV.File(det.other_filepath)    |> DataFrame
+    df_ES_angular = CSV.File(det.angular_filepath) |> DataFrame
+    df_CC       = CSV.File(det.CC_filepath)       |> DataFrame
+
+    # Extend ereco bins from -Inf to +Inf
+    bins_ES = collect(range(Ereco_bins_ES.min, stop=Ereco_bins_ES.max, length=Ereco_bins_ES.bin_number + 1))
+    bins_CC = collect(range(Ereco_bins_CC.min, stop=Ereco_bins_CC.max, length=Ereco_bins_CC.bin_number + 1))
+    bins_ES[1] = -Inf;  bins_ES[end] = Inf
+    bins_CC[1] = -Inf;  bins_CC[end] = Inf
+    Ereco_bins_ES_extended = (bin_number=Ereco_bins_ES.bin_number, min=Ereco_bins_ES.min, max=Ereco_bins_ES.max, bins=bins_ES)
+    Ereco_bins_CC_extended = (bin_number=Ereco_bins_CC.bin_number, min=Ereco_bins_CC.min, max=Ereco_bins_CC.max, bins=bins_CC)
+
+    nue_ES_sample    = (x=df_nue.Etrue,        y=df_nue.Ereco)
+    other_ES_sample  = (x=df_nuother.Etrue,    y=df_nuother.Ereco)
+    angular_ES_sample = (x=df_ES_angular.Ereco, y=df_ES_angular.cos_scatter)
+    CC_sample        = (x=df_CC.Etrue,         y=df_CC.Ereco)
+
+    nue_ES_response     = create_response_matrix(nue_ES_sample,   Etrue_bins, Ereco_bins_ES_extended)
+    nuother_ES_response = create_response_matrix(other_ES_sample, Etrue_bins, Ereco_bins_ES_extended)
+    angular_ES_response = create_response_matrix(angular_ES_sample, Ereco_bins_ES_extended, cos_scatter_bins)'
+    CC_response         = create_response_matrix(CC_sample, Etrue_bins, Ereco_bins_CC_extended)
+
+    # Angular background response — uniform, then apply forward-hemisphere cut
+    N = cos_scatter_bins.bin_number
+    edges   = range(cos_scatter_bins.min, cos_scatter_bins.max, length=N + 1)
+    centers = 0.5 .* (edges[1:end-1] .+ edges[2:end])
+    ang_mask   = centers .>= angular_cos_cut
+    n_allowed  = count(ang_mask)
+    angular_BG_response = zeros(size(angular_ES_response))
+    angular_BG_response[ang_mask, :] .= 1.0 / n_allowed
+
+    ES_response = (nue=nue_ES_response, nuother=nuother_ES_response, angular=angular_ES_response)
+
+    # Selection efficiencies
+    ES_nue_sel, _    = create_histogram(df_nue.Ereco[df_nue.mask],       Ereco_bins_ES_extended, normalise=false, weights=get_weights(df_nue, df_nue.mask))
+    ES_nue_tot, _    = create_histogram(df_nue.Ereco,                    Ereco_bins_ES_extended, normalise=false, weights=get_weights(df_nue))
+    ES_nuoth_sel, _  = create_histogram(df_nuother.Ereco[df_nuother.mask], Ereco_bins_ES_extended, normalise=false, weights=get_weights(df_nuother, df_nuother.mask))
+    ES_nuoth_tot, _  = create_histogram(df_nuother.Ereco,                 Ereco_bins_ES_extended, normalise=false, weights=get_weights(df_nuother))
+    CC_sel, _        = create_histogram(df_CC.Ereco[df_CC.mask],          Ereco_bins_CC_extended, normalise=false, weights=get_weights(df_CC, df_CC.mask))
+    CC_tot, _        = create_histogram(df_CC.Ereco,                      Ereco_bins_CC_extended, normalise=false, weights=get_weights(df_CC))
+
+    ES_nue_sel_eff  = @. ifelse(ES_nue_tot  == 0, 0.0, ES_nue_sel  / ES_nue_tot)
+    ES_nuoth_sel_eff = @. ifelse(ES_nuoth_tot == 0, 0.0, ES_nuoth_sel / ES_nuoth_tot)
+    CC_sel_eff       = @. ifelse(CC_tot       == 0, 0.0, CC_sel       / CC_tot)
+
+    ES_nue_eff    = ES_nue_sel_eff  .* fill(1.0, Ereco_bins_ES.bin_number)
+    ES_nuother_eff = ES_nuoth_sel_eff .* fill(1.0, Ereco_bins_ES.bin_number)
+    CC_eff         = CC_sel_eff       .* fill(0.9, Ereco_bins_CC.bin_number)
+
+    eff_tuple = (ES_nue=ES_nue_eff, ES_nuother=ES_nuother_eff, CC=CC_eff)
+    bins_tuple = (ES=Ereco_bins_ES_extended, CC=Ereco_bins_CC_extended, cos_scatter=cos_scatter_bins)
+
+    if inclusive_analysis
+        CC_inclusive_response = create_response_matrix(CC_sample, Etrue_bins, Ereco_bins_ES_extended)
+        CC_incl_sel, _ = create_histogram(df_CC.Ereco[df_CC.mask], Ereco_bins_ES_extended,
+                                          normalise=false, weights=get_weights(df_CC, df_CC.mask))
+        CC_incl_tot, _ = create_histogram(df_CC.Ereco, Ereco_bins_ES_extended,
+                                          normalise=false, weights=get_weights(df_CC))
+        CC_incl_sel_eff = @. ifelse(CC_incl_tot == 0, 0.0, CC_incl_sel / CC_incl_tot)
+        CC_incl_eff     = CC_incl_sel_eff .* fill(0.9, Ereco_bins_ES.bin_number)
+        eff_tuple = merge(eff_tuple, (CC_incl=CC_incl_eff,))
+        responseMatrices = (ES=ES_response, CC=CC_response,
+                            CC_inclusive=CC_inclusive_response,
+                            BG=(angular=angular_BG_response,),
+                            eff=eff_tuple, bins=bins_tuple)
+    else
+        responseMatrices = (ES=ES_response, CC=CC_response,
+                            BG=(angular=angular_BG_response,),
+                            eff=eff_tuple, bins=bins_tuple)
+    end
+
+    return responseMatrices, Ereco_bins_ES_extended, Ereco_bins_CC_extended
 end
-
-# Get selection efficiencies
-ES_nue_selection, _ = create_histogram(
-    df_nue.Ereco[df_nue.mask], 
-    Ereco_bins_ES_extended, 
-    normalise=false, 
-    weights=get_weights(df_nue, df_nue.mask)
-)
-
-ES_nuother_selection, _ = create_histogram(
-    df_nuother.Ereco[df_nuother.mask], 
-    Ereco_bins_ES_extended,
-    normalise=false,
-    weights=get_weights(df_nuother, df_nuother.mask)
-)
-
-CC_selection, CC_selected_bin_centers = create_histogram(
-    df_CC.Ereco[df_CC.mask],
-    Ereco_bins_CC_extended,
-    normalise=false,
-    weights=get_weights(df_CC, df_CC.mask)
-)
-
-# For total histograms (no mask)
-ES_nue_total, ES_nue_bin_centers = create_histogram(
-    df_nue.Ereco,
-    Ereco_bins_ES_extended,
-    normalise=false,
-    weights=get_weights(df_nue)
-)
-
-ES_nuother_total, ES_nuother_bin_centers = create_histogram(
-    df_nuother.Ereco,
-    Ereco_bins_ES_extended,
-    normalise=false,
-    weights=get_weights(df_nuother)
-)
-
-CC_total, CC_bin_centers = create_histogram(
-    df_CC.Ereco,
-    Ereco_bins_CC_extended,
-    normalise=false,
-    weights=get_weights(df_CC)
-)
-
-global ES_nue_selection_eff = @. ifelse(ES_nue_total == 0, 0.0, ES_nue_selection / ES_nue_total)
-global ES_nuother_selection_eff = @. ifelse(ES_nuother_total == 0, 0.0, ES_nuother_selection / ES_nuother_total)
-global CC_selection_eff = @. ifelse(CC_total == 0, 0.0, CC_selection / CC_total)
-
-# get reco efficiencies from histFile
-#TO DO. FOR THE MOMENT ASSUME 90% FLAT FOR CC (ES ALREADY INCLUDED IN RECO FILES)
-
-global ES_nue_reco_eff = fill(1., Ereco_bins_ES.bin_number)
-global ES_nuother_reco_eff = fill(1., Ereco_bins_ES.bin_number)
-global CC_reco_eff = fill(0.9, Ereco_bins_CC.bin_number)
-
-# Total efficiency is the product of the two:
-global ES_nue_eff = ES_nue_selection_eff .* ES_nue_reco_eff
-global ES_nuother_eff = ES_nuother_selection_eff .* ES_nuother_reco_eff
-global CC_eff = CC_selection_eff .* CC_reco_eff
 
 

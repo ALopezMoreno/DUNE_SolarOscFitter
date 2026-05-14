@@ -27,7 +27,7 @@
 # Output file prefix for all generated files (chains, plots, etc.)
 # Results will be saved as: outFile_mcmc.bin, outFile_info.txt, etc.
 # outFile: "outputs/CC_10MeVthershold_Shielding_strongCuts_deltam6_HDonly"
-outFile: "outputs/inclusive_VD_only_100kTyr_3D_100cmFidu_wShielding_forwardCut"
+outFile: "outputs/standardSergio_HD_30yr_noEarth_lowThreshold"
 
 # Previous file to continue MCMC chain from (optional)
 # Uncomment to resume a previous run from where it left off
@@ -98,7 +98,7 @@ prior_sin2_th12: Uniform(0.15, 0.5)
 #Uniform prior covering region of interest: Uniform(0.15, 0.5)
 
 # Reactor mixing angle squared sin²θ₁₃  
-prior_sin2_th13: truncated(Normal(0.022, 0.0007), 0.005, 0.035)
+prior_sin2_th13: truncated(Normal(0.022, 0.00000007), 0.005, 0.035)
 # Gaussian prior from reactor neutrino experiments: Truncated(Normal(0.022, 0.0007), 0.005, 0.035)
 # Alternative conservative constraint: Uniform(0.0, 0.1)
 
@@ -115,10 +115,10 @@ prior_dm2_21: Uniform(2e-5, 3e-4)
 # prior_8B_flux: Uniform(1e5, 2e7)
 
 # Option 2: SNO neutral current measurement (~5.3% uncertainty)
-prior_8B_flux: truncated(Normal(5.25e6, 0.28e6), 1.5e6, 1e7)
+# prior_8B_flux: truncated(Normal(5.25e6, 0.28e6), 1.5e6, 1e7)
 
 # Option 3: Future ES measurement constraint (4% uncertainty)
-# prior_8B_flux: Truncated(Normal(5.46e6, 0.218e6), 1.5e6, 1e7)
+prior_8B_flux: Truncated(Normal(5.46e6, 0.218e6), 1.5e6, 1e7)
 
 # HEP neutrino flux (neutrinos/cm²/s)
 prior_HEP_flux: Uniform(0, 2e4)
@@ -141,7 +141,7 @@ maxTuningAttempts: 30   # Maximum tuning cycles (0 = no tuning, faster but less 
 nTuning: 200            # Steps per tuning cycle (recommended: O(1000))
 
 # Systematic uncertainty toggles (disabling speeds up computation)
-earth_potential_uncertainties: true  # Include Earth matter density uncertainties
+earth_potential_uncertainties: false  # Include Earth matter density uncertainties
                                      # Requires earth_normalisation_prior_file
 
 
@@ -157,53 +157,14 @@ llh_bins: 15            # Number of bins per parameter dimension for 2D scans
 thinning: 1 # Thinning factor for the bin-importance diagnostic calculations. 1 == no thinning
 
 #################################
-##### Detector configuration #####
+##### Shared detector configuration #####
 
-# Detector exposure (determines event statistics)
-CC_exposure: 10         # Charged Current exposure in module-years
-ES_exposure: 10         # Elastic Scattering exposure in module-years
-                        # 1 module-year ≈ 10 kton-year for DUNE
-
-##### Background event rates #####
-
-# Background normalizations (events/second/module before cuts ---still after efficiency atm---)
-ES_background_normalisations: [2.2e-6, 2.2e-6, 2.2e-6]   # ES background fluxes in cm-2s-1 -- nominal: 2.2e-6 -- shielded: CHANGE BKG FILES
-CC_background_normalisations: [8.8e-8, 8.8e-8]   # CC background fluxes in cm-2s-1 -- nominal: 2.2e-6 -- shielded: 4.4e-8
-
-# Background systematic uncertainties (fractional)
-ES_background_systematics: [0.02, 0.02, 0.02]   # 2% uncertainty on ES backgrounds  
-CC_background_systematics: [0.02, 0.02]   # 2% uncertainty on each CC background
-
-# Note: Background files must match the number of components specified above
-# ES: 1 component, CC: 2 components (neutrons + gammas)
-
-##### Energy binning configuration #####
-
-# True neutrino energy binning (for oscillation calculations)
+# True neutrino energy binning (for oscillation calculations) — shared across all detectors
 nBins_Etrue: 30         # Number of true energy bins
-range_Etrue: [2, 21]  # True energy range in MeV
+range_Etrue: [1, 21]    # True energy range in MeV
 
-# Reconstructed energy binning (for detector response)
-nBins_Ereco_ES: 20      # ES reconstructed energy bins
-nBins_Ereco_CC: 20      # CC reconstructed energy bins
-
-range_Ereco_ES: [2, 20]  # ES energy range in MeV
-range_Ereco_CC: [2, 20]    # CC energy range in MeV
-
-# Analysis energy thresholds (events below these energies are excluded)
-Ereco_min_ES: 3       # ES threshold in MeV
-Ereco_min_CC: 3       # CC threshold in MeV
-
-# Zenith angle binning (for Earth matter effects)
-nBins_cosz: 30         # Number of cos(zenith) bins from -1 (upward) to 0 (horizontal)
-
-# Scattering angle binning (for ES reconstruction)
-nBins_cos_scatter: 20
-# Use ES scattering?
-use_scattering_info: true
-# Forward-hemisphere cut on cos(scatter angle): events with cos(θ_scatter) < ES_cos_cut are masked.
-# -1.0 = no cut (full range); 0.0 = keep only forward hemisphere (θ < 90°).
-ES_cos_cut: 0.0
+# Zenith angle binning (for Earth matter effects) — shared
+nBins_cosz: 30          # Number of cos(zenith) bins from -1 (upward) to 0 (horizontal)
 
 #######################
 ##### Input files #####
@@ -228,26 +189,104 @@ solar_exposure_file: "inputs/solarExposure.csv"   # Detector exposure vs zenith 
 # Must be JLD2 file with 'posterior_cov' matrix object
 # proposal_matrix: "outputs/posterior_covariance.jld2"
 
-##### Detector response files #####
-
-# Monte Carlo samples for detector response matrices
-# CSV files with columns: Etrue, Ereco, mask (selection), weights (optional)
-# reconstruction_sample_CC: "inputs/sergio_reco_CC_withFullCuts.csv"
-reconstruction_sample_CC: "inputs/inputs_neutronOnly_may2026/Nu/3D/data_file_CC_1mFidu_discri_100Emin.csv"  # CC interactions
-reconstruction_sample_ES_nue:     "inputs/inputs_neutronOnly_may2026/Nu/3D/data_file_ES_nue_1mFidu_discri_100Emin.csv"      # ES ν_e interactions
-reconstruction_sample_ES_nuother: "inputs/inputs_neutronOnly_may2026/Nu/3D/data_file_ES_numutau_1mFidu_discri_100Emin.csv"  # ES ν_μ,τ interactions
-reconstruction_sample_ES_angle: "inputs/ES_angular_reco.csv"
-
-##### Background Monte Carlo files #####
-
-# Background event samples (must match number of components in normalisations above)
-CC_background_files: ["inputs/neutron_bg_CC_sergio_withFullCuts.csv", 
-                      "inputs/gamma_bg_CC_sergio_withFullCuts.csv"]
-ES_background_files: ["inputs/inputs_neutronOnly_may2026/Nbkg/3D/data_file_Nbkg_1mFidu_discri_100Emin_longW.csv",
-                      "inputs/inputs_neutronOnly_may2026/Nbkg/3D/data_file_Nbkg_1mFidu_discri_100Emin_Bottom.csv",
-                      "inputs/inputs_neutronOnly_may2026/Nbkg/3D/data_file_Nbkg_1mFidu_discri_100Emin_shortW.csv"]
-
 ##### Real data file (only used when Asimov == false) #####
 
 data_file: "data.txt"   # Real data file (format TBD)
+
+################################################################################
+# Per-detector configuration blocks
+#
+# Each entry under `detectors:` is an independent detector module with its own
+# exposure, reconstruction files, backgrounds, binning, and analysis mode.
+#
+# Keys per detector:
+#   CC_exposure / ES_exposure  — module-years (1 module-year ≈ 10 kton-year)
+#   singleChannel              — false (both), "ES", or "CC"
+#   inclusiveMode              — true: fold CC signal into ES channel
+#   use_scattering_info        — true: enable ES angular (cos-scatter) likelihood
+#   ES_cos_cut                 — forward-hemisphere cut on cos(scatter); -1 = no cut
+#   nBins_Ereco_ES/CC          — reconstructed energy bins
+#   range_Ereco_ES/CC          — [min, max] in MeV
+#   Ereco_min_ES/CC            — analysis threshold in MeV
+#   nBins_cos_scatter          — cos(scatter) bins for angular analysis
+#   reconstruction_sample_*    — CSV files for detector response matrices
+#   ES_background_files        — list of ES background CSV files
+#   CC_background_files        — list of CC background CSV files
+#   ES/CC_background_normalisations / _systematics — see single-detector docs above
+#
+# Backward compatibility: if no `detectors:` block is present, the fitter reads
+# the old flat keys (CC_exposure, reconstruction_sample_CC, etc.) from the top
+# level and treats them as a single detector named "default".
+################################################################################
+
+# Which detectors to include in the fit. Must be a subset of the keys under `detectors:`.
+# Remove or comment out to use all defined detectors.
+# Examples: [VD]  [HD]  [VD, HD]
+active_detectors: [HD]
+
+detectors:
+  VD:
+    CC_exposure: 20
+    ES_exposure: 20
+    singleChannel: false
+    inclusiveMode: true
+    use_scattering_info: true
+    ES_cos_cut: -1.0
+
+    nBins_Ereco_ES: 20
+    nBins_Ereco_CC: 20
+    range_Ereco_ES: [2, 20]
+    range_Ereco_CC: [2, 20]
+    Ereco_min_ES: 3
+    Ereco_min_CC: 3
+    nBins_cos_scatter: 20
+
+    reconstruction_sample_CC:         "inputs/inputs_neutronOnly_may2026/Nu/3D/data_file_CC_1mFidu_discri_200Emin.csv"
+    reconstruction_sample_ES_nue:     "inputs/inputs_neutronOnly_may2026/Nu/3D/data_file_ES_nue_1mFidu_discri_200Emin.csv"
+    reconstruction_sample_ES_nuother: "inputs/inputs_neutronOnly_may2026/Nu/3D/data_file_ES_numutau_1mFidu_discri_200Emin.csv"
+    reconstruction_sample_ES_angle:   "inputs/ES_angular_reco.csv"
+
+    ES_background_files:
+      - "inputs/inputs_neutronOnly_may2026/Nbkg/3D/data_file_Nbkg_1mFidu_discri_200Emin_longW.csv"
+      - "inputs/inputs_neutronOnly_may2026/Nbkg/3D/data_file_Nbkg_1mFidu_discri_200Emin_Bottom.csv"
+      - "inputs/inputs_neutronOnly_may2026/Nbkg/3D/data_file_Nbkg_1mFidu_discri_200Emin_shortW.csv"
+    CC_background_files:
+      - "inputs/neutron_bg_CC_sergio_withFullCuts.csv"
+      - "inputs/gamma_bg_CC_sergio_withFullCuts.csv"
+
+    ES_background_normalisations: [2.2e-6, 2.2e-6, 2.2e-6]  # ES background fluxes in cm-2s-1 -- nominal: 2.2e-6 -- shielded: CHANGE BKG FILES
+    CC_background_normalisations: [8.8e-8, 8.8e-8]          # CC background fluxes in cm-2s-1 -- nominal: 2.2e-6 -- shielded: 4.4e-8
+    ES_background_systematics:    [0.02, 0.02, 0.02]
+    CC_background_systematics:    [0.02, 0.02]
+
+  # HD detector — January 2026 reconstruction (sergio_reco / Enu_Ereco files).
+  # CC-only analysis, standard (non-inclusive) mode.
+  HD:
+    CC_exposure: 15
+    ES_exposure: 10
+    singleChannel: "CC"
+    inclusiveMode: false
+    use_scattering_info: false
+    ES_cos_cut: -1.0
+    nBins_Ereco_ES: 40
+    nBins_Ereco_CC: 40
+    range_Ereco_ES: [1, 15]
+    range_Ereco_CC: [1, 25]
+    Ereco_min_ES: 3
+    Ereco_min_CC: 1.5
+    nBins_cos_scatter: 30
+    reconstruction_sample_CC:         "inputs/sergio_reco_CC_withFullCuts.csv"
+    reconstruction_sample_ES_nue:     "inputs/Enu_Ereco_ES_nue_smeared.csv"
+    reconstruction_sample_ES_nuother: "inputs/Enu_Ereco_ES_nuother_smeared.csv"
+    reconstruction_sample_ES_angle:   "inputs/ES_angular_reco.csv"
+    ES_background_files:
+      - "inputs/ES_neutron_background_wShielding_1mFidu_discri_angle_cut_100Emin_longW.csv"
+      - "inputs/ES_neutron_background_wShielding_1mFidu_discri_angle_cut_100Emin_Bottom.csv"
+    CC_background_files:
+      - "inputs/neutron_bg_CC_sergio_withFullCuts.csv"
+      - "inputs/gamma_bg_CC_sergio_withFullCuts.csv"
+    ES_background_normalisations: [2.2e-6, 2.2e-6]  # ES background fluxes in cm-2s-1 -- nominal: 2.2e-6 -- shielded: CHANGE BKG FILES
+    CC_background_normalisations: [2.2e-6, 2.2e-6]  # CC background fluxes in cm-2s-1 -- nominal: 2.2e-6 -- shielded: 4.4e-8
+    ES_background_systematics:    [0.02, 0.02]
+    CC_background_systematics:    [0.02, 0.02]
   
