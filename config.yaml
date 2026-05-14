@@ -27,7 +27,7 @@
 # Output file prefix for all generated files (chains, plots, etc.)
 # Results will be saved as: outFile_mcmc.bin, outFile_info.txt, etc.
 # outFile: "outputs/CC_10MeVthershold_Shielding_strongCuts_deltam6_HDonly"
-outFile: "outputs/standardSergio_HD_30yr_noEarth_lowThreshold"
+outFile: "outputs/standard"
 
 # Previous file to continue MCMC chain from (optional)
 # Uncomment to resume a previous run from where it left off
@@ -98,7 +98,7 @@ prior_sin2_th12: Uniform(0.15, 0.5)
 #Uniform prior covering region of interest: Uniform(0.15, 0.5)
 
 # Reactor mixing angle squared sin²θ₁₃  
-prior_sin2_th13: truncated(Normal(0.022, 0.00000007), 0.005, 0.035)
+prior_sin2_th13: truncated(Normal(0.022, 0.0007), 0.005, 0.035)
 # Gaussian prior from reactor neutrino experiments: Truncated(Normal(0.022, 0.0007), 0.005, 0.035)
 # Alternative conservative constraint: Uniform(0.0, 0.1)
 
@@ -141,7 +141,7 @@ maxTuningAttempts: 30   # Maximum tuning cycles (0 = no tuning, faster but less 
 nTuning: 200            # Steps per tuning cycle (recommended: O(1000))
 
 # Systematic uncertainty toggles (disabling speeds up computation)
-earth_potential_uncertainties: false  # Include Earth matter density uncertainties
+earth_potential_uncertainties: true  # Include Earth matter density uncertainties
                                      # Requires earth_normalisation_prior_file
 
 
@@ -222,7 +222,7 @@ data_file: "data.txt"   # Real data file (format TBD)
 # Which detectors to include in the fit. Must be a subset of the keys under `detectors:`.
 # Remove or comment out to use all defined detectors.
 # Examples: [VD]  [HD]  [VD, HD]
-active_detectors: [HD]
+active_detectors: [VD, HD]
 
 detectors:
   VD:
