@@ -16,28 +16,39 @@ SolarOscFitter is a comprehensive analysis framework for studying solar neutrino
 
 ### Prerequisites
 
-- Julia 1.6 or higher
+- Julia 1.12.3 (pinned in `Manifest.toml`)
 - Python 3.7 or higher
 
 ### Julia Dependencies
 
-Install the required Julia packages:
+The repo includes a committed `Manifest.toml` with pinned versions. Install Julia and instantiate:
 
-```julia
-using Pkg
-Pkg.add([
-    "YAML", "Distributions", "JLD2", "HDF5", "PDMats", "Plots", "StatsBase", "BAT", "DensityInterface",
-    "IntervalSets", "CSV", "DataFrames", "StaticArrays", "Interpolations", "QuadGK",
-    "DataStructures", "ArraysOfArrays", "StructArrays", "ElasticArrays"
-])
+```bash
+# Recommended: install Julia via juliaup
+curl -fsSL https://install.julialang.org | sh
+juliaup add 1.12.3 && juliaup default 1.12.3
+
+# Instantiate exact pinned dependencies from Manifest.toml
+julia --project=./ -e "using Pkg; Pkg.instantiate()"
 ```
+
+If you're on a different Julia version and hit compatibility errors, run `Pkg.resolve()` before `Pkg.instantiate()` to re-solve the dependency graph.
 
 ### Python Dependencies
 
 Install the required Python packages:
 
 ```bash
-pip install numpy matplotlib seaborn mplhep cmasher scipy corner h5py pandas
+pip install matplotlib numpy pandas scipy h5py seaborn mplhep cmasher cmap \
+            networkx corner Pillow termcolor peanuts
+```
+
+`plotting.py`, `posteriorHelpers.py`, and `binImportanceHelpers.py` are local modules inside `utils/`. Run plotting scripts from within that directory, or set `PYTHONPATH`:
+
+```bash
+cd utils && python plotOutput.py ...
+# or from anywhere:
+PYTHONPATH=/path/to/SolarOscFitter/utils python utils/plotOutput.py ...
 ```
 
 ### C++ Dependencies
