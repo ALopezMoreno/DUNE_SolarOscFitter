@@ -120,28 +120,38 @@ end # module
 # Global Scope Functions
 # ─────────────────────────────────────────────────────────────────────────────
 
-function compute_angular_components(unoscillatedSample, responseMatrices, params, solarModel, bin_edges, raw_backgrounds)
+function compute_angular_components(unoscillatedSample, responseMatrices, params, solarModel,
+                                    bin_edges, raw_backgrounds, det_flags)
+    Ereco_bins_ES    = responseMatrices.bins.ES
+    cos_scatter_bins = responseMatrices.bins.cos_scatter
+
     mixingPars = get_mixing_parameters(params)
     oscProbs_1e, earth_norm_vector, lookup = setup_earth_propagation(E_calc, mixingPars, params)
-    BG_ES, _ = normalize_backgrounds(raw_backgrounds, params)
-    oscProbs = compute_oscillation_probabilities(E_calc, mixingPars, solarModel, params, oscProbs_1e, earth_norm_vector, lookup)
-    osc = compute_oscillated_samples(unoscillatedSample, params, oscProbs)
+    BG_ES, _ = normalize_backgrounds(raw_backgrounds, params, det_flags.det_name)
+    oscProbs  = compute_oscillation_probabilities(E_calc, mixingPars, solarModel, params,
+                                                  oscProbs_1e, earth_norm_vector, lookup)
+    osc = compute_oscillated_samples(unoscillatedSample, params, oscProbs;
+                                     es_mode=det_flags.ES_mode, cc_mode=det_flags.CC_mode)
 
-    if ES_mode && osc.ES !== nothing
-        es_nue_day = apply_day_response(osc.ES.nue_day, responseMatrices.ES.nue, ES_nue_eff)
-        es_other_day = apply_day_response(osc.ES.nuother_day, responseMatrices.ES.nuother, ES_nuother_eff)
-        es_nue_night = apply_night_response(osc.ES.nue_night, responseMatrices.ES.nue, ES_nue_eff)
+    if det_flags.ES_mode && osc.ES !== nothing
+        ES_nue_eff    = responseMatrices.eff.ES_nue
+        ES_nuother_eff = responseMatrices.eff.ES_nuother
+        es_nue_day    = apply_day_response(osc.ES.nue_day,     responseMatrices.ES.nue,     ES_nue_eff)
+        es_other_day  = apply_day_response(osc.ES.nuother_day, responseMatrices.ES.nuother, ES_nuother_eff)
+        es_nue_night  = apply_night_response(osc.ES.nue_night,     responseMatrices.ES.nue,     ES_nue_eff)
         es_other_night = apply_night_response(osc.ES.nuother_night, responseMatrices.ES.nuother, ES_nuother_eff)
-        es_total = vec(es_nue_day .+ es_other_day) .+ vec(sum(es_nue_night .+ es_other_night, dims=1))
+        es_total   = vec(es_nue_day .+ es_other_day) .+ vec(sum(es_nue_night .+ es_other_night, dims=1))
         ES_angular = responseMatrices.ES.angular .* es_total'
     else
         ES_angular = zeros(cos_scatter_bins.bin_number, Ereco_bins_ES.bin_number)
     end
 
-    if CC_mode && inclusive_analysis && osc.CC !== nothing && hasproperty(responseMatrices, :CC_inclusive)
-        cc_day = apply_day_response(osc.CC.day, responseMatrices.CC_inclusive, CC_incl_eff)
+    if det_flags.CC_mode && det_flags.inclusive_analysis &&
+       osc.CC !== nothing && hasproperty(responseMatrices, :CC_inclusive)
+        CC_incl_eff = responseMatrices.eff.CC_incl
+        cc_day   = apply_day_response(osc.CC.day,   responseMatrices.CC_inclusive, CC_incl_eff)
         cc_night = apply_night_response(osc.CC.night, responseMatrices.CC_inclusive, CC_incl_eff)
-        cc_total = vec(cc_day) .+ vec(sum(cc_night, dims=1))
+        cc_total   = vec(cc_day) .+ vec(sum(cc_night, dims=1))
         CC_angular = responseMatrices.BG.angular .* cc_total'
     else
         CC_angular = zeros(cos_scatter_bins.bin_number, Ereco_bins_ES.bin_number)
@@ -149,7 +159,7 @@ function compute_angular_components(unoscillatedSample, responseMatrices, params
 
     if !isempty(BG_ES)
         bg_night_total = vec(sum(0.5 .* BG_ES' .* exposure_weights, dims=1))
-        bg_total = 0.5 .* vec(BG_ES) .+ bg_night_total
+        bg_total   = 0.5 .* vec(BG_ES) .+ bg_night_total
         BG_angular = responseMatrices.BG.angular .* bg_total'
     else
         BG_angular = zeros(cos_scatter_bins.bin_number, Ereco_bins_ES.bin_number)
@@ -157,9 +167,17 @@ function compute_angular_components(unoscillatedSample, responseMatrices, params
     return ES_angular, CC_angular, BG_angular
 end
 
-function plot_inclusive_angular_diagnostics(unoscillatedSample, responseMatrices, params, solarModel, bin_edges, raw_backgrounds;
-    Ereco_min = Ereco_bins_ES.min * 1e3, Ereco_max = Ereco_bins_ES.max * 1e3, cos_min = cos_scatter_bins.min, cos_max = cos_scatter_bins.max, kwargs...)
-    ES_ang, CC_ang, BG_ang = compute_angular_components(unoscillatedSample, responseMatrices, params, solarModel, bin_edges, raw_backgrounds)
-    PropagationDebug.plot_angular_stacks(ES_ang, CC_ang, BG_ang; Ereco_min=Ereco_min, Ereco_max=Ereco_max, cos_min=cos_min, cos_max=cos_max, kwargs...)
+function plot_inclusive_angular_diagnostics(unoscillatedSample, responseMatrices, params,
+                                             solarModel, bin_edges, raw_backgrounds, det_flags;
+                                             kwargs...)
+    Ereco_bins_ES    = responseMatrices.bins.ES
+    cos_scatter_bins = responseMatrices.bins.cos_scatter
+    ES_ang, CC_ang, BG_ang = compute_angular_components(
+        unoscillatedSample, responseMatrices, params, solarModel,
+        bin_edges, raw_backgrounds, det_flags)
+    PropagationDebug.plot_angular_stacks(ES_ang, CC_ang, BG_ang;
+        Ereco_min = Ereco_bins_ES.min * 1e3, Ereco_max = Ereco_bins_ES.max * 1e3,
+        cos_min   = cos_scatter_bins.min,    cos_max   = cos_scatter_bins.max,
+        kwargs...)
     sleep(20)
 end

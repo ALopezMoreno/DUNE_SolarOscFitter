@@ -19,7 +19,7 @@ converting theoretical predictions into observable event rates.
 Author: [Author name]
 =#
 
-include("../src/oscillations/osc.jl")
+include(joinpath(@__DIR__, "oscillations", "osc.jl"))
 
 # Import oscillation calculation functions
 using .Osc: oscPars, osc_prob_both_slow
@@ -29,7 +29,7 @@ global E_calc = (bin_edges_calc[1:end-1] + bin_edges_calc[2:end]) / 2.0
 
 # Choose fast or slow Earth propagation based on configuration. Choose oscillations calculator (nuFast only works on fast mode)
 if nuFast
-    include("../src/oscillations/nuFast_interface.jl")
+    include(joinpath(@__DIR__, "oscillations", "nuFast_interface.jl"))
     using .nuFastOsc: osc_prob_both_fast, init_engines
     nuFastOsc.init_engines(E_calc, cosz_calc)
 else

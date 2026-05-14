@@ -63,7 +63,7 @@ function track_memory(interval::Float64=0.1)
 end
 
 
-include("../src/logger.jl")
+include(joinpath(@__DIR__, "logger.jl"))
 
 # Function to load parameters from the YAML file
 function load_parameters(yaml_file::String)
@@ -140,6 +140,47 @@ function load_earth_normalisation_prior(jld2_file::String)
     end
 end
 
+"""
+    parse_detector_block(block, name) -> NamedTuple
+
+Parse one entry from the `detectors:` YAML section (or the flat top-level config
+for backward compatibility) into a per-detector named tuple consumed by setup.jl.
+"""
+function parse_detector_block(block::Dict, name::String)
+    sc = get(block, "singleChannel", false)
+    cc_mode = (sc == false || sc == "CC")
+    es_mode = (sc == false || sc == "ES")
+    return (
+        name               = name,
+        ES_normalisation   = Float64(block["ES_exposure"]),
+        CC_normalisation   = Float64(block["CC_exposure"]),
+        nue_filepath       = block["reconstruction_sample_ES_nue"],
+        other_filepath     = block["reconstruction_sample_ES_nuother"],
+        angular_filepath   = block["reconstruction_sample_ES_angle"],
+        CC_filepath        = block["reconstruction_sample_CC"],
+        ES_filepaths_BG    = block["ES_background_files"],
+        CC_filepaths_BG    = block["CC_background_files"],
+        ES_bg_norms        = Float64.(block["ES_background_normalisations"]),
+        CC_bg_norms        = Float64.(block["CC_background_normalisations"]),
+        ES_bg_sys          = Float64.(block["ES_background_systematics"]),
+        CC_bg_sys          = Float64.(block["CC_background_systematics"]),
+        Ereco_bins_ES      = (bin_number=Int(block["nBins_Ereco_ES"]),
+                              min=block["range_Ereco_ES"][1]*1e-3,
+                              max=block["range_Ereco_ES"][2]*1e-3),
+        Ereco_bins_CC      = (bin_number=Int(block["nBins_Ereco_CC"]),
+                              min=block["range_Ereco_CC"][1]*1e-3,
+                              max=block["range_Ereco_CC"][2]*1e-3),
+        E_threshold        = (ES=block["Ereco_min_ES"]*1e-3, CC=block["Ereco_min_CC"]*1e-3),
+        cos_scatter_bins   = (bin_number=Int(block["nBins_cos_scatter"]), min=0.0, max=1.0),
+        CC_mode            = cc_mode,
+        ES_mode            = es_mode,
+        singleChannel      = sc,
+        angular_reco       = Bool(block["use_scattering_info"]),
+        angular_cos_cut    = Float64(get(block, "ES_cos_cut", -1.0)),
+        inclusive_analysis = Bool(get(block, "inclusiveMode", false)),
+    )
+end
+
 function save_settings_to_file(filename::String)
     # Open the file for writing
     open(filename, "w") do file
@@ -150,8 +191,7 @@ function save_settings_to_file(filename::String)
         write(file, "----- General -----\n")
         write(file, "Fast mode: $fast\n")
         write(file, "Use nuFast (overrides Fast mode to *true*): $nuFast\n")
-        write(file, "Earth uncertainty enabled: $earthUncertainty\n")
-        write(file, "Single channel mode: $singleChannel\n\n")
+        write(file, "Earth uncertainty enabled: $earthUncertainty\n\n")
 
         # Solar and Earth models
         write(file, "----- Solar & Earth Models -----\n")
@@ -160,14 +200,29 @@ function save_settings_to_file(filename::String)
         write(file, "Earth model file: $earthModelFile\n")
         write(file, "Earth uncertainty file: $earthUncertaintyFile\n\n")
 
-        # Binning
-        write(file, "----- Binning -----\n")
+        # Shared binning
+        write(file, "----- Shared Binning -----\n")
         write(file, "Etrue bins: $(Etrue_bins)\n")
-        write(file, "Ereco bins (ES): $(Ereco_bins_ES)\n")
-        write(file, "Ereco bins (CC): $(Ereco_bins_CC)\n")
-        write(file, "Energy thresholds (ES, CC): $E_threshold\n")
         write(file, "cos(z) bins: $cosz_bins\n\n")
-        write(file, "cos(s) bins: $cos_scatter_bins\n\n")
+
+        # Per-detector settings
+        write(file, "----- Detectors -----\n")
+        for (dname, det) in detector_configs
+            write(file, "  [$dname]\n")
+            write(file, "    singleChannel: $(det.singleChannel)\n")
+            write(file, "    inclusiveMode: $(det.inclusive_analysis)\n")
+            write(file, "    ES_exposure: $(det.ES_normalisation)\n")
+            write(file, "    CC_exposure: $(det.CC_normalisation)\n")
+            write(file, "    Ereco bins (ES): $(det.Ereco_bins_ES)\n")
+            write(file, "    Ereco bins (CC): $(det.Ereco_bins_CC)\n")
+            write(file, "    E_threshold: $(det.E_threshold)\n")
+            write(file, "    cos_scatter_bins: $(det.cos_scatter_bins)\n")
+            write(file, "    ES background files: $(det.ES_filepaths_BG)\n")
+            write(file, "    CC background files: $(det.CC_filepaths_BG)\n")
+            write(file, "    ES background norms: $(det.ES_bg_norms)\n")
+            write(file, "    CC background norms: $(det.CC_bg_norms)\n")
+        end
+        write(file, "\n")
 
         # MCMC parameters
         write(file, "----- MCMC -----\n")
@@ -191,15 +246,6 @@ function save_settings_to_file(filename::String)
         write(file, "True Δm²₂₁: $dm2_21_true\n")
         write(file, "True ⁸B flux: $integrated_8B_flux_true\n")
         write(file, "True HEP flux: $integrated_HEP_flux_true\n\n")
-
-        # Background files
-        write(file, "----- Backgrounds & Efficiencies -----\n")
-        write(file, "ES background files: $ES_filepaths_BG\n")
-        write(file, "CC background files: $CC_filepaths_BG\n")
-        write(file, "ES background norms: $ES_bg_norms\n")
-        write(file, "CC background norms: $CC_bg_norms\n")
-        write(file, "ES background systematics: $ES_bg_sys\n")
-        write(file, "CC background systematics: $CC_bg_sys\n")
     end
 end
 
@@ -241,35 +287,23 @@ function main()
     # Solar angle exposure over time
     global solarExposureFile = config["solar_exposure_file"]
 
-    # Reconstruction samples
-    global nue_filepath = config["reconstruction_sample_ES_nue"]
-    global other_filepath = config["reconstruction_sample_ES_nuother"]
-    global angular_filepath = config["reconstruction_sample_ES_angle"]
-    global CC_filepath = config["reconstruction_sample_CC"]
-
-    # MC normalisation
-    global ES_normalisation = config["ES_exposure"]
-    global CC_normalisation = config["CC_exposure"]
-
-    # Background MC
-    global ES_filepaths_BG = config["ES_background_files"]
-    global CC_filepaths_BG = config["CC_background_files"]
-
-    # Background normalisations (MC gets normalised to 1)
-    global ES_bg_norms = config["ES_background_normalisations"]
-    global CC_bg_norms = config["CC_background_normalisations"]
-
-    # Systematic uncertainties on the background rates (constant over bins)
-    global ES_bg_sys = config["ES_background_systematics"]
-    global CC_bg_sys = config["CC_background_systematics"]
-
-    # Binning
+    # Shared binning (same for all detectors)
     global Etrue_bins = (bin_number=config["nBins_Etrue"], min=config["range_Etrue"][1]*1e-3, max=config["range_Etrue"][2]*1e-3)
-    global Ereco_bins_ES = (bin_number=config["nBins_Ereco_ES"], min=config["range_Ereco_ES"][1]*1e-3, max=config["range_Ereco_ES"][2]*1e-3)  # The first and last bins are exended ad infinitum
-    global Ereco_bins_CC = (bin_number=config["nBins_Ereco_CC"], min=config["range_Ereco_CC"][1]*1e-3, max=config["range_Ereco_CC"][2]*1e-3)  # The first and last bins are exended ad infinitum
-    global E_threshold = (ES=config["Ereco_min_ES"]*1e-3, CC=config["Ereco_min_CC"]*1e-3)
-    global cosz_bins = (bin_number=config["nBins_cosz"], min=-1, max=0)
-    global cos_scatter_bins = (bin_number=config["nBins_cos_scatter"], min=0, max=1)
+    global cosz_bins  = (bin_number=config["nBins_cosz"], min=-1, max=0)
+
+    # Per-detector configuration blocks
+    if haskey(config, "detectors")
+        active = get(config, "active_detectors", collect(keys(config["detectors"])))
+        global detector_configs = Dict{String,Any}(
+            name => parse_detector_block(config["detectors"][name], name)
+            for name in active
+        )
+    else
+        # Backward-compatible fallback: read flat keys as a single "default" detector
+        global detector_configs = Dict{String,Any}(
+            "default" => parse_detector_block(config, "default")
+        )
+    end
 
     # MCMC parameters
     load_proposal_matrix(config)
@@ -303,28 +337,6 @@ function main()
     global fast = config["fastFit"]
     # use NuFast?
     global nuFast = config["nuFast"]
-
-    # Single channel fit?
-    global singleChannel = get(config, "singleChannel", false)
-    global CC_mode, ES_mode
-    if singleChannel == false
-        CC_mode = true
-        ES_mode = true
-    elseif singleChannel == "CC"
-        CC_mode = true
-        ES_mode = false
-    elseif singleChannel == "ES"
-        CC_mode = false
-        ES_mode = true
-    else
-        error("Invalid value for singleChannel: $singleChannel. Expected false, \"CC\", or \"ES\".")
-    end
-
-    # Angular likelihood info?
-    global angular_reco = config["use_scattering_info"]
-    global angular_cos_cut = get(config, "ES_cos_cut", -1.0)
-    # Inclusive (ES+CC combined) fit?
-    global inclusive_analysis = get(config, "inclusiveMode", false)
 
     # Uncertainties?
     global earthUncertainty = config["earth_potential_uncertainties"]

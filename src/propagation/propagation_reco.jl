@@ -1,36 +1,27 @@
 """
-    compute_ES_event_rates(oscSamplesES, responseMatrices, BG_ES)
+    compute_ES_event_rates(oscSamplesES, responseMatrices, BG_ES, det_flags)
 
 Compute ES day and night event rates (including backgrounds), or zero arrays if
-`ES_mode` is false or `oscSamplesES === nothing`.
+`det_flags.ES_mode` is false or `oscSamplesES === nothing`.
 
-Inputs:
-- oscSamplesES: container with fields `nue_day`, `nue_night`, `nuother_day`, `nuother_night`
-- responseMatrices: container with field `ES` having subfields `nue`, `nuother`
-- BG_ES: 1D background spectrum in Ereco bins
-
-Returns:
-- eventRate_ES_day::Vector{Float64}
-- eventRate_ES_night::Matrix{Float64} (cosz x Ereco)
-
-Uses globals:
-- `ES_mode`, `Ereco_bins_ES`, `cosz_bins`
-- `exposure_weights`, `ES_nue_eff`, `ES_nuother_eff`
-- `apply_day_response`, `apply_night_response`
+`responseMatrices` must carry `.eff.ES_nue`, `.eff.ES_nuother`, `.bins.ES`, `.bins.cos_scatter`.
+Uses shared globals: `cosz_bins`, `exposure_weights`.
 """
-function compute_ES_event_rates(oscSamplesES, responseMatrices, BG_ES)
-    if !ES_mode || oscSamplesES === nothing
+function compute_ES_event_rates(oscSamplesES, responseMatrices, BG_ES, det_flags)
+    Ereco_bins_ES = responseMatrices.bins.ES
+    if !det_flags.ES_mode || oscSamplesES === nothing
         return fill(0.0, Ereco_bins_ES.bin_number),
                fill(0.0, (cosz_bins.bin_number, Ereco_bins_ES.bin_number))
     end
 
-    eventRate_ES_nue_day = apply_day_response(oscSamplesES.nue_day, responseMatrices.ES.nue, ES_nue_eff)
-    eventRate_ES_nue_night = apply_night_response(oscSamplesES.nue_night, responseMatrices.ES.nue, ES_nue_eff)
+    ES_nue_eff    = responseMatrices.eff.ES_nue
+    ES_nuother_eff = responseMatrices.eff.ES_nuother
 
-    eventRate_ES_nuother_day = apply_day_response(oscSamplesES.nuother_day, responseMatrices.ES.nuother, ES_nuother_eff)
+    eventRate_ES_nue_day     = apply_day_response(oscSamplesES.nue_day,     responseMatrices.ES.nue,     ES_nue_eff)
+    eventRate_ES_nue_night   = apply_night_response(oscSamplesES.nue_night, responseMatrices.ES.nue,     ES_nue_eff)
+    eventRate_ES_nuother_day   = apply_day_response(oscSamplesES.nuother_day,   responseMatrices.ES.nuother, ES_nuother_eff)
     eventRate_ES_nuother_night = apply_night_response(oscSamplesES.nuother_night, responseMatrices.ES.nuother, ES_nuother_eff)
 
-    # total ES day/night, including backgrounds (0.5 day/night fraction)
     eventRate_ES_day   = (eventRate_ES_nue_day   .+ eventRate_ES_nuother_day)   .+ 0.5 .* BG_ES
     eventRate_ES_night = (eventRate_ES_nue_night .+ eventRate_ES_nuother_night) .+ 0.5 .* (BG_ES' .* exposure_weights)
 
@@ -38,145 +29,101 @@ function compute_ES_event_rates(oscSamplesES, responseMatrices, BG_ES)
 end
 
 
-"""
-NO LONGER BEING USED --- MIGHT BE IMPLEMENTED FOR HEP SEARCHES WHERE WE STRUGGLE WITH LOW EVENT COUNTS
-compute_ES_angular_event_rates_conditional(oscSamplesES, responseMatrices, angularResponseMatrices, BG_ES)
-
-Compute the reco energy vs. electron scattering angle distribution, combining
-signal and background for an energy-dependent only (conditiona) likelihood. I.e. it assumes no solar-angle dependence in the
-signal; night samples are summed over cos(z) before applying the angular
-response.
-
-Returns zero array if `ES_mode` is false or `oscSamplesES === nothing`.
-
-Inputs:
-- oscSamplesES: container with fields `nue_day`, `nue_night`, `nuother_day`, `nuother_night`
-- responseMatrices: container with field `ES` having subfields `nue`, `nuother` (used to compute 1D energy spectra)
-- angularResponseMatrices: container with fields
-    - `ES`::Matrix{Float64} mapping Ereco bins -> angular bins (cos_scatter x Ereco)
-    - `BG`::Matrix{Float64} mapping Ereco bins -> angular bins (cos_scatter x Ereco)
-- BG_ES: 1D background spectrum in Ereco bins
-
-Returns:
-- eventRate_ES_angular::Matrix{Float64} (cos_scatter x Ereco)
-
-Uses globals:
-- `ES_mode`, `Ereco_bins_ES`, `cos_scatter`
-- `ES_nue_eff`, `ES_nuother_eff`
-- `apply_day_response`, `apply_night_response`
-"""
-function compute_ES_angular_event_rates_conditional(oscSamplesES, responseMatrices, BG_ES)
-    if !ES_mode || oscSamplesES === nothing || !angular_reco
+function compute_ES_angular_event_rates_conditional(oscSamplesES, responseMatrices, BG_ES, det_flags)
+    Ereco_bins_ES    = responseMatrices.bins.ES
+    cos_scatter_bins = responseMatrices.bins.cos_scatter
+    if !det_flags.ES_mode || oscSamplesES === nothing || !det_flags.angular_reco
         return fill(0.0, (cos_scatter_bins.bin_number, Ereco_bins_ES.bin_number))
     end
 
-    # AT THE MOMENT WE DO NOT HAVE SOLAR ANGLE DEPENDENCE
+    ES_nue_eff    = responseMatrices.eff.ES_nue
+    ES_nuother_eff = responseMatrices.eff.ES_nuother
 
-    # 1) Calculate the event rates as usual
-    eventRate_ES_nue_day = apply_day_response(oscSamplesES.nue_day, responseMatrices.ES.nue, ES_nue_eff)
-    eventRate_ES_nue_night = apply_night_response(oscSamplesES.nue_night, responseMatrices.ES.nue, ES_nue_eff)
-
-    eventRate_ES_nuother_day = apply_day_response(oscSamplesES.nuother_day, responseMatrices.ES.nuother, ES_nuother_eff)
+    eventRate_ES_nue_day     = apply_day_response(oscSamplesES.nue_day,     responseMatrices.ES.nue,     ES_nue_eff)
+    eventRate_ES_nue_night   = apply_night_response(oscSamplesES.nue_night, responseMatrices.ES.nue,     ES_nue_eff)
+    eventRate_ES_nuother_day   = apply_day_response(oscSamplesES.nuother_day,   responseMatrices.ES.nuother, ES_nuother_eff)
     eventRate_ES_nuother_night = apply_night_response(oscSamplesES.nuother_night, responseMatrices.ES.nuother, ES_nuother_eff)
 
-    eventRate_ES_day   = (eventRate_ES_nue_day   .+ eventRate_ES_nuother_day)
-    eventRate_ES_night = (eventRate_ES_nue_night .+ eventRate_ES_nuother_night)
+    eventRate_ES_day   = eventRate_ES_nue_day   .+ eventRate_ES_nuother_day
+    eventRate_ES_night = eventRate_ES_nue_night .+ eventRate_ES_nuother_night
 
-    # 2) Collapse the night event rates into 1D arrays of reco energy bins (we ignore solar angle) and sum
     eventRate_ES_night_summed = sum(eventRate_ES_night, dims=1)
     eventRate_ES_combined = vec(eventRate_ES_day) .+ vec(eventRate_ES_night_summed)
 
-    # 3) Rescale the energy slices of the angular response matrices by the event rate in each energy bin
-    #    (the angular response matrices are already normalised over the angles)
-    eventRate_ES_angular_signal = responseMatrices.ES.angular .* eventRate_ES_combined'
+    eventRate_ES_angular_signal     = responseMatrices.ES.angular .* eventRate_ES_combined'
     eventRate_ES_angular_background = responseMatrices.BG.angular .* BG_ES'
 
-    # 4) Sum total
-    eventRate_ES_angular = eventRate_ES_angular_signal .+ eventRate_ES_angular_background
-
-    return eventRate_ES_angular
+    return eventRate_ES_angular_signal .+ eventRate_ES_angular_background
 end
 
 
-function compute_ES_angular_event_rates(oscSamplesES, responseMatrices, BG_ES)
-    if !ES_mode || oscSamplesES === nothing || !angular_reco
+"""
+    compute_ES_angular_event_rates(oscSamplesES, responseMatrices, BG_ES, det_flags)
+
+Compute ES day/night angular (cos-scatter × Ereco) event rates including backgrounds.
+Returns zero arrays if `det_flags.ES_mode` is false or angular_reco is disabled.
+"""
+function compute_ES_angular_event_rates(oscSamplesES, responseMatrices, BG_ES, det_flags)
+    Ereco_bins_ES    = responseMatrices.bins.ES
+    cos_scatter_bins = responseMatrices.bins.cos_scatter
+    if !det_flags.ES_mode || oscSamplesES === nothing || !det_flags.angular_reco
         return fill(0.0, (cos_scatter_bins.bin_number, Ereco_bins_ES.bin_number)),
                fill(0.0, (cos_scatter_bins.bin_number, Ereco_bins_ES.bin_number, cosz_bins.bin_number))
     end
 
-    # 1) Calculate the event rates as usual
-    eventRate_ES_nue_day = apply_day_response(oscSamplesES.nue_day, responseMatrices.ES.nue, ES_nue_eff)
-    eventRate_ES_nue_night = apply_night_response(oscSamplesES.nue_night, responseMatrices.ES.nue, ES_nue_eff)
+    ES_nue_eff    = responseMatrices.eff.ES_nue
+    ES_nuother_eff = responseMatrices.eff.ES_nuother
 
-    eventRate_ES_nuother_day = apply_day_response(oscSamplesES.nuother_day, responseMatrices.ES.nuother, ES_nuother_eff)
+    eventRate_ES_nue_day     = apply_day_response(oscSamplesES.nue_day,     responseMatrices.ES.nue,     ES_nue_eff)
+    eventRate_ES_nue_night   = apply_night_response(oscSamplesES.nue_night, responseMatrices.ES.nue,     ES_nue_eff)
+    eventRate_ES_nuother_day   = apply_day_response(oscSamplesES.nuother_day,   responseMatrices.ES.nuother, ES_nuother_eff)
     eventRate_ES_nuother_night = apply_night_response(oscSamplesES.nuother_night, responseMatrices.ES.nuother, ES_nuother_eff)
 
-    eventRate_ES_day   = (eventRate_ES_nue_day   .+ eventRate_ES_nuother_day)
-    eventRate_ES_night = (eventRate_ES_nue_night .+ eventRate_ES_nuother_night)
+    eventRate_ES_day   = eventRate_ES_nue_day   .+ eventRate_ES_nuother_day
+    eventRate_ES_night = eventRate_ES_nue_night .+ eventRate_ES_nuother_night
 
-    # 2) Split signal and background event rates into their angular distributions
-    eventRate_ES_day_angular_signal = responseMatrices.ES.angular .* vec(eventRate_ES_day)'
+    eventRate_ES_day_angular_signal     = responseMatrices.ES.angular .* vec(eventRate_ES_day)'
     eventRate_ES_day_angular_background = responseMatrices.BG.angular .* vec(BG_ES)' .* 0.5
-
     eventRate_ES_day_angular = eventRate_ES_day_angular_signal .+ eventRate_ES_day_angular_background
 
-    eventRate_ES_night_angular_signal = reshape(responseMatrices.ES.angular, cos_scatter_bins.bin_number, Ereco_bins_ES.bin_number, 1) .* reshape(eventRate_ES_night', 1, Ereco_bins_ES.bin_number, cosz_bins.bin_number)
-    eventRate_ES_night_angular_background = reshape(responseMatrices.BG.angular, cos_scatter_bins.bin_number, Ereco_bins_ES.bin_number, 1) .* reshape(exposure_weights' .* BG_ES, 1, Ereco_bins_ES.bin_number, cosz_bins.bin_number)
-
+    ncos  = cos_scatter_bins.bin_number
+    nErec = Ereco_bins_ES.bin_number
+    ncosz = cosz_bins.bin_number
+    eventRate_ES_night_angular_signal     = reshape(responseMatrices.ES.angular, ncos, nErec, 1) .*
+                                            reshape(eventRate_ES_night', 1, nErec, ncosz)
+    eventRate_ES_night_angular_background = reshape(responseMatrices.BG.angular, ncos, nErec, 1) .*
+                                            reshape(exposure_weights' .* BG_ES, 1, nErec, ncosz)
     eventRate_ES_night_angular = eventRate_ES_night_angular_signal .+ eventRate_ES_night_angular_background .* 0.5
 
-    # 3) Angular cut: mask bins with cos(scatter angle) < angular_cos_cut (set in config).
-    #    0 = forward hemisphere only; -1 = no cut (full range).                 #
-    cos_cut = angular_cos_cut                                                         #
-                                                                                #
-    N = cos_scatter_bins.bin_number                                             #
-    edges = range(cos_scatter_bins.min,                                         #
-                  cos_scatter_bins.max,                                         #
-                  length = N + 1)                                               #
-                                                                                #
-    centers = 0.5 .* (edges[1:end-1] .+ edges[2:end])                           #
-                                                                                #
-    mask = centers .>= cos_cut  # Bool vector, length = Ncos                    #
-                                                                                #
-    eventRate_ES_day_angular .*= mask                                           #
-    eventRate_ES_night_angular .*= reshape(mask, :, 1, 1)                       #
-    #############################################################################
-
-    #P1 = plot(eventRate_ES_day_angular[:, 10])
-    #display(P1)
-    #sleep(100)
+    # Angular cut from det_flags
+    cos_cut = det_flags.angular_cos_cut
+    N = cos_scatter_bins.bin_number
+    edges   = range(cos_scatter_bins.min, cos_scatter_bins.max, length=N + 1)
+    centers = 0.5 .* (edges[1:end-1] .+ edges[2:end])
+    amask   = centers .>= cos_cut
+    eventRate_ES_day_angular   .*= amask
+    eventRate_ES_night_angular .*= reshape(amask, :, 1, 1)
 
     return eventRate_ES_day_angular, eventRate_ES_night_angular
 end
 
 
 """
-    compute_CC_event_rates(oscSamplesCC, responseMatrices, BG_CC)
+    compute_CC_event_rates(oscSamplesCC, responseMatrices, BG_CC, det_flags)
 
 Compute CC day and night event rates (including backgrounds), or zero arrays if
-`CC_mode` is false or `oscSamplesCC === nothing`.
-
-Inputs:
-- oscSamplesCC: container with fields `day`, `night`
-- responseMatrices: container with field `CC`
-- BG_CC: 1D background spectrum in Ereco bins
-
-Returns:
-- eventRate_CC_day::Vector{Float64}
-- eventRate_CC_night::Matrix{Float64} (cosz x Ereco)
-
-Uses globals:
-- `CC_mode`, `Ereco_bins_CC`, `cosz_bins`
-- `exposure_weights`, `CC_eff`
-- `apply_day_response`, `apply_night_response`
+`det_flags.CC_mode` is false or `oscSamplesCC === nothing`.
 """
-function compute_CC_event_rates(oscSamplesCC, responseMatrices, BG_CC)
-    if !CC_mode || oscSamplesCC === nothing
+function compute_CC_event_rates(oscSamplesCC, responseMatrices, BG_CC, det_flags)
+    Ereco_bins_CC = responseMatrices.bins.CC
+    if !det_flags.CC_mode || oscSamplesCC === nothing
         return fill(0.0, Ereco_bins_CC.bin_number),
                fill(0.0, (cosz_bins.bin_number, Ereco_bins_CC.bin_number))
     end
 
-    eventRate_CC_day = apply_day_response(oscSamplesCC.day, responseMatrices.CC, CC_eff) .+ 0.5 .* BG_CC
+    CC_eff = responseMatrices.eff.CC
+
+    eventRate_CC_day   = apply_day_response(oscSamplesCC.day,   responseMatrices.CC, CC_eff) .+ 0.5 .* BG_CC
     eventRate_CC_night = apply_night_response(oscSamplesCC.night, responseMatrices.CC, CC_eff) .+ 0.5 .* (BG_CC' .* exposure_weights)
 
     return eventRate_CC_day, eventRate_CC_night
@@ -184,22 +131,17 @@ end
 
 
 """
-    compute_CC_inclusive_event_rates(oscSamplesCC, responseMatrices)
+    compute_CC_inclusive_event_rates(oscSamplesCC, responseMatrices, det_flags)
 
-Compute CC signal event rates for the inclusive (ES+CC combined) analysis.
-No backgrounds are added — CC lepton-ID backgrounds are already absorbed into BG_ES.
-CC events are treated as isotropic (uniform in cos_scatter) when angular_reco is active.
-
-Returns arrays in ES Ereco bins so they can be directly added to ES rates:
-- angular_reco = false: (Vector(Ereco_ES), Matrix(cosz × Ereco_ES))
-- angular_reco = true:  (Matrix(cos_scatter × Ereco_ES), Array3(cos_scatter × Ereco_ES × cosz))
-
-Uses globals: CC_mode, inclusive_analysis, angular_reco, Ereco_bins_ES, cosz_bins, cos_scatter_bins,
-              CC_incl_eff, exposure_weights
+Compute CC signal event rates for inclusive (ES+CC combined) analysis. Returns arrays
+in ES Ereco bins so they can be added directly to ES rates.
 """
-function compute_CC_inclusive_event_rates(oscSamplesCC, responseMatrices)
-    if !CC_mode || !inclusive_analysis || oscSamplesCC === nothing
-        if angular_reco
+function compute_CC_inclusive_event_rates(oscSamplesCC, responseMatrices, det_flags)
+    Ereco_bins_ES    = responseMatrices.bins.ES
+    Ereco_bins_CC    = responseMatrices.bins.CC
+    cos_scatter_bins = responseMatrices.bins.cos_scatter
+    if !det_flags.CC_mode || !det_flags.inclusive_analysis || oscSamplesCC === nothing
+        if det_flags.angular_reco
             return fill(0.0, (cos_scatter_bins.bin_number, Ereco_bins_ES.bin_number)),
                    fill(0.0, (cos_scatter_bins.bin_number, Ereco_bins_ES.bin_number, cosz_bins.bin_number))
         else
@@ -208,13 +150,17 @@ function compute_CC_inclusive_event_rates(oscSamplesCC, responseMatrices)
         end
     end
 
+    CC_incl_eff = responseMatrices.eff.CC_incl
     cc_day   = apply_day_response(oscSamplesCC.day,   responseMatrices.CC_inclusive, CC_incl_eff)
     cc_night = apply_night_response(oscSamplesCC.night, responseMatrices.CC_inclusive, CC_incl_eff)
 
-    if angular_reco
+    if det_flags.angular_reco
+        ncos  = cos_scatter_bins.bin_number
+        nErec = Ereco_bins_ES.bin_number
+        ncosz = cosz_bins.bin_number
         cc_day_angular   = responseMatrices.BG.angular .* vec(cc_day)'
-        cc_night_angular = reshape(responseMatrices.BG.angular, cos_scatter_bins.bin_number, Ereco_bins_ES.bin_number, 1) .*
-                           reshape(cc_night', 1, Ereco_bins_ES.bin_number, cosz_bins.bin_number)
+        cc_night_angular = reshape(responseMatrices.BG.angular, ncos, nErec, 1) .*
+                           reshape(cc_night', 1, nErec, ncosz)
         return cc_day_angular, cc_night_angular
     else
         return cc_day, cc_night
@@ -222,16 +168,21 @@ function compute_CC_inclusive_event_rates(oscSamplesCC, responseMatrices)
 end
 
 
-function compute_CC_angular_event_rates_signal_only(oscSamplesCC, responseMatrices)
-    if !CC_mode || oscSamplesCC === nothing || !angular_reco
+function compute_CC_angular_event_rates_signal_only(oscSamplesCC, responseMatrices, det_flags)
+    Ereco_bins_CC    = responseMatrices.bins.CC
+    cos_scatter_bins = responseMatrices.bins.cos_scatter
+    if !det_flags.CC_mode || oscSamplesCC === nothing || !det_flags.angular_reco
         return fill(0.0, (cos_scatter_bins.bin_number, Ereco_bins_CC.bin_number))
     end
 
-    eventRate_CC_day = apply_day_response(oscSamplesCC.day, responseMatrices.CC, CC_eff)
+    CC_eff = responseMatrices.eff.CC
+    eventRate_CC_day   = apply_day_response(oscSamplesCC.day,   responseMatrices.CC, CC_eff)
     eventRate_CC_night = apply_night_response(oscSamplesCC.night, responseMatrices.CC, CC_eff)
 
-    eventRate_CC_day_angular = responseMatrices.CC.angular .* vec(eventRate_CC_day)'
-    eventRate_CC_night_angular = responseMatrices.CC.angular .* reshape(eventRate_CC_night', 1, Ereco_bins_CC.bin_number, cosz_bins.bin_number)
+    ncosz = cosz_bins.bin_number
+    eventRate_CC_day_angular   = responseMatrices.CC.angular .* vec(eventRate_CC_day)'
+    eventRate_CC_night_angular = responseMatrices.CC.angular .*
+                                 reshape(eventRate_CC_night', 1, Ereco_bins_CC.bin_number, ncosz)
 
     return eventRate_CC_day_angular, eventRate_CC_night_angular
 end

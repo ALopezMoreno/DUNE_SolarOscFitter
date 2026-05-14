@@ -18,22 +18,29 @@ function ES_conversions(side, norm_value)
 end
 
 """
-    normalize_backgrounds(raw_backgrounds, params)
+    normalize_backgrounds(raw_backgrounds, params, det_name::String)
 
 Compute the summed ES and CC background vectors by applying nuisance-parameter
 scale factors on-the-fly, without copying the raw arrays.
 
-Uses globals:
-- `ES_bg_par_counts`
-- `CC_bg_par_counts`
+`det_name` is used to construct the parameter-name prefix, e.g. `"VD"` →
+looks up `:VD_ES_bg_norm_1`, `:VD_ES_bg_norm_2`, … in `params`.
+
+`raw_backgrounds` must carry `ES_par_counts` and `CC_par_counts` fields
+(set by `build_backgrounds`).
 
 Returns:
 - BG_ES :: Vector{Float64}
 - BG_CC :: Vector{Float64}
 """
-function normalize_backgrounds(raw_backgrounds, params)
-    es_norms = _params_by_prefix(params, Val(:ES_bg_norm_))
-    cc_norms = _params_by_prefix(params, Val(:CC_bg_norm_))
+function normalize_backgrounds(raw_backgrounds, params, det_name::String)
+    es_prefix = Val(Symbol(det_name, "_ES_bg_norm_"))
+    cc_prefix = Val(Symbol(det_name, "_CC_bg_norm_"))
+    es_norms = _params_by_prefix(params, es_prefix)
+    cc_norms = _params_by_prefix(params, cc_prefix)
+
+    ES_bg_par_counts = raw_backgrounds.ES_par_counts
+    CC_bg_par_counts = raw_backgrounds.CC_par_counts
 
     # ES backgrounds
     if isempty(raw_backgrounds.ES)

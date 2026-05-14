@@ -997,7 +997,7 @@ def plot_default_corner(data, diagnostics=False):
         return fig
 
 
-def overlay_contours(data, ax, fill=False, **plotKwargs):
+def overlay_contours(data, ax, fill=False, smooth=True, **plotKwargs):
     hull = ConvexHull(data)
     ordered_points = data[hull.vertices]
     # Extract x and y coordinates from ordered points
@@ -1007,22 +1007,22 @@ def overlay_contours(data, ax, fill=False, **plotKwargs):
     sorted_x = np.append(x, x[0])
     sorted_y = np.append(y, y[0])
 
-    t = np.arange(0, len(sorted_x))
-    cs_x = CubicSpline(t, sorted_x)
-    cs_y = CubicSpline(t, sorted_y)
-
-    # Generate the smoothed perimeter points
-    num_points = int(len(x) * 2.7 )  # Adjust as needed
-    smoothed_t = np.linspace(0, len(sorted_x) - 1, num_points)
-    smoothed_x = cs_x(smoothed_t)
-    smoothed_y = cs_y(smoothed_t)
-
-    # Plot the smoothed contour
+    if smooth:
+        t = np.arange(0, len(sorted_x))
+        cs_x = CubicSpline(t, sorted_x)
+        cs_y = CubicSpline(t, sorted_y)
+        num_points = int(len(x) * 2.7)
+        smoothed_t = np.linspace(0, len(sorted_x) - 1, num_points)
+        plot_x = cs_x(smoothed_t)
+        plot_y = cs_y(smoothed_t)
+    else:
+        plot_x = sorted_x
+        plot_y = sorted_y
 
     if not fill:
-        ax.plot(smoothed_x, smoothed_y, **plotKwargs)
+        ax.plot(plot_x, plot_y, **plotKwargs)
     else:
-        polygon = np.asarray([smoothed_x, smoothed_y]).T
+        polygon = np.asarray([plot_x, plot_y]).T
         pol = plt.Polygon(polygon, closed=False, fill=True, **plotKwargs)
         ax.add_patch(pol)
 
@@ -1084,10 +1084,16 @@ def add_external_solar_data(ax):
     bestFitGlobal = np.genfromtxt('inputs/contours/bestFitGlobal.csv', delimiter=',')
     bestFitGlobal[1] = bestFitGlobal[1]*1e-1
 
+    ciemat1 = np.genfromtxt('inputs/contours/ciemat_HDcentral_1sigma.csv', delimiter=',')
+    ciemat1[:, 1] = ciemat1[:, 1]*1e-1
+
+    ciemat2 = np.genfromtxt('inputs/contours/ciemat_HDcentral_2sigma.csv', delimiter=',')
+    ciemat2[:, 1] = ciemat2[:, 1]*1e-1
+
     contcol = 'darksalmon'
     kamcol = 'purple'
     globcol = 'orange'
-    snocol = 'green'
+    snocol = 'limegreen'
     junocol = "crimson"
 
     #kamcol = '#009E73'
@@ -1109,6 +1115,9 @@ def add_external_solar_data(ax):
     overlay_contours(juno1, ax, color=junocol, lw=2, ls='-')  # linewidth=10)
     overlay_contours(juno2, ax, color=junocol, lw=2, label='JUNO', ls='-')
     overlay_contours(juno3, ax, color=junocol, lw=2, ls='-')
+
+    overlay_contours(ciemat1, ax, smooth=False, color=snocol, lw=2, ls='-')
+    overlay_contours(ciemat2, ax, smooth=False, color=snocol, lw=2, label='CIEMAT', ls='-')
 
     ax.plot(bestFitkamLAND[0], bestFitkamLAND[1], color=kamcol, linestyle='', marker='s', markersize=5)
     ax.plot(bestFitGlobal[0], bestFitGlobal[1], color=globcol, linestyle='', marker='P', markersize=6)

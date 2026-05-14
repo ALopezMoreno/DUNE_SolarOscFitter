@@ -156,11 +156,12 @@ function compute_oscillation_probabilities(
 end
 
 
-function compute_oscillated_samples(unoscillatedSample, params, oscProbs)
+function compute_oscillated_samples(unoscillatedSample, params, oscProbs;
+                                    es_mode::Bool=true, cc_mode::Bool=true)
     ES = nothing
     CC = nothing
 
-    if ES_mode
+    if es_mode
         ES = (
             nue_day =
                 unoscillatedSample.ES_nue_8B  .* oscProbs.nue_8B_day  .* params.integrated_8B_flux .+
@@ -180,7 +181,7 @@ function compute_oscillated_samples(unoscillatedSample, params, oscProbs)
         )
     end
 
-    if CC_mode
+    if cc_mode
         CC = (
             day =
                 unoscillatedSample.CC_8B  .* oscProbs.nue_8B_day  .* params.integrated_8B_flux .+
