@@ -98,7 +98,7 @@ prior_sin2_th12: Uniform(0.15, 0.5)
 #Uniform prior covering region of interest: Uniform(0.15, 0.5)
 
 # Reactor mixing angle squared sin²θ₁₃  
-prior_sin2_th13: truncated(Normal(0.022, 0.00000007), 0.005, 0.035)
+prior_sin2_th13: truncated(Normal(0.022, 0.0007), 0.005, 0.035)
 # Gaussian prior from reactor neutrino experiments: Truncated(Normal(0.022, 0.0007), 0.005, 0.035)
 # Alternative conservative constraint: Uniform(0.0, 0.1)
 
