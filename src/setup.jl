@@ -78,6 +78,9 @@ for (det_name, det) in detector_configs
     if det.inclusive_analysis
         @logmsg Setup ("  Inclusive mode: CC signal folded into ES channel. CC backgrounds disabled.")
     end
+    if det.semi_inclusive_analysis
+        @logmsg Setup ("  Semi-inclusive mode: forward hemisphere inclusive, backward hemisphere CC + mis-ID ES.")
+    end
 
     # ── Build unoscillated sample ──────────────────────────────────────────
     unoscillatedSample_det, bin_edges_det, _ = build_unoscillated_sample(det)
@@ -111,7 +114,7 @@ for (det_name, det) in detector_configs
             true_parameters_det[Symbol("$(det_name)_ES_bg_norm_$i")] = norm
         end
     end
-    if det.CC_mode && !det.inclusive_analysis
+    if det.CC_mode && (!det.inclusive_analysis || det.semi_inclusive_analysis)
         for (i, norm) in enumerate(CC_bg_norms_true_det)
             true_parameters_det[Symbol("$(det_name)_CC_bg_norm_$i")] = norm
         end
@@ -120,12 +123,13 @@ for (det_name, det) in detector_configs
 
     # ── det_flags: per-detector mode flags for propagateSamples ───────────
     det_flags = (
-        ES_mode            = det.ES_mode,
-        CC_mode            = det.CC_mode,
-        angular_reco       = det.angular_reco,
-        inclusive_analysis = det.inclusive_analysis,
-        angular_cos_cut    = det.angular_cos_cut,
-        det_name           = det_name,
+        ES_mode                 = det.ES_mode,
+        CC_mode                 = det.CC_mode,
+        angular_reco            = det.angular_reco,
+        inclusive_analysis      = det.inclusive_analysis,
+        semi_inclusive_analysis = det.semi_inclusive_analysis,
+        angular_cos_cut         = det.angular_cos_cut,
+        det_name                = det_name,
     )
 
     # ── Propagation closure (captures det_flags) ───────────────────────────
@@ -152,13 +156,13 @@ for (det_name, det) in detector_configs
     if isnothing(index_ES_det)
         error("[$det_name] E_threshold.ES = $(det.E_threshold.ES) exceeds all ES reco-energy bins.")
     end
-    if isnothing(index_CC_det) && det.CC_mode && !det.inclusive_analysis
+    if isnothing(index_CC_det) && det.CC_mode && (!det.inclusive_analysis || det.semi_inclusive_analysis)
         error("[$det_name] E_threshold.CC = $(det.E_threshold.CC) exceeds all CC reco-energy bins.")
     end
     index_CC_det = isnothing(index_CC_det) ? 1 : index_CC_det
 
     # ── Day-night asymmetry logging ────────────────────────────────────────
-    CC_bg_aboveThreshold = (det.inclusive_analysis || isempty(BG_CC_tot_true)) ?
+    CC_bg_aboveThreshold = ((det.inclusive_analysis && !det.semi_inclusive_analysis) || isempty(BG_CC_tot_true)) ?
                             0.0 : sum(BG_CC_tot_true[index_CC_det:end])
     ES_bg_aboveThreshold = sum(BG_ES_tot_true[index_ES_det:end])
 
@@ -212,7 +216,7 @@ for (det_name, det) in detector_configs
         ES_combined = zeros(size(CC_combined))
     end
 
-    if det.inclusive_analysis && !isnothing(CC_incl_spectrum_det)
+    if (det.inclusive_analysis || det.semi_inclusive_analysis) && !isnothing(CC_incl_spectrum_det)
         incl_total = sum(ES_combined[index_ES_det:end])
         CC_above   = sum(CC_incl_spectrum_det[index_ES_det:end])
         BG_above   = ES_bg_aboveThreshold
@@ -223,7 +227,7 @@ for (det_name, det) in detector_configs
         @logmsg Setup "    of which BG: $(sci_notation(BG_above))"
     else
         det.ES_mode && @logmsg Setup "  Total ES data above threshold: $(sci_notation(sum(ES_combined[index_ES_det:end])))"
-        if det.CC_mode && !det.inclusive_analysis
+        if det.CC_mode && (!det.inclusive_analysis || det.semi_inclusive_analysis)
             CC_total_above = sum(CC_combined[index_CC_det:end])
             CC_sig_above   = CC_total_above - CC_bg_aboveThreshold
             @logmsg Setup "  Total CC data above threshold: $(sci_notation(CC_total_above))"
@@ -235,12 +239,11 @@ for (det_name, det) in detector_configs
     @logmsg Setup @sprintf("  D-N asymmetry CC: %.4f%%", eff_asymm_CC * 100)
 
     # ── Angular diagnostics (debug) ────────────────────────────────────────
-    if det.inclusive_analysis && det.angular_reco
-        plot_inclusive_angular_diagnostics(
+    if det.ES_mode || det.CC_mode
+        save_debug_data(
             unoscillatedSample_det, responseMatrices_det, true_params_det,
             solarModel, bin_edges_det, backgrounds_det, det_flags;
-            n_panels  = 6,
-            save_path = "$(outFile)_$(det_name)_angular_stacks.pdf",
+            save_path = "$(outFile)_$(det_name)_angular_stacks.jld2",
         )
     end
 
@@ -282,9 +285,10 @@ include(joinpath(@__DIR__, "likelihoods", "likelihood_main.jl"))
 # ─────────────────────────────────────────────────────────────────────────────
 let _det  = first(values(detector_configs)),
     _out  = first(values(detector_outputs))
-    global angular_reco       = _det.angular_reco
-    global inclusive_analysis = _det.inclusive_analysis
-    global ES_mode            = _det.ES_mode
+    global angular_reco            = _det.angular_reco
+    global inclusive_analysis      = _det.inclusive_analysis
+    global semi_inclusive_analysis = _det.semi_inclusive_analysis
+    global ES_mode                 = _det.ES_mode
     global CC_mode            = _det.CC_mode
     global singleChannel      = _det.singleChannel
     global index_ES           = _out.likelihood_inputs.index_ES

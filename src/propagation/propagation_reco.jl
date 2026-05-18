@@ -140,7 +140,7 @@ function compute_CC_inclusive_event_rates(oscSamplesCC, responseMatrices, det_fl
     Ereco_bins_ES    = responseMatrices.bins.ES
     Ereco_bins_CC    = responseMatrices.bins.CC
     cos_scatter_bins = responseMatrices.bins.cos_scatter
-    if !det_flags.CC_mode || !det_flags.inclusive_analysis || oscSamplesCC === nothing
+    if !det_flags.CC_mode || !(det_flags.inclusive_analysis || det_flags.semi_inclusive_analysis) || oscSamplesCC === nothing
         if det_flags.angular_reco
             return fill(0.0, (cos_scatter_bins.bin_number, Ereco_bins_ES.bin_number)),
                    fill(0.0, (cos_scatter_bins.bin_number, Ereco_bins_ES.bin_number, cosz_bins.bin_number))
@@ -165,6 +165,37 @@ function compute_CC_inclusive_event_rates(oscSamplesCC, responseMatrices, det_fl
     else
         return cc_day, cc_night
     end
+end
+
+
+"""
+    compute_ES_misID_CC_event_rates(oscSamplesES, responseMatrices, det_flags)
+
+CC-bin event rates for backward-scattered ES events mis-identified as CC.
+
+`responseMatrices` must carry `.CC_misID_nue` and `.CC_misID_nuother` — precomputed
+`(N_Etrue × N_Ereco_CC)` matrices that encode the full two-step chain:
+  1. 100%-efficiency ES reco pass (normalised ES response, no `ES_nue_eff` applied).
+  2. CC reco pass treating `e_reco_ES` as pseudo-true energy (via CC response reindexed
+     to ES reco bin centres — the stated approximation).
+Backward angular fraction is already folded into the matrices.
+
+CC efficiency (`eff.CC`) is applied here; ES selection efficiency is NOT.
+Only active when `det_flags.semi_inclusive_analysis` is true.
+"""
+function compute_ES_misID_CC_event_rates(oscSamplesES, responseMatrices, det_flags)
+    Ereco_bins_CC = responseMatrices.bins.CC
+    if !det_flags.semi_inclusive_analysis || !det_flags.ES_mode || oscSamplesES === nothing
+        return fill(0.0, Ereco_bins_CC.bin_number),
+               fill(0.0, (cosz_bins.bin_number, Ereco_bins_CC.bin_number))
+    end
+    CC_eff = responseMatrices.eff.CC
+    misID_nue_day     = apply_day_response(oscSamplesES.nue_day,       responseMatrices.CC_misID_nue,     CC_eff)
+    misID_nue_night   = apply_night_response(oscSamplesES.nue_night,   responseMatrices.CC_misID_nue,     CC_eff)
+    misID_nuoth_day   = apply_day_response(oscSamplesES.nuother_day,   responseMatrices.CC_misID_nuother, CC_eff)
+    misID_nuoth_night = apply_night_response(oscSamplesES.nuother_night, responseMatrices.CC_misID_nuother, CC_eff)
+    return misID_nue_day .+ misID_nuoth_day,
+           misID_nue_night .+ misID_nuoth_night
 end
 
 

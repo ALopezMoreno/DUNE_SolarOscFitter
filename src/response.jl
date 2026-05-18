@@ -104,11 +104,12 @@ Build detector response matrices for detector `det`. Uses shared global `Etrue_b
 (Ereco/cos-scatter bin specs) so propagation functions need no separate globals.
 """
 function build_response_matrices(det)
-    Ereco_bins_ES    = det.Ereco_bins_ES
-    Ereco_bins_CC    = det.Ereco_bins_CC
-    cos_scatter_bins = det.cos_scatter_bins
-    angular_cos_cut  = det.angular_cos_cut
-    inclusive_analysis = det.inclusive_analysis
+    Ereco_bins_ES           = det.Ereco_bins_ES
+    Ereco_bins_CC           = det.Ereco_bins_CC
+    cos_scatter_bins        = det.cos_scatter_bins
+    angular_cos_cut         = det.angular_cos_cut
+    inclusive_analysis      = det.inclusive_analysis
+    semi_inclusive_analysis = det.semi_inclusive_analysis
 
     df_nue      = CSV.File(det.nue_filepath)      |> DataFrame
     df_nuother  = CSV.File(det.other_filepath)    |> DataFrame
@@ -163,7 +164,8 @@ function build_response_matrices(det)
     eff_tuple = (ES_nue=ES_nue_eff, ES_nuother=ES_nuother_eff, CC=CC_eff)
     bins_tuple = (ES=Ereco_bins_ES_extended, CC=Ereco_bins_CC_extended, cos_scatter=cos_scatter_bins)
 
-    if inclusive_analysis
+    if inclusive_analysis || semi_inclusive_analysis
+        # CC mapped to ES bins — used for the forward inclusive hemisphere in both modes
         CC_inclusive_response = create_response_matrix(CC_sample, Etrue_bins, Ereco_bins_ES_extended)
         CC_incl_sel, _ = create_histogram(df_CC.Ereco[df_CC.mask], Ereco_bins_ES_extended,
                                           normalise=false, weights=get_weights(df_CC, df_CC.mask))
@@ -172,10 +174,59 @@ function build_response_matrices(det)
         CC_incl_sel_eff = @. ifelse(CC_incl_tot == 0, 0.0, CC_incl_sel / CC_incl_tot)
         CC_incl_eff     = CC_incl_sel_eff .* fill(0.9, Ereco_bins_ES.bin_number)
         eff_tuple = merge(eff_tuple, (CC_incl=CC_incl_eff,))
-        responseMatrices = (ES=ES_response, CC=CC_response,
-                            CC_inclusive=CC_inclusive_response,
-                            BG=(angular=angular_BG_response,),
-                            eff=eff_tuple, bins=bins_tuple)
+
+        if semi_inclusive_analysis
+            # ── CC angular split fractions (uniform-CC assumption) ────────────
+            # ang_mask selects FORWARD bins (centers >= angular_cos_cut), already computed above.
+            Ncos       = cos_scatter_bins.bin_number
+            f_CC_above = count(ang_mask) / Ncos   # fraction of CC in forward hemisphere
+            f_CC_below = 1.0 - f_CC_above         # fraction of CC in backward hemisphere
+
+            # ── Mis-ID response: two-step ES→CC chain ────────────────────────
+            # Step 1: nue/nuother_ES_response (normalised, NO efficiency) encodes the
+            #   100%-efficiency ES reco pass.  ES_nue_eff is deliberately NOT applied here.
+            # Step 2: CC_response reindexed to ES reco bin centres encodes the CC reco pass
+            #   treating e_reco_ES as pseudo-true energy (the stated approximation).
+            # Backward fraction (per Ereco_ES bin) selects only backward-scattered ES events.
+            N_ES        = Ereco_bins_ES.bin_number
+            ES_centers  = 0.5 .* (bins_ES[1:end-1] .+ bins_ES[2:end])
+            Etrue_edges = collect(range(Etrue_bins.min, Etrue_bins.max,
+                                        length = Etrue_bins.bin_number + 1))
+
+            # Reindex CC response rows by ES reco bin centres
+            CC_response_as_ereco = zeros(N_ES, Ereco_bins_CC.bin_number)
+            for j in 1:N_ES
+                etrue_bin = min(searchsortedlast(Etrue_edges, ES_centers[j]),
+                                Etrue_bins.bin_number)
+                if etrue_bin >= 1
+                    CC_response_as_ereco[j, :] = CC_response[etrue_bin, :]
+                end
+            end
+
+            # Backward angular fraction per Ereco_ES bin
+            backward_frac = vec(sum(angular_ES_response[.!ang_mask, :], dims=1))  # (N_Ereco_ES,)
+
+            # Scale ES response columns by backward fraction, then fold with CC_response_as_ereco.
+            # Result: (N_Etrue × N_Ereco_CC) matrix encoding the full backward mis-ID chain.
+            nue_ES_backward     = nue_ES_response    .* backward_frac'
+            nuother_ES_backward = nuother_ES_response .* backward_frac'
+            CC_misID_nue_response     = nue_ES_backward    * CC_response_as_ereco
+            CC_misID_nuother_response = nuother_ES_backward * CC_response_as_ereco
+
+            responseMatrices = (ES=ES_response, CC=CC_response,
+                                CC_inclusive=CC_inclusive_response,
+                                CC_misID_nue=CC_misID_nue_response,
+                                CC_misID_nuother=CC_misID_nuother_response,
+                                CC_split=(above=f_CC_above, below=f_CC_below),
+                                BG=(angular=angular_BG_response,),
+                                eff=eff_tuple, bins=bins_tuple)
+        else
+            # Pure inclusive (existing path unchanged)
+            responseMatrices = (ES=ES_response, CC=CC_response,
+                                CC_inclusive=CC_inclusive_response,
+                                BG=(angular=angular_BG_response,),
+                                eff=eff_tuple, bins=bins_tuple)
+        end
     else
         responseMatrices = (ES=ES_response, CC=CC_response,
                             BG=(angular=angular_BG_response,),

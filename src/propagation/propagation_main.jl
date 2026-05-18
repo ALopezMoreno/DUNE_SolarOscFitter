@@ -106,7 +106,35 @@ function propagateSamples(unoscillatedSample, responseMatrices, params, solarMod
 
     # 7) CC reco event rates
     CC_incl_spectrum = nothing
-    if det_flags.inclusive_analysis
+    if det_flags.semi_inclusive_analysis
+        f_above = responseMatrices.CC_split.above
+        f_below = responseMatrices.CC_split.below
+
+        # Forward hemisphere: inclusive CC (scaled to above-cut fraction, no double-counting)
+        cc_incl_day, cc_incl_night =
+            compute_CC_inclusive_event_rates(oscillatedSample.CC, responseMatrices, det_flags)
+        # CC_incl_spectrum reflects the f_above-scaled contribution actually added to ES rates.
+        CC_incl_spectrum = f_above .* if det_flags.angular_reco
+            vec(sum(cc_incl_day, dims=1)) .+ vec(sum(cc_incl_night, dims=(1, 3)))
+        else
+            cc_incl_day .+ vec(sum(cc_incl_night, dims=1))
+        end
+        eventRate_ES_day   .+= f_above .* cc_incl_day
+        eventRate_ES_night .+= f_above .* cc_incl_night
+
+        # Backward hemisphere: CC signal + backgrounds (scaled to below-cut fraction) + mis-ID ES.
+        # Scaling by f_below applies uniformly to CC signal and CC backgrounds
+        # (both assumed isotropically distributed in angle).
+        eventRate_CC_day, eventRate_CC_night =
+            compute_CC_event_rates(oscillatedSample.CC, responseMatrices, BG_CC, det_flags)
+        eventRate_CC_day   .*= f_below
+        eventRate_CC_night .*= f_below
+        misID_day, misID_night =
+            compute_ES_misID_CC_event_rates(oscillatedSample.ES, responseMatrices, det_flags)
+        eventRate_CC_day   .+= misID_day
+        eventRate_CC_night .+= misID_night
+
+    elseif det_flags.inclusive_analysis
         cc_incl_day, cc_incl_night =
             compute_CC_inclusive_event_rates(oscillatedSample.CC, responseMatrices, det_flags)
         CC_incl_spectrum = if det_flags.angular_reco

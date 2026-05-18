@@ -392,3 +392,4 @@ contribution_matrix_*.jl*
 
 # One-off gallery/presentation scripts
 utils/cbar_gallery.py
+test_semiinclusive.yaml
