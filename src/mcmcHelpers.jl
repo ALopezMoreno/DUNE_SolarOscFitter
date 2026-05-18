@@ -50,7 +50,7 @@ function BAT.mcmc_init!(
     # inside each chain_state carries over the learned proposal geometry.
     mcmc_states = map(init_alg.state.chain_states) do cs
         trafo_tuner   = BAT.create_trafo_tuner_state(samplingalg.transform_tuning, cs, 0)
-        proposal_tuner = BAT.create_proposal_tuner_state(samplingalg.proposal_tuning, cs, 0)
+        proposal_tuner = BAT.create_proposal_tuner_state(samplingalg.proposal_tuning, cs, cs.proposal, 0)
         temperer      = BAT.create_temperering_state(samplingalg.tempering, cs)
         MCMCState(cs, proposal_tuner, trafo_tuner, temperer)
     end
