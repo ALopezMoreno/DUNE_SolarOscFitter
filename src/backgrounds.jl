@@ -37,9 +37,10 @@ need separate globals when running multiple detectors concurrently.
 function build_backgrounds(det, Ereco_bins_ES_extended, Ereco_bins_CC_extended)
     ES_normalisation   = det.ES_normalisation
     CC_normalisation   = det.CC_normalisation
-    inclusive_analysis = det.inclusive_analysis
-    ES_mode            = det.ES_mode
-    CC_mode            = det.CC_mode
+    inclusive_analysis      = det.inclusive_analysis
+    semi_inclusive_analysis = det.semi_inclusive_analysis
+    ES_mode                 = det.ES_mode
+    CC_mode                 = det.CC_mode
     ES_bg_norms        = det.ES_bg_norms
     CC_bg_norms        = det.CC_bg_norms
     ES_bg_sys          = det.ES_bg_sys
@@ -53,7 +54,7 @@ function build_backgrounds(det, Ereco_bins_ES_extended, Ereco_bins_CC_extended)
     ES_sides = []
     for df in df_ES_list
         if "weights" in names(df)
-            ES_temp, _      = create_histogram(df.Ereco[df.mask], Ereco_bins_ES_extended, weights=df.weights[df.mask], normalise=true)
+            ES_temp, _      = create_histogram(df.Ereco, Ereco_bins_ES_extended, weights=df.weights, normalise=true)
             ES_temp_selec, _ = create_histogram(df.Ereco[df.mask], Ereco_bins_ES_extended, weights=df.weights[df.mask], normalise=false)
             ES_temp_total, _ = create_histogram(df.Ereco,           Ereco_bins_ES_extended, weights=df.weights,          normalise=false)
         else
@@ -68,9 +69,9 @@ function build_backgrounds(det, Ereco_bins_ES_extended, Ereco_bins_CC_extended)
         push!(ES_sides, side)
     end
 
-    # ── CC backgrounds (disabled in inclusive mode) ──────────────────────────
+    # ── CC backgrounds (disabled in pure inclusive mode; enabled in semi-inclusive) ──────────────────────────
     CC_bg = []
-    if !inclusive_analysis
+    if !inclusive_analysis || semi_inclusive_analysis
         for df in df_CC_list
             if "weights" in names(df)
                 CC_temp_selec, _ = create_histogram(df.Ereco[df.mask], Ereco_bins_CC_extended, weights=df.weights[df.mask], normalise=false)
@@ -107,7 +108,7 @@ function build_backgrounds(det, Ereco_bins_ES_extended, Ereco_bins_CC_extended)
         end
     end
 
-    if CC_mode && !inclusive_analysis
+    if CC_mode && (!inclusive_analysis || semi_inclusive_analysis)
         for (bg, norm, sys) in zip(CC_bg, CC_bg_norms, CC_bg_sys)
             if sys == 0
                 bg .*= norm / 2.2e-6

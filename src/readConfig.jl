@@ -150,34 +150,43 @@ function parse_detector_block(block::Dict, name::String)
     sc = get(block, "singleChannel", false)
     cc_mode = (sc == false || sc == "CC")
     es_mode = (sc == false || sc == "ES")
+    inclusive_analysis      = Bool(get(block, "inclusiveMode", false))
+    semi_inclusive_analysis = Bool(get(block, "semiInclusiveMode", false))
+    if semi_inclusive_analysis && inclusive_analysis
+        error("inclusiveMode and semiInclusiveMode cannot both be true for detector $name")
+    end
+    if semi_inclusive_analysis && (!cc_mode || !es_mode)
+        error("semiInclusiveMode requires singleChannel: false for detector $name")
+    end
     return (
-        name               = name,
-        ES_normalisation   = Float64(block["ES_exposure"]),
-        CC_normalisation   = Float64(block["CC_exposure"]),
-        nue_filepath       = block["reconstruction_sample_ES_nue"],
-        other_filepath     = block["reconstruction_sample_ES_nuother"],
-        angular_filepath   = block["reconstruction_sample_ES_angle"],
-        CC_filepath        = block["reconstruction_sample_CC"],
-        ES_filepaths_BG    = block["ES_background_files"],
-        CC_filepaths_BG    = block["CC_background_files"],
-        ES_bg_norms        = Float64.(block["ES_background_normalisations"]),
-        CC_bg_norms        = Float64.(block["CC_background_normalisations"]),
-        ES_bg_sys          = Float64.(block["ES_background_systematics"]),
-        CC_bg_sys          = Float64.(block["CC_background_systematics"]),
-        Ereco_bins_ES      = (bin_number=Int(block["nBins_Ereco_ES"]),
-                              min=block["range_Ereco_ES"][1]*1e-3,
-                              max=block["range_Ereco_ES"][2]*1e-3),
-        Ereco_bins_CC      = (bin_number=Int(block["nBins_Ereco_CC"]),
-                              min=block["range_Ereco_CC"][1]*1e-3,
-                              max=block["range_Ereco_CC"][2]*1e-3),
-        E_threshold        = (ES=block["Ereco_min_ES"]*1e-3, CC=block["Ereco_min_CC"]*1e-3),
-        cos_scatter_bins   = (bin_number=Int(block["nBins_cos_scatter"]), min=0.0, max=1.0),
-        CC_mode            = cc_mode,
-        ES_mode            = es_mode,
-        singleChannel      = sc,
-        angular_reco       = Bool(block["use_scattering_info"]),
-        angular_cos_cut    = Float64(get(block, "ES_cos_cut", -1.0)),
-        inclusive_analysis = Bool(get(block, "inclusiveMode", false)),
+        name                    = name,
+        ES_normalisation        = Float64(block["ES_exposure"]),
+        CC_normalisation        = Float64(block["CC_exposure"]),
+        nue_filepath            = block["reconstruction_sample_ES_nue"],
+        other_filepath          = block["reconstruction_sample_ES_nuother"],
+        angular_filepath        = block["reconstruction_sample_ES_angle"],
+        CC_filepath             = block["reconstruction_sample_CC"],
+        ES_filepaths_BG         = block["ES_background_files"],
+        CC_filepaths_BG         = block["CC_background_files"],
+        ES_bg_norms             = Float64.(block["ES_background_normalisations"]),
+        CC_bg_norms             = Float64.(block["CC_background_normalisations"]),
+        ES_bg_sys               = Float64.(block["ES_background_systematics"]),
+        CC_bg_sys               = Float64.(block["CC_background_systematics"]),
+        Ereco_bins_ES           = (bin_number=Int(block["nBins_Ereco_ES"]),
+                                   min=block["range_Ereco_ES"][1]*1e-3,
+                                   max=block["range_Ereco_ES"][2]*1e-3),
+        Ereco_bins_CC           = (bin_number=Int(block["nBins_Ereco_CC"]),
+                                   min=block["range_Ereco_CC"][1]*1e-3,
+                                   max=block["range_Ereco_CC"][2]*1e-3),
+        E_threshold             = (ES=block["Ereco_min_ES"]*1e-3, CC=block["Ereco_min_CC"]*1e-3),
+        cos_scatter_bins        = (bin_number=Int(block["nBins_cos_scatter"]), min=0.0, max=1.0),
+        CC_mode                 = cc_mode,
+        ES_mode                 = es_mode,
+        singleChannel           = sc,
+        angular_reco            = Bool(block["use_scattering_info"]),
+        angular_cos_cut         = Float64(get(block, "ES_cos_cut", -1.0)),
+        inclusive_analysis      = inclusive_analysis,
+        semi_inclusive_analysis = semi_inclusive_analysis,
     )
 end
 
@@ -211,6 +220,7 @@ function save_settings_to_file(filename::String)
             write(file, "  [$dname]\n")
             write(file, "    singleChannel: $(det.singleChannel)\n")
             write(file, "    inclusiveMode: $(det.inclusive_analysis)\n")
+            write(file, "    semiInclusiveMode: $(det.semi_inclusive_analysis)\n")
             write(file, "    ES_exposure: $(det.ES_normalisation)\n")
             write(file, "    CC_exposure: $(det.CC_normalisation)\n")
             write(file, "    Ereco bins (ES): $(det.Ereco_bins_ES)\n")

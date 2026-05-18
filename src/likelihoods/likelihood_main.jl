@@ -9,13 +9,13 @@ for (dname, out) in detector_outputs
 
     det_llh = make_likelihood(li;
         use_ES = det.ES_mode,
-        use_CC = det.CC_mode && !det.inclusive_analysis,
+        use_CC = det.CC_mode && (!det.inclusive_analysis || det.semi_inclusive_analysis),
         ES_llh = det.angular_reco ? llh_ES_angle   : llh_ES_poisson,
         CC_llh = llh_CC_poisson,
     )
     det_perbin = make_perbin_likelihood(li;
         use_ES = det.ES_mode,
-        use_CC = det.CC_mode && !det.inclusive_analysis,
+        use_CC = det.CC_mode && (!det.inclusive_analysis || det.semi_inclusive_analysis),
         ES_llh = det.angular_reco ? llh_ES_angle_perbin : llh_ES_poisson_perbin,
         CC_llh = llh_CC_poisson_perbin,
     )
@@ -36,6 +36,4 @@ end
 
 per_bin_llh = parameters -> sum(f(parameters) for f in _det_perbin_tuple)
 
-if run_mode == "MCMC"
-    global likelihood_all_samples = logfuncdensity(total_llh)
-end
+global likelihood_all_samples = logfuncdensity(total_llh)
