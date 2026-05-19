@@ -127,9 +127,13 @@ with h5py.File(args.infile, "r") as f:
             ES_angular_day      = f["angular/ES_day"][:].T   # (n_cos, n_Ereco_ES)
             # Julia (n_cos, n_Ereco, n_cosz) → h5py (n_cosz, n_Ereco, n_cos) → .T → (n_cos, n_Ereco, n_cosz)
             ES_angular_night_3d = f["angular/ES_night_3d"][:].T
+            CC_angular_night_3d = f["angular/CC_night_3d"][:].T if "angular/CC_night_3d" in f else None
+            BG_angular_night_3d = f["angular/BG_night_3d"][:].T if "angular/BG_night_3d" in f else None
         else:
             ES_angular_day      = None
             ES_angular_night_3d = None
+            CC_angular_night_3d = None
+            BG_angular_night_3d = None
 
 if full_data:
     n_E   = Ereco_ES_n
@@ -142,6 +146,11 @@ else:
     E_edges_reco   = np.linspace(Ereco_min, Ereco_max, n_E + 1)
     E_centers_reco = 0.5 * (E_edges_reco[:-1] + E_edges_reco[1:])
     cos_edges      = np.linspace(cos_min, cos_max, n_cos + 1)
+
+# Mask for energy bins above the analysis threshold (Ereco_min+1 = 3 MeV for default config).
+# Bins below this threshold contain huge backgrounds not used in the fit, which swamp
+# the angular plots when summed over energy.
+e_thresh_mask = E_centers_reco >= (Ereco_min + 1)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def filled_stairs(ax, edges, y, fill_color, edge_color, label=None, lw=LW):
@@ -370,10 +379,12 @@ with PdfPages(out_pdf) as pdf:
                 r"ES day angular distribution",
                 cmap="cividis")
 
-        # 1D stacked spectrum (day only)
-        es_day_1d = ES_angular_day.sum(axis=0)
-        cc_day_1d = CC_angular.sum(axis=0)
-        bg_day_1d = BG_angular.sum(axis=0)
+        # 1D stacked spectrum (day only, above-threshold energy bins).
+        # Zero out sub-threshold bins to match x-axis clip on PAGE 7 (Ereco_min+1).
+        # CC_angular and BG_angular are day+night totals; multiply by 0.5 for day-only.
+        es_day_1d = (ES_angular_day * e_thresh_mask).sum(axis=0)
+        cc_day_1d = (CC_angular * e_thresh_mask).sum(axis=0) * 0.5
+        bg_day_1d = (BG_angular * e_thresh_mask).sum(axis=0) * 0.5
         ax = axes[1]
         filled_stairs(ax, E_edges_reco, bg_day_1d + cc_day_1d + es_day_1d, ES_FILL, ES_EDGE, label="ES day")
         filled_stairs(ax, E_edges_reco, bg_day_1d + cc_day_1d,              CC_FILL, CC_EDGE, label="CC")
@@ -411,10 +422,13 @@ with PdfPages(out_pdf) as pdf:
 
         for idx, iz in enumerate(z_indices):
             ax = axes_flat[idx]
-            # sum over energy bins to get 1D angular distribution for this zenith
-            es_z = ES_angular_night_3d[:, :, iz].sum(axis=1)   # (n_cos_scatter,)
-            cc_z = CC_angular.sum(axis=1)   # (n_cos,) — CC combined (no zenith split)
-            bg_z = BG_angular.sum(axis=1)
+            # Sum over above-threshold energy bins only (e_thresh_mask excludes the
+            # sub-threshold 2–3 MeV bin whose 12 M BG events swamp the angular plot).
+            es_z = ES_angular_night_3d[:, e_thresh_mask, iz].sum(axis=1)   # (n_cos_scatter,)
+            cc_z = CC_angular_night_3d[:, e_thresh_mask, iz].sum(axis=1) if CC_angular_night_3d is not None \
+                   else (CC_angular * e_thresh_mask).sum(axis=1) / n_z
+            bg_z = BG_angular_night_3d[:, e_thresh_mask, iz].sum(axis=1) if BG_angular_night_3d is not None \
+                   else (BG_angular * e_thresh_mask).sum(axis=1) / n_z
             total_z = es_z + cc_z + bg_z
             y_max = max(10.0, float(total_z.max()) * 1.5)
 

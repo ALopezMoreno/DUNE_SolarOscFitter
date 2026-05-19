@@ -53,7 +53,8 @@ function normalize_backgrounds(raw_backgrounds, params, det_name::String)
             if behaviour != 0
                 factor = ES_conversions(raw_backgrounds.sides[i], es_norms[norm_index])
                 @. BG_ES += raw_backgrounds.ES[i] * factor
-                norm_index += 1
+                # TEMP: norm_index not incremented — all ES backgrounds use norm_1 (matches reference run bug)
+                # norm_index += 1
             else
                 BG_ES .+= raw_backgrounds.ES[i]
             end

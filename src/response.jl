@@ -89,8 +89,8 @@ end
 
 # Helper function to safely get weights if they exist
 function get_weights(df, mask=nothing)
-    if hasproperty(df, :Weights)
-        return mask !== nothing ? df.Weights[mask] : df.Weights
+    if hasproperty(df, :weights)
+        return mask !== nothing ? df.weights[mask] : df.weights
     else
         return nothing
     end
@@ -146,12 +146,12 @@ function build_response_matrices(det)
     ES_response = (nue=nue_ES_response, nuother=nuother_ES_response, angular=angular_ES_response)
 
     # Selection efficiencies
-    ES_nue_sel, _    = create_histogram(df_nue.Ereco[df_nue.mask],       Ereco_bins_ES_extended, normalise=false, weights=get_weights(df_nue, df_nue.mask))
-    ES_nue_tot, _    = create_histogram(df_nue.Ereco,                    Ereco_bins_ES_extended, normalise=false, weights=get_weights(df_nue))
-    ES_nuoth_sel, _  = create_histogram(df_nuother.Ereco[df_nuother.mask], Ereco_bins_ES_extended, normalise=false, weights=get_weights(df_nuother, df_nuother.mask))
-    ES_nuoth_tot, _  = create_histogram(df_nuother.Ereco,                 Ereco_bins_ES_extended, normalise=false, weights=get_weights(df_nuother))
-    CC_sel, _        = create_histogram(df_CC.Ereco[df_CC.mask],          Ereco_bins_CC_extended, normalise=false, weights=get_weights(df_CC, df_CC.mask))
-    CC_tot, _        = create_histogram(df_CC.Ereco,                      Ereco_bins_CC_extended, normalise=false, weights=get_weights(df_CC))
+    ES_nue_sel, _    = create_histogram(df_nue.Ereco[df_nue.mask],         Ereco_bins_ES_extended, normalise=false)
+    ES_nue_tot, _    = create_histogram(df_nue.Ereco,                      Ereco_bins_ES_extended, normalise=false)
+    ES_nuoth_sel, _  = create_histogram(df_nuother.Ereco[df_nuother.mask], Ereco_bins_ES_extended, normalise=false)
+    ES_nuoth_tot, _  = create_histogram(df_nuother.Ereco,                  Ereco_bins_ES_extended, normalise=false)
+    CC_sel, _        = create_histogram(df_CC.Ereco[df_CC.mask],           Ereco_bins_CC_extended, normalise=false)
+    CC_tot, _        = create_histogram(df_CC.Ereco,                       Ereco_bins_CC_extended, normalise=false)
 
     ES_nue_sel_eff  = @. ifelse(ES_nue_tot  == 0, 0.0, ES_nue_sel  / ES_nue_tot)
     ES_nuoth_sel_eff = @. ifelse(ES_nuoth_tot == 0, 0.0, ES_nuoth_sel / ES_nuoth_tot)
@@ -159,7 +159,7 @@ function build_response_matrices(det)
 
     ES_nue_eff    = ES_nue_sel_eff  .* fill(1.0, Ereco_bins_ES.bin_number)
     ES_nuother_eff = ES_nuoth_sel_eff .* fill(1.0, Ereco_bins_ES.bin_number)
-    CC_eff         = CC_sel_eff       .* fill(0.9, Ereco_bins_CC.bin_number)
+    CC_eff         = CC_sel_eff
 
     eff_tuple = (ES_nue=ES_nue_eff, ES_nuother=ES_nuother_eff, CC=CC_eff)
     bins_tuple = (ES=Ereco_bins_ES_extended, CC=Ereco_bins_CC_extended, cos_scatter=cos_scatter_bins)
@@ -168,11 +168,11 @@ function build_response_matrices(det)
         # CC mapped to ES bins — used for the forward inclusive hemisphere in both modes
         CC_inclusive_response = create_response_matrix(CC_sample, Etrue_bins, Ereco_bins_ES_extended)
         CC_incl_sel, _ = create_histogram(df_CC.Ereco[df_CC.mask], Ereco_bins_ES_extended,
-                                          normalise=false, weights=get_weights(df_CC, df_CC.mask))
+                                          normalise=false)
         CC_incl_tot, _ = create_histogram(df_CC.Ereco, Ereco_bins_ES_extended,
-                                          normalise=false, weights=get_weights(df_CC))
+                                          normalise=false)
         CC_incl_sel_eff = @. ifelse(CC_incl_tot == 0, 0.0, CC_incl_sel / CC_incl_tot)
-        CC_incl_eff     = CC_incl_sel_eff .* fill(0.9, Ereco_bins_ES.bin_number)
+        CC_incl_eff     = CC_incl_sel_eff
         eff_tuple = merge(eff_tuple, (CC_incl=CC_incl_eff,))
 
         if semi_inclusive_analysis
