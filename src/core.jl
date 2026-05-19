@@ -45,13 +45,23 @@ const sin2nuW = 0.231                                               #
 # Neutrino-electron scattering cross-section constants
 # These determine the interaction strength for different neutrino flavors
 
-# Coupling constants for electron neutrinos (ν_e + e^- scattering)
-const g1_nue = 1/2 + sin2nuW      # Vector coupling for ν_e
-const g2_nue = sin2nuW            # Axial coupling for ν_e
+# EW radiative corrections from Bahcall, Kamionkowski & Sirlin (1995), PRD 51, 6146.
+# rho_nc: NC current renormalization (~0.8% from W/Z/top/Higgs loops).
+# kappa: effective low-q² enhancement of sin²θ_W relative to the MS-bar value at M_Z
+#        (~3.3%, dominant effect is running from M_Z to q²≈0 for solar neutrinos).
+# Higgs-loop contribution to kappa is ~0.03% (negligible individually).
+# Values are for m_top = 173 GeV, m_H = 125 GeV; see BKS95 Table 1 and
+# PDG Electroweak Model Review for updated sin²θ_W(q²=0).
+const rho_nc   = 1.0081
+const kappa_ew = 1.0329   # = sin²θ_W(q²→0, MS-bar) / sin²θ_W(M_Z, MS-bar) ≈ 0.23867 / 0.231
 
-# Coupling constants for other neutrino flavors (ν_μ,τ + e^- scattering)
-const g1_nuother = -1/2 + sin2nuW # Vector coupling for ν_μ,τ
-const g2_nuother = sin2nuW        # Axial coupling for ν_μ,τ
+# Radiatively corrected coupling constants for electron neutrinos (ν_e + e^- scattering)
+const g1_nue = sqrt(rho_nc) * (1/2 + kappa_ew * sin2nuW)
+const g2_nue = sqrt(rho_nc) * kappa_ew * sin2nuW
+
+# Radiatively corrected coupling constants for other neutrino flavors (ν_μ,τ + e^- scattering)
+const g1_nuother = sqrt(rho_nc) * (-1/2 + kappa_ew * sin2nuW)
+const g2_nuother = sqrt(rho_nc) * kappa_ew * sin2nuW
 
 # Reference cross-section in cm^2
 const sigma_0 = 88.06e-46 #1.939e-13 * (1.97e-16)^2 # in cm^-2
