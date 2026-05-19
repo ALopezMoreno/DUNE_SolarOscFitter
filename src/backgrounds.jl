@@ -56,13 +56,13 @@ function build_backgrounds(det, Ereco_bins_ES_extended, Ereco_bins_CC_extended)
         if "weights" in names(df)
             ES_temp, _      = create_histogram(df.Ereco, Ereco_bins_ES_extended, weights=df.weights, normalise=true)
             ES_temp_selec, _ = create_histogram(df.Ereco[df.mask], Ereco_bins_ES_extended, weights=df.weights[df.mask], normalise=false)
-            ES_temp_total, _ = create_histogram(df.Ereco,           Ereco_bins_ES_extended, weights=df.weights,          normalise=false)
+            ES_temp_total, _ = create_histogram(df.Ereco,           Ereco_bins_ES_extended,                              normalise=false)
         else
             ES_temp, _      = create_histogram(df.Ereco,            Ereco_bins_ES_extended, normalise=true)
             ES_temp_selec, _ = create_histogram(df.Ereco[df.mask],  Ereco_bins_ES_extended, normalise=false)
             ES_temp_total, _ = create_histogram(df.Ereco,            Ereco_bins_ES_extended, normalise=false)
         end
-        side = "side" in names(df) ? df.side : -1
+        side = "side" in names(df) ? coalesce(first(df.side), -1) : -1
         ES_eff_bg   = @. ifelse(ES_temp_total == 0, 0.0, ES_temp_selec / ES_temp_total)
         attenuation = sum(ES_temp_total) / 50e6
         push!(ES_bg,    ES_temp .* detection_time .* ES_eff_bg .* ES_normalisation .* attenuation)
@@ -75,10 +75,8 @@ function build_backgrounds(det, Ereco_bins_ES_extended, Ereco_bins_CC_extended)
         for df in df_CC_list
             if "weights" in names(df)
                 CC_temp_selec, _ = create_histogram(df.Ereco[df.mask], Ereco_bins_CC_extended, weights=df.weights[df.mask], normalise=false)
-                CC_temp_total, _ = create_histogram(df.Ereco,           Ereco_bins_CC_extended, weights=df.weights,          normalise=false)
             else
                 CC_temp_selec, _ = create_histogram(df.Ereco[df.mask], Ereco_bins_CC_extended, normalise=false)
-                CC_temp_total, _ = create_histogram(df.Ereco,           Ereco_bins_CC_extended, normalise=false)
             end
             # CC BG MC is normalised to 1 kt-year; signal MC uses detector_nAr40 = 10 kT,
             # so total signal scaling is 10 kT × CC_normalisation. Match with ×10 here.

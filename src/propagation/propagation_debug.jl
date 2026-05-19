@@ -167,9 +167,12 @@ function compute_angular_components(unoscillatedSample, responseMatrices, params
         cc_day   = apply_day_response(osc.CC.day,   responseMatrices.CC_inclusive, CC_incl_eff)
         cc_night = apply_night_response(osc.CC.night, responseMatrices.CC_inclusive, CC_incl_eff)
         cc_total   = vec(cc_day) .+ vec(sum(cc_night, dims=1))
-        CC_angular = responseMatrices.BG.angular .* cc_total'
+        CC_angular          = responseMatrices.BG.angular .* cc_total'
+        CC_angular_night_3d = reshape(responseMatrices.BG.angular, n_cos, n_E, 1) .*
+                              reshape(cc_night', 1, n_E, n_z)
     else
-        CC_angular = zeros(n_cos, n_E)
+        CC_angular          = zeros(n_cos, n_E)
+        CC_angular_night_3d = zeros(n_cos, n_E, n_z)
     end
 
     if det_flags.CC_mode && !det_flags.inclusive_analysis && osc.CC !== nothing
@@ -184,11 +187,15 @@ function compute_angular_components(unoscillatedSample, responseMatrices, params
     bg_ES_day = isempty(BG_ES) ? zeros(Float64, n_E) : 0.5 .* vec(BG_ES)
 
     if !isempty(BG_ES)
-        bg_night_total = vec(sum(0.5 .* BG_ES' .* exposure_weights, dims=1))
-        bg_total   = 0.5 .* vec(BG_ES) .+ bg_night_total
-        BG_angular = responseMatrices.BG.angular .* bg_total'
+        bg_night_per_z = 0.5 .* (BG_ES' .* exposure_weights)   # (n_z, n_E)
+        bg_night_total = vec(sum(bg_night_per_z, dims=1))
+        bg_total       = 0.5 .* vec(BG_ES) .+ bg_night_total
+        BG_angular          = responseMatrices.BG.angular .* bg_total'
+        BG_angular_night_3d = reshape(responseMatrices.BG.angular, n_cos, n_E, 1) .*
+                              reshape(bg_night_per_z', 1, n_E, n_z)
     else
-        BG_angular = zeros(n_cos, n_E)
+        BG_angular          = zeros(n_cos, n_E)
+        BG_angular_night_3d = zeros(n_cos, n_E, n_z)
     end
 
     return (
@@ -197,6 +204,8 @@ function compute_angular_components(unoscillatedSample, responseMatrices, params
         BG_angular          = BG_angular,
         ES_angular_day      = ES_angular_day,
         ES_angular_night_3d = ES_angular_night_3d,
+        CC_angular_night_3d = CC_angular_night_3d,
+        BG_angular_night_3d = BG_angular_night_3d,
         oscProbs            = oscProbs,
         osc                 = osc,
         es_day_1d           = es_day_all,
@@ -300,7 +309,9 @@ function save_debug_data(unoscillatedSample, responseMatrices, params,
             f["angular/ES_day"]       = Matrix{Float64}(d.ES_angular_day)
             f["angular/ES_night_3d"]  = Array{Float64, 3}(d.ES_angular_night_3d)
             f["angular/CC"]           = Matrix{Float64}(d.CC_angular)
+            f["angular/CC_night_3d"]  = Array{Float64, 3}(d.CC_angular_night_3d)
             f["angular/BG"]           = Matrix{Float64}(d.BG_angular)
+            f["angular/BG_night_3d"]  = Array{Float64, 3}(d.BG_angular_night_3d)
         end
     end
     @info "Debug pipeline data saved to $save_path"
