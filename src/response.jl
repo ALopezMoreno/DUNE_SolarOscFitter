@@ -161,6 +161,27 @@ function build_response_matrices(det)
     ES_nuother_eff = ES_nuoth_sel_eff .* fill(1.0, Ereco_bins_ES.bin_number)
     CC_eff         = CC_sel_eff
 
+    # ── TEMPORARY efficiency boost ────────────────────────────────────────────
+    # The ES selection mask is too stringent above ~10 MeV.  To study high-energy
+    # sensitivity without retuning the selection, we artificially raise the masking
+    # efficiency to a 90% plateau by 11.5 MeV using a smooth Hermite step.
+    #
+    # Affected quantities (inclusive / semi-inclusive modes only):
+    #   • ES_nue_eff / ES_nuother_eff  → ES signal rates in the inclusive likelihood
+    #   • CC_incl_eff (boosted below)  → forward CC rates projected onto ES bins
+    # Exclusive-mode ES rates (eff.ES_nue / eff.ES_nuother used outside the
+    # inclusive block) are unaffected because CC_eff is not boosted here.
+    #
+    # Remove this block once the selection efficiency is properly tuned at high energy.
+    if inclusive_analysis || semi_inclusive_analysis
+        _es_edges   = collect(range(Ereco_bins_ES.min, Ereco_bins_ES.max, length=Ereco_bins_ES.bin_number+1))
+        _es_centers = 0.5 .* (_es_edges[1:end-1] .+ _es_edges[2:end])
+        _t      = clamp.((_es_centers .- 0.010) ./ (0.0115 - 0.010), 0.0, 1.0)
+        _smooth = @. _t^2 * (3 - 2*_t)   # Hermite smooth-step: 0 at 10 MeV, 1 at 11.5 MeV
+        ES_nue_eff     = @. ES_nue_eff     + _smooth * (0.9 - ES_nue_eff)
+        ES_nuother_eff = @. ES_nuother_eff + _smooth * (0.9 - ES_nuother_eff)
+    end
+
     eff_tuple = (ES_nue=ES_nue_eff, ES_nuother=ES_nuother_eff, CC=CC_eff)
     bins_tuple = (ES=Ereco_bins_ES_extended, CC=Ereco_bins_CC_extended, cos_scatter=cos_scatter_bins)
 
@@ -173,6 +194,10 @@ function build_response_matrices(det)
                                           normalise=false)
         CC_incl_sel_eff = @. ifelse(CC_incl_tot == 0, 0.0, CC_incl_sel / CC_incl_tot)
         CC_incl_eff     = CC_incl_sel_eff
+        # TEMP: forward CC masking efficiency boost — same Hermite ramp as ES above.
+        # Applies to the inclusive CC→ES-bin projection (forward hemisphere in semi-inclusive).
+        # _smooth is computed in the temporary block above; both blocks must be removed together.
+        CC_incl_eff = @. CC_incl_eff + _smooth * (0.9 - CC_incl_eff)
         eff_tuple = merge(eff_tuple, (CC_incl=CC_incl_eff,))
 
         if semi_inclusive_analysis

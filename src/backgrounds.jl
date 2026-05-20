@@ -64,6 +64,20 @@ function build_backgrounds(det, Ereco_bins_ES_extended, Ereco_bins_CC_extended)
         end
         side = "side" in names(df) ? coalesce(first(df.side), -1) : -1
         ES_eff_bg   = @. ifelse(ES_temp_total == 0, 0.0, ES_temp_selec / ES_temp_total)
+        # ── TEMPORARY efficiency boost ──────────────────────────────────────────
+        # Matches the boost applied to ES_nue_eff / ES_nuother_eff / CC_incl_eff in
+        # response.jl: raises ES background masking efficiency to a 90% plateau by
+        # 11.5 MeV so that ES background rates are consistent with the boosted signal
+        # rates in the inclusive likelihood.  No effect in exclusive mode.
+        # Remove together with the corresponding blocks in response.jl.
+        if inclusive_analysis || semi_inclusive_analysis
+            _bg_edges   = collect(range(Ereco_bins_ES_extended.min, Ereco_bins_ES_extended.max,
+                                        length=Ereco_bins_ES_extended.bin_number+1))
+            _bg_centers = 0.5 .* (_bg_edges[1:end-1] .+ _bg_edges[2:end])
+            _t      = clamp.((_bg_centers .- 0.010) ./ (0.0115 - 0.010), 0.0, 1.0)
+            _smooth = @. _t^2 * (3 - 2*_t)   # Hermite smooth-step: 0 at 10 MeV, 1 at 11.5 MeV
+            ES_eff_bg = @. ES_eff_bg + _smooth * (0.9 - ES_eff_bg)
+        end
         attenuation = sum(ES_temp_total) / 50e6
         push!(ES_bg,    ES_temp .* detection_time .* ES_eff_bg .* ES_normalisation .* attenuation)
         push!(ES_sides, side)
