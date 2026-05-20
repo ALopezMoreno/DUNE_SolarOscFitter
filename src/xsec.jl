@@ -34,7 +34,7 @@ df = CSV.File("inputs/CC_nue_40Ar_total_marley.csv") |> DataFrame
 
 # Extract energy and cross-section data with unit conversions
 CC_xsec_energy_raw = vcat(0.0, df[:, 1] * 1e-3)  # Convert MeV to GeV, add zero point
-CC_xsec_raw = vcat(0.0, df[:, 2] * 1e-42)        # Convert to cm^2, add zero point
+CC_xsec_raw = vcat(0.0, df[:, 2] * 1e-42) .* CC_xsec_scale  # Convert to cm^2, add zero point
 
 # Data cleaning and preparation for interpolation
 # Ensure energy values are sorted

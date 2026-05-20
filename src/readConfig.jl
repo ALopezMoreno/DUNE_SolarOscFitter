@@ -200,7 +200,8 @@ function save_settings_to_file(filename::String)
         write(file, "----- General -----\n")
         write(file, "Fast mode: $fast\n")
         write(file, "Use nuFast (overrides Fast mode to *true*): $nuFast\n")
-        write(file, "Earth uncertainty enabled: $earthUncertainty\n\n")
+        write(file, "Earth uncertainty enabled: $earthUncertainty\n")
+        write(file, "CC xsec scale: $CC_xsec_scale\n\n")
 
         # Solar and Earth models
         write(file, "----- Solar & Earth Models -----\n")
@@ -353,6 +354,9 @@ function main()
 
     # Previous file?
     global prevFile = haskey(config, "prevFile") ? config["prevFile"] : nothing
+
+    # CC cross-section scale factor (1.0 = standard MARLEY prediction)
+    global CC_xsec_scale = Float64(get(config, "CC_xsec_scale", 1.0))
 
     allowed_modes = ["LLH", "MCMC", "derived", "PROFILE"]
     global run_mode = config["RunMode"]
