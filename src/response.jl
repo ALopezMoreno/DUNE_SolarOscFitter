@@ -176,7 +176,7 @@ function build_response_matrices(det)
     if inclusive_analysis || semi_inclusive_analysis
         _es_edges   = collect(range(Ereco_bins_ES.min, Ereco_bins_ES.max, length=Ereco_bins_ES.bin_number+1))
         _es_centers = 0.5 .* (_es_edges[1:end-1] .+ _es_edges[2:end])
-        _t      = clamp.((_es_centers .- 0.010) ./ (0.0115 - 0.010), 0.0, 1.0)
+        _t      = clamp.((_es_centers .- 0.010) ./ (0.012 - 0.010), 0.0, 1.0)
         _smooth = @. _t^2 * (3 - 2*_t)   # Hermite smooth-step: 0 at 10 MeV, 1 at 11.5 MeV
         ES_nue_eff     = @. ES_nue_eff     + _smooth * (0.9 - ES_nue_eff)
         ES_nuother_eff = @. ES_nuother_eff + _smooth * (0.9 - ES_nuother_eff)
