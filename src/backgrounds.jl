@@ -74,7 +74,7 @@ function build_backgrounds(det, Ereco_bins_ES_extended, Ereco_bins_CC_extended)
             _bg_edges   = collect(range(Ereco_bins_ES_extended.min, Ereco_bins_ES_extended.max,
                                         length=Ereco_bins_ES_extended.bin_number+1))
             _bg_centers = 0.5 .* (_bg_edges[1:end-1] .+ _bg_edges[2:end])
-            _t      = clamp.((_bg_centers .- 0.010) ./ (0.0115 - 0.010), 0.0, 1.0)
+            _t      = clamp.((_bg_centers .- 0.010) ./ (0.012 - 0.010), 0.0, 1.0)
             _smooth = @. _t^2 * (3 - 2*_t)   # Hermite smooth-step: 0 at 10 MeV, 1 at 11.5 MeV
             ES_eff_bg = @. ES_eff_bg + _smooth * (0.9 - ES_eff_bg)
         end
