@@ -184,12 +184,14 @@ function compute_oscillated_samples(unoscillatedSample, params, oscProbs;
     if cc_mode
         CC = (
             day =
-                unoscillatedSample.CC_8B  .* oscProbs.nue_8B_day  .* params.integrated_8B_flux .+
-                unoscillatedSample.CC_hep .* oscProbs.nue_hep_day .* params.integrated_HEP_flux,
+                (unoscillatedSample.CC_8B  .* oscProbs.nue_8B_day  .* params.integrated_8B_flux .+
+                 unoscillatedSample.CC_hep .* oscProbs.nue_hep_day .* params.integrated_HEP_flux) .*
+                params.cc_xsec_norm,
 
             night =
-                (unoscillatedSample.CC_8B'  .* (params.integrated_8B_flux' .* oscProbs.nue_8B_night  .* exposure_weights)) .+
-                (unoscillatedSample.CC_hep' .* (params.integrated_HEP_flux  .* oscProbs.nue_hep_night .* exposure_weights)),
+                ((unoscillatedSample.CC_8B'  .* (params.integrated_8B_flux' .* oscProbs.nue_8B_night  .* exposure_weights)) .+
+                 (unoscillatedSample.CC_hep' .* (params.integrated_HEP_flux  .* oscProbs.nue_hep_night .* exposure_weights))) .*
+                params.cc_xsec_norm,
         )
     end
 
