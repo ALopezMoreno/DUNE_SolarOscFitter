@@ -57,7 +57,8 @@ priors = Dict{Symbol,Any}(
   :integrated_HEP_flux => prior_HEP_flux,
 
   # systematic parameters
-  :integrated_8B_flux => prior_8B_flux
+  :integrated_8B_flux => prior_8B_flux,
+  :cc_xsec_norm => prior_cc_xsec_norm
 )
 
 

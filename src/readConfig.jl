@@ -329,6 +329,9 @@ function main()
     global prior_dm2_21 = string_to_distribution(config["prior_dm2_21"])
     global prior_8B_flux = string_to_distribution(config["prior_8B_flux"])
     global prior_HEP_flux = string_to_distribution(config["prior_HEP_flux"])
+    global prior_cc_xsec_norm = string_to_distribution(
+        get(config, "prior_cc_xsec_norm", "truncated(Normal(1.0, 0.1), 0.1, 2.0)")
+    )
     load_earth_normalisation_prior(config["earth_normalisation_prior_file"])
 
     # LLH parameters

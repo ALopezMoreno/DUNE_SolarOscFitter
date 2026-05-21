@@ -67,6 +67,7 @@ flux_8B_scan = true_params.integrated_8B_flux  # Fixed 8B flux for scanning
 # Get Δ_FWHM for the priors of the dominant systematics (8B flux and background systematics)
 Δ_FWHM = Dict{Symbol,Any}(
     :integrated_8B_flux => sqrt(2 * log(2)) * std(prior_8B_flux),
+    :cc_xsec_norm => sqrt(2 * log(2)) * std(prior_cc_xsec_norm),
 )
 
 _llh_det_name = first(keys(detector_configs))
