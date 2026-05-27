@@ -25,7 +25,7 @@ julia tests/runtests.jl
 |------|--------|---------|
 | `MCMC` | `src/mcmc.jl` | Bayesian posterior sampling via BAT.jl (HMC) |
 | `LLH` | `src/llhScan.jl` | 2D likelihood scans over parameter pairs |
-| `derived` | `src/derive_variables_from_chain.jl` | Post-process chains: appends day-night asymmetry and per-bin likelihoods; requires `prevFile` set in config |
+| `derived` | `src/derive_variables_from_chain.jl` | Post-process an existing chain: appends `derived_*` arrays to the same JLD2. Computes per-sample day-night asymmetries `2(D−N)/(D+N)` (background-subtracted) for ES and CC; posterior predictive distributions (mean ± σ bands on signal-only rates); weighted first-/second-moment statistics of per-bin log-likelihoods vs sin²θ₁₂ and Δm²₂₁. Requires `prevFile` set in config. |
 | `PROFILE` | `src/profiling.jl` | Wall-time benchmarking; use `configs/profilingConfig.yaml` |
 
 ## Python utils
@@ -73,13 +73,36 @@ Key `plotOutput.py` flags:
 Called once per likelihood evaluation with a new parameter point:
 
 ```
-params → get_mixing_parameters → oscPars{T}
-       → setup_earth_propagation   (matter effect lookup + Earth paths)
-       → compute_oscillation_probs (day/night × 8B/HEP × νe/νother)
-       → apply_response_matrices   (true E → reco E smearing)
-       → normalize_backgrounds
-       → event rates per channel/period
+params → compute_shared_osc_probs   (oscillation probs on fine grid, block-averaged)
+       → compute_oscillated_samples  (unosc × P × flux, per channel/period)
+       → normalize_backgrounds       (scale by nuisance parameters)
+       → compute_ES/CC_event_rates   (apply response matrices, add BG)
+       → return day/night rates per channel
 ```
+
+**Unoscillated baseline** (`unoscillatedSample.jl`, built once at init): for each process (8B, HEP) and flavour channel (ES\_νe, ES\_νother, CC), `flux(E) × σ(E)` is numerically integrated over each `Etrue` bin and scaled by `detector_ne` (ES) or `detector_nAr40 × detection_time × normalisation` (CC), giving vectors of length `n_Etrue`.
+
+**Response matrices** (`response.jl`, built once at init): a 2D MC histogram `C[i_true, j_reco]` is row-normalised to `R[i_true, j_reco] = P(E_reco | E_true)` so each row sums to 1. Separate matrices exist for ES\_νe, ES\_νother, CC, and — in inclusive/semi-inclusive modes — CC\_inclusive remapped to ES reco bins. Per-reco-bin selection efficiency `eff[j_reco] = N_selected / N_total` is derived from MC.
+
+**Oscillation probabilities** (`propagation_osc.jl`): computed on a finer grid than the analysis binning — 2× in energy for day, 3× in zenith and 2× in energy for night — then block-averaged (`block_average` in `propagation_core.jl`) to analysis resolution. Night array convention: shape `(n_cosz, n_Etrue)`, rows index zenith bins. ν_other by unitarity: `P_other = 1 − P_νe`.
+
+**Unoscillated baseline** (`unoscillatedSample.jl`) also computes a per-bin log-energy vector `log_E_norm = log.(E_bins / E_pivot)` where `E_pivot` is the flux-weighted mean CC event energy. This is stored in the `unoscillatedSample` named tuple and used at runtime for spectral shape distortions. By construction, `sum(unosc_CC_8B .* log_E_norm) ≈ 0`, making `cc_xsec_tilt` orthogonal to `cc_xsec_norm`.
+
+**Oscillated samples** (`compute_oscillated_samples`):
+- Day: element-wise product `unosc .* P_νe .* flux` → `(n_Etrue,)`.
+- Night: outer product with per-zenith `exposure_weights` folded in → `(n_cosz, n_Etrue)`.
+- CC signal is multiplied by `xsec_shape = exp(cc_xsec_tilt × logE + cc_xsec_curv × logE²) × cc_xsec_norm`, a per-Etrue-bin weight vector. CC backgrounds are not affected (they are cosmogenic in origin).
+
+**Response application** (`propagation_core.jl`):
+- `apply_day_response(osc, R, eff)` = `0.5 × (R' × osc) .* eff` → `(n_Ereco,)`. The 0.5 accounts for 50% day-time exposure.
+- `apply_night_response(osc_rows, R, eff)` loops over the `n_cosz` rows of `osc_rows(n_cosz, n_Etrue)`, computes `0.5 × (row' × R) .* eff` per zenith slice, and vcat-s to `(n_cosz, n_Ereco)`.
+
+**Background normalisation** (`propagation_bg.jl`): applied at every likelihood call via nuisance parameters.
+- ES: `ES_conversions(side, norm)` = detector face area in cm² × `norm` (long faces: 2 × 12 m × 64 m; end caps: 2 × 12 m × 12 m).
+- CC: `CC_conversions(norm)` = `norm / 2.2×10⁻⁶` (MC normalised to 2.2×10⁻⁶ neutrons cm⁻² s⁻¹).
+- Backgrounds enter the final rate as `0.5 × BG` (day) and `0.5 × BG .* exposure_weights` (night).
+
+**Inclusive / semi-inclusive modes** (`propagation_main.jl`, `propagation_reco.jl`): in `inclusiveMode` CC signal is folded into ES reco bins via the `CC_inclusive` response matrix and CC backgrounds are disabled. In `semiInclusiveMode` the forward hemisphere uses the CC-inclusive projection; the backward hemisphere retains a separate CC channel plus ES events mis-identified as CC.
 
 ### Oscillation calculation (`oscillations/osc.jl`)
 
@@ -111,6 +134,13 @@ The codebase is script-based (no module encapsulation), so many parameters live 
 - `mcmcSteps`, `mcmcChains`, `tuningSteps`, `maxTuningAttempts`
 - `earthUncertainty`, `earth_lookup`, `earth_paths`, `earth_normalisation_prior`
 - `propMatrix` — covariance matrix for the HMC proposal, loaded from `proposal_matrix` config key if present
+- `semi_inclusive_analysis` — per-detector flag (`semiInclusiveMode` in config): forward hemisphere uses CC-inclusive in ES bins; backward hemisphere uses CC exclusive + ES mis-ID
+- `CC_xsec_scale` — **deprecated**. Fixed multiplier baked into the unoscillated CC sample at setup time. Superseded by `true_cc_xsec_norm` + `prior_cc_xsec_norm`. Keep at 1.0; stacking with `cc_xsec_norm` multiplies both effects.
+- `true_cc_xsec_norm` — Asimov true value for `cc_xsec_norm`; default 1.0 (`true_cc_xsec_norm` in config). Decoupled from the prior centre, enabling bias/wrong-prior studies.
+- `prior_cc_xsec_norm` — prior on the CC cross-section overall normalisation nuisance parameter; default `truncated(Normal(1.0, 0.1), 0.1, 2.0)`. Centre independently of `true_cc_xsec_norm`.
+- `prior_cc_xsec_tilt` — prior on the CC xsec spectral tilt `α₁`; applied as `exp(α₁ × log(E/E_pivot))`; default `Normal(0.0, 0.1)`. Orthogonal to `cc_xsec_norm` by choice of pivot.
+- `prior_cc_xsec_curv` — prior on the CC xsec spectral curvature `α₂`; applied as `exp(α₂ × log²(E/E_pivot))`; default `Normal(0.0, 0.05)`. Orthogonal to both norm and tilt by symmetry.
+- `active_detectors` — list of detector names to include in the fit (`active_detectors` in config)
 
 ## nuFast build
 
@@ -134,5 +164,7 @@ This produces `src/oscillations/libnufast_earth.so`.
 - **Earth systematics diagonalised** (`mcmc.jl`): BAT.jl does not yet support multivariate Gaussian priors, so the Earth density covariance matrix is approximated as independent 1-D normals (diagonal only). Update when BAT adds `MvNormal` prior support.
 - **Barlow-Beeston half-count substitution** (`likelihood_statistical.jl`): when `e == 0` or `m == 0` the BB formula substitutes 0.5 (a Wald lower bound). Intentional regularisation — revisit once a background floor is in place.
 - **CC background ×10 factor** (`backgrounds.jl`): CC background MC is normalised to 1 kt-year. The signal MC uses `detector_nAr40 = 10 kT × detection_time`, so the signal scales as `10 kT × CC_normalisation`. The `×10` in the background scaling matches this — it is not the exposure itself but the 10 kT factor embedded in `detector_nAr40`. If `detector_nAr40` ever changes, update this factor to match.
-- **`src/responseSys.jl` and `src/xsecSys.jl`** are empty stubs. Energy-scale and cross-section systematics are not yet implemented.
+- **`src/responseSys.jl` and `src/xsecSys.jl`** are empty stubs. Energy-scale systematics and response systematics are not yet implemented. CC cross-section shape uncertainty is handled via `cc_xsec_norm`, `cc_xsec_tilt`, and `cc_xsec_curv` fit parameters (see globals section).
 - **Runs are not reproducible**: the random seed in `mcmc.jl` is commented out. Set `seed` in the BAT context if reproducibility is needed.
+- **Temporary efficiency boost in inclusive/semi-inclusive mode** (`response.jl`, `backgrounds.jl`): a Hermite smooth-step ramp artificially raises ES (and CC\_inclusive) masking efficiency to a 90% plateau between 10 and 11.5 MeV, with the same boost applied to ES background efficiency for self-consistency. This is a temporary measure to study high-energy sensitivity without retuning the selection. Remove both blocks (tagged `TEMPORARY` in both files) once the selection is properly tuned.
+- **ES background normalisations fully correlated** (`propagation_bg.jl`): all ES background components currently share a single nuisance parameter (`{det}_ES_bg_norm_1`) because `norm_index` is not incremented in the ES loop (line 57 is commented out). This is intentional to match a frozen reference run. CC backgrounds correctly have independent parameters per component. Un-comment line 57 when running with independent ES background shapes.

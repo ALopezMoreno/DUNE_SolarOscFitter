@@ -1,33 +1,3 @@
-#=
-mcmc.jl
-
-Bayesian parameter estimation for neutrino oscillation parameters using Markov Chain 
-Monte Carlo (MCMC) sampling with the BAT.jl library.
-
-This script performs posterior sampling from the likelihood function defined by the
-solar neutrino data and prior distributions over oscillation parameters.
-
-Key Features:
-- Hamiltonian Monte Carlo (HMC) sampling via BAT.jl with NUTS termination
-- Support for systematic uncertainties (Earth matter, backgrounds)
-- Batch processing to manage memory usage
-- Configurable proposal distributions and covariance matrices
-- Comprehensive logging and progress tracking
-
-Workflow:
-1. Define prior distributions for all parameters
-2. Configure MCMC settings (chains, steps, tuning)
-3. Run MCMC sampling in batches
-4. Save results for posterior analysis
-
-Dependencies:
-- BAT.jl for Bayesian analysis toolkit
-- Distributions.jl for probability distributions
-- JLD2.jl for data storage
-
-Author: [Author name]
-=#
-
 using Logging
 
 # DEBUGGING AND TESTING: Set the logging level to Warn to suppress Info messages
@@ -58,7 +28,9 @@ priors = Dict{Symbol,Any}(
 
   # systematic parameters
   :integrated_8B_flux => prior_8B_flux,
-  :cc_xsec_norm => prior_cc_xsec_norm
+  :cc_xsec_norm => prior_cc_xsec_norm,
+  :cc_xsec_tilt => prior_cc_xsec_tilt,
+  :cc_xsec_curv => prior_cc_xsec_curv
 )
 
 
