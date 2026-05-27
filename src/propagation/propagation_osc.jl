@@ -182,16 +182,20 @@ function compute_oscillated_samples(unoscillatedSample, params, oscProbs;
     end
 
     if cc_mode
+        xsec_shape = exp.(params.cc_xsec_tilt .* unoscillatedSample.log_E_norm .+
+                          params.cc_xsec_curv .* unoscillatedSample.log_E_norm.^2) .*
+                     params.cc_xsec_norm
+
         CC = (
             day =
                 (unoscillatedSample.CC_8B  .* oscProbs.nue_8B_day  .* params.integrated_8B_flux .+
                  unoscillatedSample.CC_hep .* oscProbs.nue_hep_day .* params.integrated_HEP_flux) .*
-                params.cc_xsec_norm,
+                xsec_shape,
 
             night =
                 ((unoscillatedSample.CC_8B'  .* (params.integrated_8B_flux' .* oscProbs.nue_8B_night  .* exposure_weights)) .+
                  (unoscillatedSample.CC_hep' .* (params.integrated_HEP_flux  .* oscProbs.nue_hep_night .* exposure_weights))) .*
-                params.cc_xsec_norm,
+                xsec_shape,
         )
     end
 

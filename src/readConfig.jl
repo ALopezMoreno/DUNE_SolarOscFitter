@@ -1,25 +1,3 @@
-#=
-readConfig.jl
-
-Configuration file parser and main entry point for the Solar Oscillation Fitter.
-This script reads YAML configuration files and sets up global parameters for
-the analysis, then dispatches to the appropriate analysis mode.
-
-Key Features:
-- YAML configuration file parsing
-- Memory usage tracking and profiling
-- Support for multiple run modes (MCMC, LLH scan, derived variables)
-- Automatic parameter validation and type conversion
-- Comprehensive logging and settings export
-
-Run Modes:
-- "MCMC": Bayesian parameter estimation with MCMC sampling
-- "LLH": Likelihood scanning over parameter space
-- "derived": Post-processing of MCMC chains for derived quantities
-
-Author: [Author name]
-=#
-
 using YAML          # For configuration file parsing
 using Printf        # For formatted output
 using JLD2          # For data file I/O
@@ -332,6 +310,12 @@ function main()
     global prior_cc_xsec_norm = string_to_distribution(
         get(config, "prior_cc_xsec_norm", "truncated(Normal(1.0, 0.1), 0.1, 2.0)")
     )
+    global prior_cc_xsec_tilt = string_to_distribution(
+        get(config, "prior_cc_xsec_tilt", "Normal(0.0, 0.1)")
+    )
+    global prior_cc_xsec_curv = string_to_distribution(
+        get(config, "prior_cc_xsec_curv", "Normal(0.0, 0.05)")
+    )
     load_earth_normalisation_prior(config["earth_normalisation_prior_file"])
 
     # LLH parameters
@@ -346,6 +330,7 @@ function main()
     global dm2_21_true = config["true_dm2_21"]
     global integrated_8B_flux_true = mean(prior_8B_flux)
     global integrated_HEP_flux_true = config["true_integrated_HEP_flux"]
+    global cc_xsec_norm_true = Float64(get(config, "true_cc_xsec_norm", 1.0))
 
     # Fast mode?
     global fast = config["fastFit"]

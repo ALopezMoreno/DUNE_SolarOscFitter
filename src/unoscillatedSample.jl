@@ -1,23 +1,3 @@
-#=
-unoscillatedSample.jl
-
-Unoscillated neutrino event rate calculations for the Solar Oscillation Fitter.
-This module computes the expected neutrino interaction rates at the detector
-before oscillations, serving as the baseline for oscillation probability calculations.
-
-Key Features:
-- Integration of solar neutrino fluxes with interaction cross-sections
-- Separate calculations for 8B and HEP neutrino sources
-- Support for both ES (elastic scattering) and CC (charged current) channels
-- Energy binning and numerical integration over detector response
-- Detector mass and exposure time scaling
-
-The unoscillated samples provide the reference event rates that are then
-modified by oscillation probabilities to predict observed event rates.
-
-Author: [Author name]
-=#
-
 # Numerical integration for flux calculations
 using QuadGK
 
@@ -113,17 +93,23 @@ function build_unoscillated_sample(det)
     unosc_ES_nue_8B     = integrate_over_bins(unoscillatedRate_ES_nue_8B,     bin_edges) .* (detector_ne   * detection_time * ES_normalisation)
     unosc_ES_nuother_8B = integrate_over_bins(unoscillatedRate_ES_nuother_8B, bin_edges) .* (detector_ne   * detection_time * ES_normalisation)
     unosc_CC_8B         = integrate_over_bins(unoscillatedRate_CC_8B,         bin_edges) .* (detector_nAr40 * detection_time * CC_normalisation)
+
+    # Flux-weighted pivot energy — makes cc_xsec_tilt orthogonal to cc_xsec_norm
+    E_pivot_CC = sum(unosc_CC_8B .* energies_GeV) / sum(unosc_CC_8B)
+    log_E_norm = log.(energies_GeV ./ E_pivot_CC)
+
     unosc_ES_nue_hep     = integrate_over_bins(unoscillatedRate_ES_nue_hep,     bin_edges) .* (detector_ne   * detection_time * ES_normalisation)
     unosc_ES_nuother_hep = integrate_over_bins(unoscillatedRate_ES_nuother_hep, bin_edges) .* (detector_ne   * detection_time * ES_normalisation)
     unosc_CC_hep         = integrate_over_bins(unoscillatedRate_CC_hep,         bin_edges) .* (detector_nAr40 * detection_time * CC_normalisation)
 
     unoscillatedSample = (
-        ES_nue_8B    = unosc_ES_nue_8B,
-        ES_nuother_8B = unosc_ES_nuother_8B,
-        CC_8B        = unosc_CC_8B,
-        ES_nue_hep   = unosc_ES_nue_hep,
+        ES_nue_8B      = unosc_ES_nue_8B,
+        ES_nuother_8B  = unosc_ES_nuother_8B,
+        CC_8B          = unosc_CC_8B,
+        ES_nue_hep     = unosc_ES_nue_hep,
         ES_nuother_hep = unosc_ES_nuother_hep,
-        CC_hep       = unosc_CC_hep,
+        CC_hep         = unosc_CC_hep,
+        log_E_norm     = log_E_norm,
     )
 
     return unoscillatedSample, bin_edges, energies_GeV

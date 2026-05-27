@@ -1,248 +1,133 @@
 ################################################################################
-#                    Solar Oscillation Fitter Configuration                    #
+#               Solar Oscillation Fitter — Configuration File                  #
 ################################################################################
 #
-# This configuration file controls all aspects of the solar neutrino oscillation
-# analysis. It serves as both a working configuration and a tutorial for new users.
-#
-# QUICK START GUIDE:
-# 1. Set RunMode to "MCMC" for parameter estimation
-# 2. Choose Asimov: true for simulation studies, false for real data
-# 3. Set singleChannel to false (both), "ES", or "CC" 
-# 4. Adjust nSteps and nChains for desired precision vs runtime
-# 5. Modify prior distributions based on external constraints
-# 6. Update file paths to point to your input data
-#
-# ANALYSIS MODES:
-# - MCMC: Bayesian parameter estimation 
-# - LLH: Likelihood scanning for quick tests
-# - derived: Post-process existing chains for observables
-#
+#  RunMode: MCMC | LLH | derived | PROFILE
+#  Asimov:  true  → generate fake data from true_* values below
+#           false → read real data from data_file
 #
 ################################################################################
 
-###############################
-##### Output and run type #####
 
-# Output file prefix for all generated files (chains, plots, etc.)
-# Results will be saved as: outFile_mcmc.bin, outFile_info.txt, etc.
-# outFile: "outputs/CC_10MeVthershold_Shielding_strongCuts_deltam6_HDonly"
-outFile: "outputs/HD-40yr-Inclusive-test-newEff"
+# ── 1. RUN CONTROL ──────────────────────────────────────────────────────────
 
-# Previous file to continue MCMC chain from (optional)
-# Uncomment to resume a previous run from where it left off
-# REQUIRED when RunMode is "derived" to specify which chain to post-process
-# prevFile: "outputs/inclusive_v1_shielding"
+outFile:  "outputs/EXAMPLE_OUTPUT"  # output file prefix
+# prevFile: "outputs/my_previous_run"              # resume from saved chain state
 
-# Analysis mode selection:
-# "MCMC"   - Bayesian parameter estimation with Markov Chain Monte Carlo
-# "LLH"    - Likelihood scanning over 2D parameter slices
-# "derived" - Post-process existing MCMC chain to calculate derived quantities
-RunMode: "MCMC"
+RunMode:  "MCMC"   # MCMC | LLH | derived | PROFILE
+Asimov:   true
 
-# Data type selection:
-# true  - Asimov dataset (use theoretical predictions as "data")
-# false - Real data analysis (requires data_file)
-Asimov: true
-
-# Computational speed optimization:
-# true  - Fast mode: simplified Earth model, averaged solar densities (recommended)
-# false - Slow mode: full Earth model, detailed solar density integration (slightly more accurate)
-fastFit: true
-
-# Use nufast calculator? (overrides fastFit mode to true -- NO MULTITHREADING!!)
-nuFast: false
-
-# Detection channel selection:
-# false - Fit both ES (Elastic Scattering) and CC (Charged Current) channels
-# "ES"  - Fit only Elastic Scattering channel
-# "CC"  - Fit only Charged Current channel
-singleChannel: false
-
-# Channel tagging approach:
-inclusiveMode: true
-
-##############################
-##### Asimov true values #####
-
-# True parameter values used to generate Asimov (fake) data
-# These represent the "ground truth" that the analysis should recover
-# Only used when Asimov: true
-
-# Solar neutrino mixing parameters (dimensionless)
-true_sin2_th12: 0.307    # Solar mixing angle
-true_sin2_th13: 0.0224   # Reactor mixing angle
-# The complex phase is irrelevant in this analysis and is fixed to zero
-# The atmospheric mixing angle is also irrelevant and is fixed to 0.5
-
-# Mass-squared differences (eV²)
-true_dm2_21: 6e-5        # Solar mass-squared difference
-                         # PDG 2020: 7.53e-5, SNO: 5.113e-5
-
-# Solar neutrino flux normalizations (neutrinos/cm²/s)
-true_integrated_HEP_flux: 8250.0  # HEP neutrino flux (B16-AGSS09 prediction)
-                                  # Used for HEP neutrino discovery studies
+fastFit:  true    # fast Earth model (recommended; set false for higher accuracy)
+nuFast:   false   # C++ nuFast oscillation library (incompatible with multithreading)
 
 
-###############################
-##### Prior distributions #####
+# ── 2. ASIMOV TRUTH ─────────────────────────────────────────────────────────
+# Ground-truth values used to generate Asimov data (Asimov: true only).
+# Set independently of prior centres to enable bias / wrong-prior studies.
 
-# Prior probability distributions for all fitted parameters
-# Format: DistributionType(parameters)
-# Available: Objects from the Distributions.jl package
+true_sin2_th12:           0.307     # solar mixing angle
+true_sin2_th13:           0.0224    # reactor mixing angle (δCP and θ₂₃ fixed)
+true_dm2_21:              6e-5      # solar Δm² (eV²)  [PDG: 7.53e-5, SNO: 5.11e-5]
+true_integrated_HEP_flux: 8250.0   # HEP flux (ν/cm²/s)
+true_cc_xsec_norm:        1.0       # CC xsec scale relative to MARLEY
 
-##### Neutrino oscillation parameters #####
 
-# Solar mixing angle squared sin²θ₁₂
+# ── 3. PRIORS ───────────────────────────────────────────────────────────────
+# Distributions.jl syntax.  All parameters are sampled during MCMC / LLH.
+
+# Oscillation parameters
 prior_sin2_th12: Uniform(0.15, 0.5)
-#Uniform prior covering region of interest: Uniform(0.15, 0.5)
+prior_sin2_th13: truncated(Normal(0.022, 0.0007), 0.005, 0.035)  # reactor constraint
+prior_dm2_21:    Uniform(2e-5, 3e-4)
 
-# Reactor mixing angle squared sin²θ₁₃  
-prior_sin2_th13: truncated(Normal(0.022, 0.0007), 0.005, 0.035)
-# Gaussian prior from reactor neutrino experiments: Truncated(Normal(0.022, 0.0007), 0.005, 0.035)
-# Alternative conservative constraint: Uniform(0.0, 0.1)
-
-# Solar mass-squared difference Δm²₂₁ (eV²)
-prior_dm2_21: Uniform(2e-5, 3e-4)
-# Conservative range covering experimental uncertainties
-
-##### Solar flux systematic parameters #####
-
-# ⁸B solar neutrino flux (neutrinos/cm²/s)
-# Choose one of the following scenarios:
-
-# Option 1: Free flux (no external constraint)
-# prior_8B_flux: Uniform(1e5, 2e7)
-
-# Option 2: SNO neutral current measurement (~5.3% uncertainty)
-prior_8B_flux: truncated(Normal(5.25e6, 0.28e6), 1.5e6, 1e7)
-
-# Option 3: Future ES measurement constraint (4% uncertainty)
-# prior_8B_flux: Truncated(Normal(5.46e6, 0.218e6), 1.5e6, 1e7)
-
-# HEP neutrino flux (neutrinos/cm²/s)
+# Solar flux
+prior_8B_flux:  truncated(Normal(5.25e6, 0.28e6), 1.5e6, 1e7)   # SNO NC, ~5.3%
+# alternatives: Uniform(1e5, 2e7)  |  truncated(Normal(5.46e6, 0.22e6), 1.5e6, 1e7)
 prior_HEP_flux: Uniform(0, 2e4)
-# Conservative upper bound ~2-3 orders of magnitude below ⁸B flux
-# Used for HEP neutrino discovery sensitivity studies
 
-# CC cross-section normalisation uncertainty (relative to MARLEY prediction)
-prior_cc_xsec_norm: truncated(Normal(1.0, 0.1), 0.1, 2.0)
-
-
-###########################
-##### MCMC parameters #####
-
-# Markov Chain Monte Carlo sampling configuration
-# More chains and steps = better statistics but longer runtime
-
-nChains: 10             # Number of parallel MCMC chains (recommended: number of available cores)
-nSteps: 300            # Number of post-tuning steps per chain
-                        # Total samples = nChains × nSteps
-
-# Adaptive step size tuning (improves sampling efficiency)
-maxTuningAttempts: 30   # Maximum tuning cycles (0 = no tuning, faster but less efficient)
-nTuning: 50             # Steps per tuning cycle (recommended: O(1000))
-
-# Systematic uncertainty toggles (disabling speeds up computation)
-earth_potential_uncertainties: true  # Include Earth matter density uncertainties
-                                     # Requires earth_normalisation_prior_file
+# CC cross-section shape  (all relative to MARLEY; see CLAUDE.md for details)
+prior_cc_xsec_norm: truncated(Normal(1.0, 0.1), 0.1, 2.0)  # overall scale
+prior_cc_xsec_tilt: Normal(0.0, 0.1)                        # power-law slope shift
+prior_cc_xsec_curv: Normal(0.0, 0.05)                       # quadratic curvature
 
 
-##########################
-##### LLH parameters #####
+# ── 4. SAMPLER ──────────────────────────────────────────────────────────────
 
-# Likelihood scanning configuration (only used when RunMode: "LLH")
-llh_bins: 15            # Number of bins per parameter dimension for 2D scans
-                        # Higher values = finer resolution but longer runtime
+nChains:           10    # parallel HMC chains  (≈ number of CPU cores)
+nSteps:            300   # post-tuning steps per chain
+nTuning:           50    # steps per tuning cycle
+maxTuningAttempts: 30    # tuning cycles  (0 = skip tuning)
 
-##############################
-##### Derived parameters #####
-thinning: 1 # Thinning factor for the bin-importance diagnostic calculations. 1 == no thinning
+earth_potential_uncertainties: true   # marginalise over Earth density profile
 
-#################################
-##### Shared detector configuration #####
+# proposal_matrix: "outputs/posterior_covariance.jld2"  # warm-start from prior run
 
-# True neutrino energy binning (for oscillation calculations) — shared across all detectors
-nBins_Etrue: 30         # Number of true energy bins
-range_Etrue: [1, 21]    # True energy range in MeV
 
-# Zenith angle binning (for Earth matter effects) — shared
-nBins_cosz: 20          # Number of cos(zenith) bins from -1 (upward) to 0 (horizontal)
+# ── 5. LLH / DERIVED ────────────────────────────────────────────────────────
 
-#######################
-##### Input files #####
+llh_bins: 15   # bins per axis for 2D likelihood scans  (RunMode: LLH)
+thinning:  1   # thinning for bin-importance diagnostics (RunMode: derived)
 
-##### Earth matter and solar model files #####
 
-# Earth matter density uncertainties (required if earth_potential_uncertainties: true)
+# ── 6. SHARED BINNING ───────────────────────────────────────────────────────
+# True-energy and zenith binning shared across all detectors.
+
+nBins_Etrue:  30
+range_Etrue:  [1, 21]   # MeV
+nBins_cosz:   20        # cos(zenith) bins from −1 (upward) to 0 (horizontal)
+
+
+# ── 7. INPUT FILES ───────────────────────────────────────────────────────────
+
+solar_model_file:               "inputs/AGSS09_high_z.jld2"
+flux_model_file:                "inputs/fluxes.jld2"
+earth_model_file:               "inputs/EARTH_MODEL_PREM_DENSE.dat"
+earth_uncertainty_file:         "inputs/earth_uncertainty_4.5e-5.jld2"
 earth_normalisation_prior_file: "inputs/earth_uncertainty_cov.jld2"
-# JLD2 file containing 'covariance' matrix and 'true' vector for Earth density uncertainties
+solar_exposure_file:            "inputs/solarExposure.csv"
 
-# Solar model and neutrino production data
-solar_model_file: "inputs/AGSS09_high_z.jld2"     # Solar structure and neutrino production regions
-flux_model_file: "inputs/fluxes.jld2"             # Solar neutrino energy spectra
-earth_model_file: "inputs/EARTH_MODEL_PREM_DENSE.dat"  # PREM Earth density profile
-earth_uncertainty_file: "inputs/earth_uncertainty_4.5e-5.jld2"  # Earth matter uncertainties
-solar_exposure_file: "inputs/solarExposure.csv"   # Detector exposure vs zenith angle
+data_file: "data.txt"   # only used when Asimov: false
 
-##### MCMC optimization (optional) #####
 
-# Proposal covariance matrix from previous run (improves sampling efficiency)
-# Uncomment to use covariance matrix from a previous posterior
-# Must be JLD2 file with 'posterior_cov' matrix object
-# proposal_matrix: "outputs/posterior_covariance.jld2"
-
-##### Real data file (only used when Asimov == false) #####
-
-data_file: "data.txt"   # Real data file (format TBD)
-
-################################################################################
-# Per-detector configuration blocks
+# ── 8. DETECTORS ─────────────────────────────────────────────────────────────
+# List active detectors here; only those named in active_detectors are loaded.
 #
-# Each entry under `detectors:` is an independent detector module with its own
-# exposure, reconstruction files, backgrounds, binning, and analysis mode.
-#
-# Keys per detector:
-#   CC_exposure / ES_exposure  — module-years (1 module-year ≈ 10 kton-year)
-#   singleChannel              — false (both), "ES", or "CC"
-#   inclusiveMode              — true: fold CC signal into ES channel
-#   use_scattering_info        — true: enable ES angular (cos-scatter) likelihood
-#   ES_cos_cut                 — forward-hemisphere cut on cos(scatter); -1 = no cut
-#   nBins_Ereco_ES/CC          — reconstructed energy bins
-#   range_Ereco_ES/CC          — [min, max] in MeV
-#   Ereco_min_ES/CC            — analysis threshold in MeV
-#   nBins_cos_scatter          — cos(scatter) bins for angular analysis
-#   reconstruction_sample_*    — CSV files for detector response matrices
-#   ES_background_files        — list of ES background CSV files
-#   CC_background_files        — list of CC background CSV files
-#   ES/CC_background_normalisations / _systematics — see single-detector docs above
-#
-# Backward compatibility: if no `detectors:` block is present, the fitter reads
-# the old flat keys (CC_exposure, reconstruction_sample_CC, etc.) from the top
-# level and treats them as a single detector named "default".
-################################################################################
+# Per-detector keys:
+#   CC/ES_exposure          module-years  (1 module-yr ≈ 10 kt-yr)
+#   singleChannel           false | "ES" | "CC"
+#   inclusiveMode           fold CC signal into ES reco bins
+#   semiInclusiveMode       forward-hemisphere inclusive; backward exclusive
+#   use_scattering_info     enable ES angular cos-scatter likelihood
+#   ES_cos_cut              minimum cos(scatter) for ES forward-hemisphere cut
+#   nBins_Ereco_ES/CC       reconstructed-energy bins
+#   range_Ereco_ES/CC       [min, max] MeV
+#   Ereco_min_ES/CC         analysis threshold MeV
+#   nBins_cos_scatter       cos(scatter) bins  (only if use_scattering_info)
+#   reconstruction_sample_* CSV files for detector response matrices
+#   ES/CC_background_files  CSV files for background shapes
+#   ES/CC_background_normalisations   nominal background fluxes (cm⁻²s⁻¹)
+#   ES/CC_background_systematics      fractional uncertainty  (e.g. 0.02 = 2%)
 
-# Which detectors to include in the fit. Must be a subset of the keys under `detectors:`.
-# Remove or comment out to use all defined detectors.
-# Examples: [VD]  [HD]  [VD, HD]
-active_detectors: [VD]
+active_detectors: [HD]
 
 detectors:
+
+  # VD — vertical-drift detector, inclusive / semi-inclusive analysis
   VD:
     CC_exposure: 40
     ES_exposure: 40
-    singleChannel: false
-    inclusiveMode: true
-    semiInclusiveMode: false
+    singleChannel:      false
+    inclusiveMode:      true
+    semiInclusiveMode:  false
     use_scattering_info: true
     ES_cos_cut: 0.0
 
-    nBins_Ereco_ES: 30
-    nBins_Ereco_CC: 30
-    range_Ereco_ES: [2, 20]
-    range_Ereco_CC: [2, 20]
-    Ereco_min_ES: 3
-    Ereco_min_CC: 3
+    nBins_Ereco_ES:   30
+    nBins_Ereco_CC:   30
+    range_Ereco_ES:   [2, 20]
+    range_Ereco_CC:   [2, 20]
+    Ereco_min_ES:     3
+    Ereco_min_CC:     3
     nBins_cos_scatter: 25
 
     reconstruction_sample_CC:         "inputs/inputs_neutronOnly_may2026/Nu/3D/data_file_CC_1mFidu_discri_200Emin.csv"
@@ -258,28 +143,29 @@ detectors:
       - "inputs/neutron_bg_CC_sergio_withFullCuts.csv"
       - "inputs/gamma_bg_CC_sergio_withFullCuts.csv"
 
-    ES_background_normalisations: [2.2e-6, 2.2e-6, 2.2e-6]  # ES background fluxes in cm-2s-1 -- nominal: 2.2e-6 -- shielded: CHANGE BKG FILES
-    CC_background_normalisations: [4.4e-8, 4.4e-8]          # CC background fluxes in cm-2s-1 -- nominal: 2.2e-6 -- shielded: 4.4e-8
+    ES_background_normalisations: [2.2e-6, 2.2e-6, 2.2e-6]   # cm⁻²s⁻¹
+    CC_background_normalisations: [6.6e-9, 6.6e-9]
     ES_background_systematics:    [0.02, 0.02, 0.02]
     CC_background_systematics:    [0.02, 0.02]
 
-  # HD detector — January 2026 reconstruction (sergio_reco / Enu_Ereco files).
-  # CC-only analysis, standard (non-inclusive) mode.
+  # HD — horizontal-drift detector, CC-only standard analysis
   HD:
     CC_exposure: 20
     ES_exposure: 20
-    singleChannel: "CC"
-    inclusiveMode: false
-    semiInclusiveMode: false
+    singleChannel:      "CC"
+    inclusiveMode:      false
+    semiInclusiveMode:  false
     use_scattering_info: false
     ES_cos_cut: 0.5
-    nBins_Ereco_ES: 30
-    nBins_Ereco_CC: 30
-    range_Ereco_ES: [1, 15]
-    range_Ereco_CC: [1, 25]
-    Ereco_min_ES: 3
-    Ereco_min_CC: 3
+
+    nBins_Ereco_ES:   30
+    nBins_Ereco_CC:   30
+    range_Ereco_ES:   [1, 15]
+    range_Ereco_CC:   [1, 25]
+    Ereco_min_ES:     3
+    Ereco_min_CC:     3
     nBins_cos_scatter: 25
+
     reconstruction_sample_CC:         "inputs/sergio_reco_CC_withFullCuts.csv"
     reconstruction_sample_ES_nue:     "inputs/inputs_neutronOnly_may2026/Nu/3D/data_file_ES_nue_1mFidu_discri_100Emin.csv"
     reconstruction_sample_ES_nuother: "inputs/inputs_neutronOnly_may2026/Nu/3D/data_file_ES_numutau_1mFidu_discri_100Emin.csv"
@@ -292,8 +178,8 @@ detectors:
     CC_background_files:
       - "inputs/neutron_bg_CC_sergio_withFullCuts.csv"
       - "inputs/gamma_bg_CC_sergio_withFullCuts.csv"
-    ES_background_normalisations: [2.2e-6, 2.2e-6]  # ES background fluxes in cm-2s-1 -- nominal: 2.2e-6 -- shielded: CHANGE BKG FILES
-    CC_background_normalisations: [2.2e-6, 2.2e-6]  # CC background fluxes in cm-2s-1 -- nominal: 2.2e-6 -- shielded: 4.4e-8
+
+    ES_background_normalisations: [2.2e-6, 2.2e-6]
+    CC_background_normalisations: [2.2e-6, 2.2e-6]
     ES_background_systematics:    [0.02, 0.02]
     CC_background_systematics:    [0.02, 0.02]
-  

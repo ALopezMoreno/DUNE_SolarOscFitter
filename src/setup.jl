@@ -103,7 +103,9 @@ for (det_name, det) in detector_configs
         :integrated_8B_flux   => integrated_8B_flux_true,
         :ES_asymmetry         => 0,
         :CC_asymmetry         => 0,
-        :cc_xsec_norm         => 1.0,
+        :cc_xsec_norm         => cc_xsec_norm_true,
+        :cc_xsec_tilt         => 0.0,
+        :cc_xsec_curv         => 0.0,
     )
     if earthUncertainty
         for (i, val) in enumerate(earth_normalisation_true)

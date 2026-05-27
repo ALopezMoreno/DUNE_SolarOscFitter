@@ -1,24 +1,4 @@
 
-#=
-llhScan.jl
-
-Likelihood scanning for parameter space exploration in the Solar Oscillation Fitter.
-This module performs systematic scans over oscillation parameter space to map
-the likelihood surface and identify confidence regions.
-
-Key Features:
-- 2D likelihood scans over oscillation parameter pairs
-- Integration over systematic uncertainties (nuisance parameters)
-- Degrees of freedom calculations for different channels
-- CSV output with parameter ranges for plotting
-- Support for both ES and CC channel analysis
-
-The likelihood scans provide complementary information to MCMC sampling
-and are useful for visualizing parameter constraints and correlations.
-
-Author: [Author name]
-=#
-
 using Logging
 # DEBUGGING AND TESTING: Set the logging level to Warn to suppress Info messages
 # global_logger(ConsoleLogger(stderr, Logging.Warn))
@@ -68,6 +48,8 @@ flux_8B_scan = true_params.integrated_8B_flux  # Fixed 8B flux for scanning
 Δ_FWHM = Dict{Symbol,Any}(
     :integrated_8B_flux => sqrt(2 * log(2)) * std(prior_8B_flux),
     :cc_xsec_norm => sqrt(2 * log(2)) * std(prior_cc_xsec_norm),
+    :cc_xsec_tilt => sqrt(2 * log(2)) * std(prior_cc_xsec_tilt),
+    :cc_xsec_curv => sqrt(2 * log(2)) * std(prior_cc_xsec_curv),
 )
 
 _llh_det_name = first(keys(detector_configs))
