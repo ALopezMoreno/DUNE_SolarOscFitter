@@ -1,23 +1,3 @@
-#=
-makePaths.jl
-
-Neutrino path generation through Earth for matter effect calculations.
-This module creates detailed paths for neutrinos traveling through Earth's
-varying density profile, accounting for different zenith angles.
-
-Key Features:
-- Earth geometry calculations for neutrino trajectories
-- Density profile segmentation and layer identification
-- Jump detection for discontinuous density changes
-- Path optimization for numerical integration
-- Support for systematic uncertainties in Earth matter density
-
-The paths are used in oscillation calculations to account for matter effects
-as neutrinos propagate through Earth's layers with different densities.
-
-Author: [Author name]
-=#
-
 ################################################################################
 # Global Constants and Imports
 ################################################################################

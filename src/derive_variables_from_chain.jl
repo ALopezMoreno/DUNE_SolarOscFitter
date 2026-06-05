@@ -1,26 +1,9 @@
-#=
-derive_variables_from_chain.jl
-
-Post-processing script for deriving additional quantities from MCMC chains.
-This module calculates derived observables (like day-night asymmetries) from
-the posterior samples of oscillation parameters.
-
-Key Features:
-- Loading and parsing of MCMC chain data from binary files
-- Calculation of day-night asymmetries for ES and CC channels
-- Progress tracking for large chain processing
-- Serialization of derived quantities with original chain data
-- Integration with the main analysis pipeline
-
-The derived quantities are calculated by propagating each parameter sample
-through the full detector simulation to obtain observable asymmetries.
-
-Author: [Author name]
-=#
-
 using ElasticArrays    # For dynamic array handling
 using ProgressMeter    # For progress tracking
 using JLD2            # For data file operations
+using LinearAlgebra, Statistics, Distributions, StatsBase, BAT, DensityInterface, IntervalSets
+using ForwardDiff
+import AutoDiffOperators: ADSelector
 
 include(joinpath(@__DIR__, "setup.jl"))
 

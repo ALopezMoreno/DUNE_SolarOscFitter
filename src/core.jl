@@ -1,16 +1,3 @@
-#=
-core.jl
-
-Defines fundamental physics constants, cross-section parameters, and core data structures.
-
-Key components:
-- Physical constants (Fermi constant, particle masses, mixing angles)
-- Neutrino-electron scattering cross-section parameters
-- NuSpectrum struct for storing neutrino event spectra and oscillation weights
-
-Author: [Author name]
-=#
-
 using StaticArrays
 
 # Type-stable extraction of all NamedTuple fields whose names start with `pfx`.

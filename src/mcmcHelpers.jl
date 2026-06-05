@@ -1,21 +1,7 @@
 #=
-mcmcHelpers.jl
+mcmcHelpers.jl — MCMC batch processing, chain continuation, and custom proposals.
 
-Helper functions and custom algorithms for MCMC sampling in the Solar Oscillation Fitter.
-This module provides utilities for managing MCMC chains, including batch processing,
-chain continuation, custom proposal distributions, and memory management.
-
-Key Features:
-- Custom proposal distribution with user-defined covariance matrices
-- Chain state management for batch processing and continuation
-- Memory-efficient MCMC execution with garbage collection
-- Serialization utilities for chain persistence
-- Custom burnin algorithms including no-burnin option
-
-These utilities enable efficient MCMC sampling for large parameter spaces
-while managing memory usage and allowing for interrupted/resumed analyses.
-
-Author: Andres Lopez Moreno, based on Philipp Eller's Newthrino
+Based on Newthrino (Philipp Eller), extended by Andres Lopez Moreno.
 =#
 
 using BAT: MCMCIterator, MCMCInitAlgorithm, MCMCAlgorithm, BATMeasure, BATContext,

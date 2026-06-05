@@ -1,18 +1,3 @@
-#=
-logger.jl
-
-Custom logging system for the Solar Oscillation Fitter with colored output
-and specialized log levels for different analysis stages.
-
-Features:
-- Custom log levels: MCMC, Setup, Output
-- Color-coded console output for better readability
-- Scientific notation formatting for numerical values
-- Integration with Julia's standard logging system
-
-Author: [Author name]
-=#
-
 using Printf
 using Logging
 

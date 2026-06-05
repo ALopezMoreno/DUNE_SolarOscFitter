@@ -1,24 +1,3 @@
-#=
-exposure.jl
-
-Solar exposure calculation for the Solar Oscillation Fitter.
-This module loads and processes the detector's exposure to solar neutrinos
-as a function of zenith angle (cos θ), accounting for Earth's rotation
-and the detector's geographic location.
-
-Key Features:
-- Solar exposure data loading from CSV files
-- Interpolation of exposure vs zenith angle
-- Normalization and binning of exposure weights
-- Integration over zenith angle bins for analysis
-
-The exposure weights are used to properly weight neutrino events based on
-the detector's time-averaged exposure to different zenith angles throughout
-the day/year cycle.
-
-Author: [Author name]
-=#
-
 using Interpolations  # For exposure interpolation
 using QuadGK          # For numerical integration
 using CSV             # For reading exposure data
@@ -47,11 +26,14 @@ exposure_intp_int, _ = quadgk(exposure_intp, lower_limit, upper_limit)
 #exposure_intp_norm = linear_interpolation(cosz_x, cosz_y / exposure_intp_int, extrapolation_bc=Flat())
 
 # Calculate exposure weights for each zenith angle bin
-bin_edges = range(cosz_bins.min, cosz_bins.max, length=cosz_bins.bin_number+1)
+bin_edges = COARSE_COSZ_EDGES
 
 # Define integration function for each bin
 compute_integral(lower, upper) = quadgk(exposure_intp, lower, upper)[1]
 
 # Calculate normalized exposure weights for each bin
 # These weights represent the fraction of total exposure in each zenith bin
-global exposure_weights = compute_integral.(bin_edges[1:end-1], bin_edges[2:end]) ./ exposure_intp_int 
+global exposure_weights = reshape(
+    compute_integral.(bin_edges[1:end-1], bin_edges[2:end]) ./ exposure_intp_int,
+    :, 1
+)

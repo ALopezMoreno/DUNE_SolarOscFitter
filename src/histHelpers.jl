@@ -1,23 +1,3 @@
-#=
-histHelpers.jl
-
-Histogram creation and manipulation utilities for the Solar Oscillation Fitter.
-This module provides functions for creating histograms from Monte Carlo data,
-handling weighted samples, and rebinning operations.
-
-Key Features:
-- DataFrame extraction from CSV files
-- Weighted and unweighted histogram creation
-- Flexible binning with custom bin edges
-- Histogram rebinning for different energy resolutions
-- Support for missing data handling
-
-These utilities are used throughout the analysis to process Monte Carlo
-samples and create energy distributions for different detection channels.
-
-Author: [Author name]
-=#
-
 using StatsBase     # For histogram fitting and statistical operations
 using LinearAlgebra # For linear algebra operations
 

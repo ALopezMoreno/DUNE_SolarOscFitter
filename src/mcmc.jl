@@ -28,9 +28,11 @@ priors = Dict{Symbol,Any}(
 
   # systematic parameters
   :integrated_8B_flux => prior_8B_flux,
-  :cc_xsec_norm => prior_cc_xsec_norm,
-  :cc_xsec_tilt => prior_cc_xsec_tilt,
-  :cc_xsec_curv => prior_cc_xsec_curv
+  # CC xsec shape: omit when fix_cc_xsec=true so they are not sampled.
+  # propagation_osc.jl falls back to the Asimov true values in that case.
+  (fix_cc_xsec ? () : (:cc_xsec_norm => prior_cc_xsec_norm,
+                        :cc_xsec_tilt => prior_cc_xsec_tilt,
+                        :cc_xsec_curv => prior_cc_xsec_curv))...
 )
 
 

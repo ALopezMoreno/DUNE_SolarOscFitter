@@ -50,7 +50,20 @@ include(joinpath(@__DIR__, "likelihoods", "likelihood_builder.jl"))
 
 # Build Earth propagation paths (shared)
 global earth_paths  = [make_potential_for_integrand(z, earth) for z in cosz_calc]
-global earth_lookup = get_avg_densities(earth_paths)
+global earth_lookup = let
+    base    = get_avg_densities(earth_paths)
+    n_exp   = isnothing(earth_normalisation_true) ? length(base) : length(earth_normalisation_true)
+    if length(base) < n_exp
+        # Some innermost layers (e.g. inner core) lie outside the exposure support
+        # and are not traversed by any path in cosz_calc.  Get their nominal
+        # densities from the vertical reference path (layers are indexed
+        # outermost→innermost, so missing ones are always at the high end).
+        ref = get_avg_densities([make_potential_for_integrand(-1.0, earth)])
+        [base; ref[length(base)+1:n_exp]]
+    else
+        base
+    end
+end
 
 #############################################
 ######## PER-DETECTOR LOOP ########

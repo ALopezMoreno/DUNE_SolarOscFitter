@@ -92,7 +92,7 @@ function compute_ES_angular_event_rates(oscSamplesES, responseMatrices, BG_ES, d
     eventRate_ES_night_angular_signal     = reshape(responseMatrices.ES.angular, ncos, nErec, 1) .*
                                             reshape(eventRate_ES_night', 1, nErec, ncosz)
     eventRate_ES_night_angular_background = reshape(responseMatrices.BG.angular, ncos, nErec, 1) .*
-                                            reshape(exposure_weights' .* BG_ES, 1, nErec, ncosz)
+                                            reshape(reshape(BG_ES, nErec, 1) .* reshape(exposure_weights, 1, ncosz), 1, nErec, ncosz)
     eventRate_ES_night_angular = eventRate_ES_night_angular_signal .+ eventRate_ES_night_angular_background .* 0.5
 
     # Angular cut from det_flags
