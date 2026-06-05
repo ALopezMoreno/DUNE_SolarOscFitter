@@ -37,7 +37,8 @@ ES_FILL  = "#ff6b6b";  ES_EDGE  = "#b33939"
 CC_FILL  = "#70a1ff";  CC_EDGE  = "#1e3799"
 BG_FILL  = "#888888";  BG_EDGE  = "#333333"
 NUE_COL  = "#0894bc";  NUOTHER_COL = "#a41007"
-LW = 1.5
+LW      = 1.5
+LW_HIST = 3.5   # thicker lines for dedicated histogram page
 
 # ── Load data ─────────────────────────────────────────────────────────────────
 # JLD2 is HDF5-compatible.  Julia stores arrays in column-major order; HDF5 +
@@ -151,6 +152,8 @@ else:
 # Bins below this threshold contain huge backgrounds not used in the fit, which swamp
 # the angular plots when summed over energy.
 e_thresh_mask = E_centers_reco >= (Ereco_min + 1)
+e_5mev_mask   = E_centers_reco >= 5.0
+e_10mev_mask  = E_centers_reco >= 10.0
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def filled_stairs(ax, edges, y, fill_color, edge_color, label=None, lw=LW):
@@ -185,7 +188,7 @@ with PdfPages(out_pdf) as pdf:
             (u_ES_nuother_hep,r"$\nu_x$ ES  (HEP)",     NUOTHER_COL),
             (u_CC_hep,        r"CC  (HEP)",              CC_EDGE),
         ]
-        fig, axes = plt.subplots(2, 3, figsize=(26, 16), constrained_layout=True)
+        fig, axes = plt.subplots(2, 3, figsize=(18, 11), constrained_layout=True)
         for (ax, (y, title, col)) in zip(axes.ravel(), specs):
             line_stairs(ax, E_edges_true, y, col)
             ax.set_xlabel(r"$E_{\rm true}$ [MeV]")
@@ -222,7 +225,7 @@ with PdfPages(out_pdf) as pdf:
 
         ncols = min(len(panels), 3)
         nrows = int(np.ceil(len(panels) / ncols))
-        fig, axes = plt.subplots(nrows, ncols, figsize=(11 * ncols, 9 * nrows), constrained_layout=True)
+        fig, axes = plt.subplots(nrows, ncols, figsize=(8 * ncols, 6.5 * nrows), constrained_layout=True)
         axes_flat = np.atleast_1d(axes).ravel()
         for ax, (Z, xe, ye, xl, yl, title) in zip(axes_flat, panels):
             heatmap(ax, Z, xe, ye, xl, yl, title)
@@ -239,7 +242,7 @@ with PdfPages(out_pdf) as pdf:
         E_edges_true = np.linspace(Etrue_min, Etrue_max, Etrue_n + 1)
         cosz_edges   = np.linspace(cosz_min, cosz_max, cosz_n + 1)
 
-        fig, axes = plt.subplots(2, 2, figsize=(22, 16), constrained_layout=True)
+        fig, axes = plt.subplots(2, 2, figsize=(15, 11), constrained_layout=True)
 
         # day
         for ax, y, label in [
@@ -272,7 +275,7 @@ with PdfPages(out_pdf) as pdf:
         E_edges_true = np.linspace(Etrue_min, Etrue_max, Etrue_n + 1)
         cosz_edges   = np.linspace(cosz_min, cosz_max, cosz_n + 1)
 
-        fig, axes = plt.subplots(2, 3, figsize=(26, 16), constrained_layout=True)
+        fig, axes = plt.subplots(2, 3, figsize=(18, 11), constrained_layout=True)
 
         # day (top row)
         day_specs = [
@@ -313,7 +316,7 @@ with PdfPages(out_pdf) as pdf:
         E_edges_ES   = np.linspace(Ereco_ES_min, Ereco_ES_max, Ereco_ES_n + 1)
         E_edges_CC   = np.linspace(Ereco_CC_min, Ereco_CC_max, Ereco_CC_n + 1) if Ereco_CC_n > 0 else E_edges_ES
 
-        fig, axes = plt.subplots(2, 2, figsize=(24, 18), constrained_layout=True)
+        fig, axes = plt.subplots(2, 2, figsize=(16, 12), constrained_layout=True)
 
         # ES day (top-left)
         ax = axes[0, 0]
@@ -370,7 +373,7 @@ with PdfPages(out_pdf) as pdf:
         E_edges_ES   = np.linspace(Ereco_ES_min, Ereco_ES_max, Ereco_ES_n + 1)
         cos_sc_edges = np.linspace(cos_scatter_min, cos_scatter_max, cos_scatter_n + 1)
 
-        fig, axes = plt.subplots(1, 2, figsize=(24, 10), constrained_layout=True)
+        fig, axes = plt.subplots(1, 2, figsize=(16, 7), constrained_layout=True)
 
         # 2D heatmap  (n_cos_scatter, n_Ereco)
         heatmap(axes[0], ES_angular_day,
@@ -416,7 +419,7 @@ with PdfPages(out_pdf) as pdf:
         ncols_z = 3
         nrows_z = int(np.ceil(len(z_indices) / ncols_z))
         fig, axes = plt.subplots(nrows_z, ncols_z,
-                                 figsize=(9 * ncols_z, 7.6 * nrows_z),
+                                 figsize=(7 * ncols_z, 6 * nrows_z),
                                  constrained_layout=True)
         axes_flat = np.atleast_1d(axes).ravel()
 
@@ -450,7 +453,7 @@ with PdfPages(out_pdf) as pdf:
 
     # ══════════════════════════════════════════════════════════════════════════
     # PAGE 7 (or only page when --stages angular): Combined stacks
-    #   Stacked spectrum (lin + log) + N angular-slice panels
+    #   Stacked spectrum (lin + log) + N angular-slice panels + >5 MeV panel
     # Emitted only when angular_reco=true (angular arrays are meaningful)
     # ══════════════════════════════════════════════════════════════════════════
     if has_angular or (args.stages == "angular"):
@@ -467,12 +470,14 @@ with PdfPages(out_pdf) as pdf:
         panel_data.append(("spec_log",))
         for i_E in e_slices:
             panel_data.append(("ang", i_E))
+        panel_data.append(("ang_above5",))
+        panel_data.append(("ang_above10",))
 
         n_total = len(panel_data)
         ncols   = 3
         nrows   = int(np.ceil(n_total / ncols))
         fig, axes = plt.subplots(nrows, ncols,
-                                 figsize=(9 * ncols, 7.6 * nrows),
+                                 figsize=(7 * ncols, 6 * nrows),
                                  constrained_layout=True)
         axes_flat = np.atleast_1d(axes).ravel()
 
@@ -480,30 +485,30 @@ with PdfPages(out_pdf) as pdf:
             ax = axes_flat[idx]
 
             if spec[0] == "spec_lin":
-                filled_stairs(ax, E_edges_reco, bg_1d + cc_1d + es_1d, ES_FILL, ES_EDGE, label="ES")
-                filled_stairs(ax, E_edges_reco, bg_1d + cc_1d,          CC_FILL, CC_EDGE, label="CC")
-                filled_stairs(ax, E_edges_reco, bg_1d,                  BG_FILL, BG_EDGE, label="BG")
-                ax.set_xlabel(r"$E_{reco}$ [MeV]")
+                filled_stairs(ax, E_edges_reco, bg_1d + cc_1d + es_1d, ES_FILL, ES_EDGE, label=r"ES")
+                filled_stairs(ax, E_edges_reco, bg_1d + cc_1d,          CC_FILL, CC_EDGE, label=r"CC")
+                filled_stairs(ax, E_edges_reco, bg_1d,                  BG_FILL, BG_EDGE, label=r"BG")
+                ax.set_xlabel(r"$E_{\rm reco}$ [MeV]")
                 ax.set_ylabel("Events")
-                ax.set_title("Stacked Spectrum (Lin)")
+                ax.set_title(r"Stacked Spectrum (linear)")
                 ax.set_xlim(Ereco_min + 1, Ereco_max)
                 ax.set_ylim(bottom=0)
                 ax.legend(fontsize=10, loc="upper right")
 
             elif spec[0] == "spec_log":
                 _clamp = lambda v: np.where(v > 0, v, 1e-2)
-                line_stairs(ax, E_edges_reco, _clamp(es_1d), ES_EDGE, label="ES")
-                line_stairs(ax, E_edges_reco, _clamp(cc_1d), CC_EDGE, label="CC")
-                line_stairs(ax, E_edges_reco, _clamp(bg_1d), BG_EDGE, label="BG")
+                line_stairs(ax, E_edges_reco, _clamp(es_1d), ES_EDGE, label=r"ES")
+                line_stairs(ax, E_edges_reco, _clamp(cc_1d), CC_EDGE, label=r"CC")
+                line_stairs(ax, E_edges_reco, _clamp(bg_1d), BG_EDGE, label=r"BG")
                 ax.set_yscale("log")
-                ax.set_xlabel(r"$E_{reco}$ [MeV]")
+                ax.set_xlabel(r"$E_{\rm reco}$ [MeV]")
                 ax.set_ylabel("Events")
-                ax.set_title("Components (Log)")
+                ax.set_title(r"Components (log scale)")
                 ax.set_xlim(Ereco_min + 1, Ereco_max)
                 ax.set_ylim(1e-1, 1e6)
                 ax.legend(fontsize=10, loc="upper right")
 
-            else:  # angular slice
+            elif spec[0] == "ang":  # angular slice at fixed energy
                 i_E = spec[1]
                 es  = ES_angular[:, i_E]
                 cc  = CC_angular[:, i_E]
@@ -516,12 +521,85 @@ with PdfPages(out_pdf) as pdf:
                 ax.set_ylim(0, y_max)
                 ax.set_xlabel(r"$\cos\theta_s$")
                 ax.set_ylabel("Events")
-                ax.set_title(rf"$E_{{reco}} \approx {E_centers_reco[i_E]:.1f}$ MeV")
+                ax.set_title(rf"$E_{{\rm reco}} \approx {E_centers_reco[i_E]:.1f}\ \mathrm{{MeV}}$")
+
+            elif spec[0] == "ang_above5":
+                es_5 = ES_angular[:, e_5mev_mask].sum(axis=1)
+                cc_5 = CC_angular[:, e_5mev_mask].sum(axis=1)
+                bg_5 = BG_angular[:, e_5mev_mask].sum(axis=1)
+                y_max = max(10.0, float((bg_5 + cc_5 + es_5).max()) * 1.5)
+                filled_stairs(ax, cos_edges, bg_5 + cc_5 + es_5, ES_FILL, ES_EDGE, label=r"ES")
+                filled_stairs(ax, cos_edges, bg_5 + cc_5,        CC_FILL, CC_EDGE, label=r"CC")
+                filled_stairs(ax, cos_edges, bg_5,               BG_FILL, BG_EDGE, label=r"BG")
+                ax.set_xlim(cos_min, cos_max)
+                ax.set_ylim(0, y_max)
+                ax.set_xlabel(r"$\cos\theta_s$")
+                ax.set_ylabel("Events")
+                ax.set_title(r"$E_{\rm reco} > 5\ \mathrm{MeV}$")
+                ax.legend(fontsize=10)
+
+            else:  # ang_above10 — angular distribution integrated over E > 10 MeV
+                es_10 = ES_angular[:, e_10mev_mask].sum(axis=1)
+                cc_10 = CC_angular[:, e_10mev_mask].sum(axis=1)
+                bg_10 = BG_angular[:, e_10mev_mask].sum(axis=1)
+                y_max = max(10.0, float((bg_10 + cc_10 + es_10).max()) * 1.5)
+                filled_stairs(ax, cos_edges, bg_10 + cc_10 + es_10, ES_FILL, ES_EDGE, label=r"ES")
+                filled_stairs(ax, cos_edges, bg_10 + cc_10,         CC_FILL, CC_EDGE, label=r"CC")
+                filled_stairs(ax, cos_edges, bg_10,                 BG_FILL, BG_EDGE, label=r"BG")
+                ax.set_xlim(cos_min, cos_max)
+                ax.set_ylim(0, y_max)
+                ax.set_xlabel(r"$\cos\theta_s$")
+                ax.set_ylabel("Events")
+                ax.set_title(r"$E_{\rm reco} > 10\ \mathrm{MeV}$")
+                ax.legend(fontsize=10)
 
         for ax in axes_flat[n_total:]:
             ax.set_visible(False)
 
-        fig.suptitle("Inclusive angular stacks (combined day+night)", y=1.001)
+        fig.suptitle("Inclusive angular stacks (combined day$+$night)", y=1.001)
+        pdf.savefig(fig, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # PAGE 8: Dedicated energy histograms — thicker lines, two panels
+    #   Left: stacked linear  |  Right: components log scale
+    # ══════════════════════════════════════════════════════════════════════════
+    if has_angular or (args.stages == "angular"):
+        es_1d = ES_angular.sum(axis=0)
+        cc_1d = CC_angular.sum(axis=0)
+        bg_1d = BG_angular.sum(axis=0)
+
+        fig, (ax_lin, ax_log) = plt.subplots(1, 2, figsize=(15, 7),
+                                              constrained_layout=True)
+
+        # linear stacked
+        filled_stairs(ax_lin, E_edges_reco, bg_1d + cc_1d + es_1d, ES_FILL, ES_EDGE,
+                      label=r"ES", lw=LW_HIST)
+        filled_stairs(ax_lin, E_edges_reco, bg_1d + cc_1d,          CC_FILL, CC_EDGE,
+                      label=r"CC", lw=LW_HIST)
+        filled_stairs(ax_lin, E_edges_reco, bg_1d,                  BG_FILL, BG_EDGE,
+                      label=r"BG", lw=LW_HIST)
+        ax_lin.set_xlabel(r"$E_{\rm reco}\ [\mathrm{MeV}]$")
+        ax_lin.set_ylabel(r"Events / bin")
+        ax_lin.set_title(r"Stacked spectrum (linear)")
+        ax_lin.set_xlim(Ereco_min + 1, Ereco_max)
+        ax_lin.set_ylim(bottom=0)
+        ax_lin.legend(loc="upper right")
+
+        # log components
+        _clamp = lambda v: np.where(v > 0, v, 1e-2)
+        line_stairs(ax_log, E_edges_reco, _clamp(es_1d), ES_EDGE, label=r"ES", lw=LW_HIST)
+        line_stairs(ax_log, E_edges_reco, _clamp(cc_1d), CC_EDGE, label=r"CC", lw=LW_HIST)
+        line_stairs(ax_log, E_edges_reco, _clamp(bg_1d), BG_EDGE, label=r"BG", lw=LW_HIST)
+        ax_log.set_yscale("log")
+        ax_log.set_xlabel(r"$E_{\rm reco}\ [\mathrm{MeV}]$")
+        ax_log.set_ylabel(r"Events / bin")
+        ax_log.set_title(r"Components (log scale)")
+        ax_log.set_xlim(Ereco_min + 1, Ereco_max)
+        ax_log.set_ylim(1e-1, 1e6)
+        ax_log.legend(loc="upper right")
+
+        fig.suptitle(r"Energy spectra — inclusive angular stacks (day$+$night)", y=1.001)
         pdf.savefig(fig, dpi=300, bbox_inches="tight")
         plt.close(fig)
 

@@ -1,24 +1,3 @@
-#=
-earthUncertainty.jl
-
-Earth matter density uncertainty processing for systematic error analysis.
-This module loads and processes uncertainties in the Earth's density profile
-(PREM model uncertainties) and propagates them through the neutrino oscillation
-calculations to estimate systematic uncertainties in predicted event rates.
-
-Key Features:
-- Loading of PREM (Preliminary Reference Earth Model) uncertainty data
-- Interpolation and rebinning of uncertainty matrices
-- Propagation of Earth model uncertainties through full analysis chain
-- Calculation of covariance matrices for systematic uncertainties
-- Statistical analysis of uncertainty distributions
-
-The Earth matter uncertainties affect neutrino oscillation probabilities
-during nighttime propagation and contribute to systematic errors in the analysis.
-
-Author: [Author name]
-=#
-
 using JLD2           # For loading uncertainty data files
 using Interpolations # For uncertainty matrix interpolation
 using Plots          # For diagnostic plotting (optional)

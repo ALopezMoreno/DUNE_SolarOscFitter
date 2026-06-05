@@ -1,24 +1,3 @@
-#=
-propagateSample.jl
-
-Neutrino sample propagation and event rate calculation for the Solar Oscillation Fitter.
-This module takes unoscillated Monte Carlo samples and applies oscillation probabilities
-to calculate expected event rates in the detector for different channels and time periods.
-
-Key Features:
-- Oscillation probability calculation for day and night periods
-- Earth matter effect propagation for nighttime neutrinos
-- Detector response matrix application
-- Background event handling with systematic uncertainties
-- Block averaging for energy binning
-- Support for both fast and slow calculation modes
-
-The main function propagateSamples() is the core of the likelihood calculation,
-converting theoretical predictions into observable event rates.
-
-Author: [Author name]
-=#
-
 include(joinpath(@__DIR__, "oscillations", "osc.jl"))
 
 # Import oscillation calculation functions
@@ -190,8 +169,8 @@ function propagateSamples(unoscillatedSample, responseMatrices, params, solarMod
     oscProbs_nue_8B_day = block_average(oscProbs_nue_8B_day_large, 2)
     oscProbs_nue_hep_day = block_average(oscProbs_nue_hep_day_large, 2)
 
-    oscProbs_nue_8B_night = block_average(oscProbs_nue_8B_night_large, (3, 2)) 
-    oscProbs_nue_hep_night = block_average(oscProbs_nue_hep_night_large, (3, 2))
+    oscProbs_nue_8B_night  = block_average(oscProbs_nue_8B_night_large,  (N_COSZ_SUB, 2))
+    oscProbs_nue_hep_night = block_average(oscProbs_nue_hep_night_large, (N_COSZ_SUB, 2))
 
     # get nu_other probabilities from unitarity relation ################################################################
     oscProbs_nuother_8B_day = 1 .- oscProbs_nue_8B_day

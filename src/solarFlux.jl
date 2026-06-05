@@ -1,22 +1,3 @@
-#=
-solarFlux.jl
-
-Solar neutrino flux processing for the Solar Oscillation Fitter.
-This module loads and processes solar neutrino flux data for different
-nuclear processes in the Sun, creating interpolated and normalized flux functions.
-
-Key Features:
-- Loading of 8B and HEP neutrino flux data
-- Energy range extension for proper interpolation
-- Flux normalization for integration over energy
-- Linear interpolation for continuous flux functions
-
-The processed fluxes are used in unoscillated event rate calculations
-and are combined with oscillation probabilities to predict observed rates.
-
-Author: [Author name]
-=#
-
 # Load solar neutrino fluxes and create interpolated functions
 using Interpolations  # For flux interpolation
 using QuadGK          # For flux normalization integrals

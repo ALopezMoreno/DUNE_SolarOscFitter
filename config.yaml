@@ -11,7 +11,7 @@
 
 # ── 1. RUN CONTROL ──────────────────────────────────────────────────────────
 
-outFile:  "outputs/EXAMPLE_OUTPUT"  # output file prefix
+outFile:  "outputs/20_may_CC_HD-central-20yrs_test"  # output file prefix
 # prevFile: "outputs/my_previous_run"              # resume from saved chain state
 
 RunMode:  "MCMC"   # MCMC | LLH | derived | PROFILE
@@ -22,8 +22,7 @@ nuFast:   false   # C++ nuFast oscillation library (incompatible with multithrea
 
 
 # ── 2. ASIMOV TRUTH ─────────────────────────────────────────────────────────
-# Ground-truth values used to generate Asimov data (Asimov: true only).
-# Set independently of prior centres to enable bias / wrong-prior studies.
+# Ground-truth values used to generate Asimov data.
 
 true_sin2_th12:           0.307     # solar mixing angle
 true_sin2_th13:           0.0224    # reactor mixing angle (δCP and θ₂₃ fixed)
@@ -45,7 +44,9 @@ prior_8B_flux:  truncated(Normal(5.25e6, 0.28e6), 1.5e6, 1e7)   # SNO NC, ~5.3%
 # alternatives: Uniform(1e5, 2e7)  |  truncated(Normal(5.46e6, 0.22e6), 1.5e6, 1e7)
 prior_HEP_flux: Uniform(0, 2e4)
 
-# CC cross-section shape  (all relative to MARLEY; see CLAUDE.md for details)
+# CC cross-section shape  (all relative to MARLEY nominal; see README for details)
+# Set fix_cc_xsec: true to exclude these from sampling (parameters held at true values).
+fix_cc_xsec: false
 prior_cc_xsec_norm: truncated(Normal(1.0, 0.1), 0.1, 2.0)  # overall scale
 prior_cc_xsec_tilt: Normal(0.0, 0.1)                        # power-law slope shift
 prior_cc_xsec_curv: Normal(0.0, 0.05)                       # quadratic curvature
@@ -53,10 +54,10 @@ prior_cc_xsec_curv: Normal(0.0, 0.05)                       # quadratic curvatur
 
 # ── 4. SAMPLER ──────────────────────────────────────────────────────────────
 
-nChains:           10    # parallel HMC chains  (≈ number of CPU cores)
-nSteps:            300   # post-tuning steps per chain
-nTuning:           50    # steps per tuning cycle
-maxTuningAttempts: 30    # tuning cycles  (0 = skip tuning)
+nChains:           10     # parallel HMC chains  (≈ number of CPU cores)
+nSteps:            1000   # post-tuning steps per chain
+nTuning:           50     # steps per tuning cycle
+maxTuningAttempts: 30      # tuning cycles  (0 = skip tuning)
 
 earth_potential_uncertainties: true   # marginalise over Earth density profile
 
@@ -72,9 +73,9 @@ thinning:  1   # thinning for bin-importance diagnostics (RunMode: derived)
 # ── 6. SHARED BINNING ───────────────────────────────────────────────────────
 # True-energy and zenith binning shared across all detectors.
 
-nBins_Etrue:  30
+nBins_Etrue:  40
 range_Etrue:  [1, 21]   # MeV
-nBins_cosz:   20        # cos(zenith) bins from −1 (upward) to 0 (horizontal)
+nBins_cosz:   50        # cos(zenith) bins from −1 (upward) to 0 (horizontal)
 
 
 # ── 7. INPUT FILES ───────────────────────────────────────────────────────────
@@ -125,9 +126,9 @@ detectors:
     nBins_Ereco_ES:   30
     nBins_Ereco_CC:   30
     range_Ereco_ES:   [2, 20]
-    range_Ereco_CC:   [2, 20]
-    Ereco_min_ES:     3
-    Ereco_min_CC:     3
+    range_Ereco_CC:   [2, 25]
+    Ereco_min_ES:     5
+    Ereco_min_CC:     5
     nBins_cos_scatter: 25
 
     reconstruction_sample_CC:         "inputs/inputs_neutronOnly_may2026/Nu/3D/data_file_CC_1mFidu_discri_200Emin.csv"
@@ -150,7 +151,7 @@ detectors:
 
   # HD — horizontal-drift detector, CC-only standard analysis
   HD:
-    CC_exposure: 20
+    CC_exposure: 10
     ES_exposure: 20
     singleChannel:      "CC"
     inclusiveMode:      false
@@ -163,10 +164,10 @@ detectors:
     range_Ereco_ES:   [1, 15]
     range_Ereco_CC:   [1, 25]
     Ereco_min_ES:     3
-    Ereco_min_CC:     3
+    Ereco_min_CC:     5
     nBins_cos_scatter: 25
 
-    reconstruction_sample_CC:         "inputs/sergio_reco_CC_withFullCuts.csv"
+    reconstruction_sample_CC:         "inputs/CC_HD_central_sergio_may_2026_marley.csv"
     reconstruction_sample_ES_nue:     "inputs/inputs_neutronOnly_may2026/Nu/3D/data_file_ES_nue_1mFidu_discri_100Emin.csv"
     reconstruction_sample_ES_nuother: "inputs/inputs_neutronOnly_may2026/Nu/3D/data_file_ES_numutau_1mFidu_discri_100Emin.csv"
     reconstruction_sample_ES_angle:   "inputs/ES_angular_reco.csv"
@@ -176,10 +177,11 @@ detectors:
       - "inputs/inputs_neutronOnly_may2026/Nbkg/3D/data_file_Nbkg_1mFidu_discri_100Emin_Bottom.csv"
       - "inputs/inputs_neutronOnly_may2026/Nbkg/3D/data_file_Nbkg_1mFidu_discri_100Emin_shortW.csv"
     CC_background_files:
-      - "inputs/neutron_bg_CC_sergio_withFullCuts.csv"
-      - "inputs/gamma_bg_CC_sergio_withFullCuts.csv"
+      - "inputs/CC_HD_central_sergio_may_2026_neutron.csv"
+      - "inputs/CC_HD_central_sergio_may_2026_gamma.csv"
+      - "inputs/CC_HD_central_sergio_may_2026_radiological.csv"
 
     ES_background_normalisations: [2.2e-6, 2.2e-6]
-    CC_background_normalisations: [2.2e-6, 2.2e-6]
+    CC_background_normalisations: [2.2e-6, 2.2e-6, 2.2e-6]
     ES_background_systematics:    [0.02, 0.02]
-    CC_background_systematics:    [0.02, 0.02]
+    CC_background_systematics:    [0.02, 0.02, 0.02]

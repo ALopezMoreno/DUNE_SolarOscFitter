@@ -13,7 +13,7 @@ function poissonLogLikelihood(nExpected::AbstractVector{<:Real}, nMeasured::Abst
                 error("poissonLogLikelihood: bin $i significantly negative (e=$raw_e)")
             end
         end
-        e = max(raw_e, 1e-9)
+        e = 0.5 * (raw_e + 1e-9 + sqrt((raw_e - 1e-9)^2 + 1e-18))
         m = Float64(nMeasured[i])
 
         term = ifelse(
@@ -46,7 +46,8 @@ function perbin_poissonLogLikelihood(nExpected::AbstractArray,
             # below 1e-12 (flat aggregate gradient) while the per-bin formula assigns
             # wildly different log values there — producing spurious variance/score,
             # especially in low-count overflow bins.
-            out[I] = -(e - m * log(max(e, 1e-12)))
+            e_safe = 0.5 * (e + 1e-9 + sqrt((e - 1e-9)^2 + 1e-18))
+            out[I] = -(e - m * log(e_safe))
         else
             out[I] = -e
         end
@@ -161,8 +162,8 @@ function barlowBeestonLogLikelihood(nExpected, nMeasured, sigmaVar)
         s = sigmaVar[i]
         if e < 0
             println("model predicted negative event rate: ", e)
-            e = 0
         end
+        e = 0.5 * (e + 1e-9 + sqrt((e - 1e-9)^2 + 1e-18))
         
         if m > 0
             if e > 0

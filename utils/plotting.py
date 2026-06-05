@@ -48,7 +48,7 @@ def format_func(x):
 
 #fmt.format_data = format_func  # Affects tick labels
 
-def get_contours(x, y, weights, bins, smooth=0.2):
+def get_contours(x, y, weights, bins, smooth=0.8):
     range = [[x.min(), x.max()], [y.min(), y.max()]]
 
     # Parse the bin specifications.
@@ -1084,16 +1084,9 @@ def add_external_solar_data(ax):
     bestFitGlobal = np.genfromtxt('inputs/contours/bestFitGlobal.csv', delimiter=',')
     bestFitGlobal[1] = bestFitGlobal[1]*1e-1
 
-    ciemat1 = np.genfromtxt('inputs/contours/ciemat_HDcentral_1sigma.csv', delimiter=',')
-    ciemat1[:, 1] = ciemat1[:, 1]*1e-1
-
-    ciemat2 = np.genfromtxt('inputs/contours/ciemat_HDcentral_2sigma.csv', delimiter=',')
-    ciemat2[:, 1] = ciemat2[:, 1]*1e-1
-
     contcol = 'darksalmon'
     kamcol = 'purple'
     globcol = 'orange'
-    snocol = 'limegreen'
     junocol = "crimson"
 
     #kamcol = '#009E73'
@@ -1115,9 +1108,6 @@ def add_external_solar_data(ax):
     overlay_contours(juno1, ax, color=junocol, lw=2, ls='-')  # linewidth=10)
     overlay_contours(juno2, ax, color=junocol, lw=2, label='JUNO', ls='-')
     overlay_contours(juno3, ax, color=junocol, lw=2, ls='-')
-
-    overlay_contours(ciemat1, ax, smooth=False, color=snocol, lw=2, ls='-')
-    overlay_contours(ciemat2, ax, smooth=False, color=snocol, lw=2, label='CIEMAT', ls='-')
 
     ax.plot(bestFitkamLAND[0], bestFitkamLAND[1], color=kamcol, linestyle='', marker='s', markersize=5)
     ax.plot(bestFitGlobal[0], bestFitGlobal[1], color=globcol, linestyle='', marker='P', markersize=6)

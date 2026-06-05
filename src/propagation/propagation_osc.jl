@@ -133,8 +133,8 @@ function compute_oscillation_probabilities(
     oscProbs_nue_8B_day   = block_average(oscProbs_nue_8B_day_large, 2)
     oscProbs_nue_hep_day  = block_average(oscProbs_nue_hep_day_large, 2)
 
-    oscProbs_nue_8B_night = block_average(oscProbs_nue_8B_night_large, (3, 2))
-    oscProbs_nue_hep_night = block_average(oscProbs_nue_hep_night_large, (3, 2))
+    oscProbs_nue_8B_night  = block_average(oscProbs_nue_8B_night_large,  (N_COSZ_SUB, 2))
+    oscProbs_nue_hep_night = block_average(oscProbs_nue_hep_night_large, (N_COSZ_SUB, 2))
 
     # ν_other from unitarity
     oscProbs_nuother_8B_day   = 1 .- oscProbs_nue_8B_day
@@ -182,20 +182,27 @@ function compute_oscillated_samples(unoscillatedSample, params, oscProbs;
     end
 
     if cc_mode
-        xsec_shape = exp.(params.cc_xsec_tilt .* unoscillatedSample.log_E_norm .+
-                          params.cc_xsec_curv .* unoscillatedSample.log_E_norm.^2) .*
-                     params.cc_xsec_norm
+        _xsec_norm = hasproperty(params, :cc_xsec_norm) ? params.cc_xsec_norm : cc_xsec_norm_true
+        _xsec_tilt = hasproperty(params, :cc_xsec_tilt) ? params.cc_xsec_tilt : 0.0
+        _xsec_curv = hasproperty(params, :cc_xsec_curv) ? params.cc_xsec_curv : 0.0
+        xsec_shape = exp.(_xsec_tilt .* unoscillatedSample.log_E_norm .+
+                          _xsec_curv .* unoscillatedSample.log_E_norm.^2) .*
+                     _xsec_norm
+
+        # Pre-apply xsec_shape to 1D CC samples so the night (cosz×Etrue) broadcast
+        # works: (1,n_Etrue) .* (n_cosz,n_Etrue) is fine; (n_cosz,n_Etrue) .* (n_Etrue,)
+        # fails because Julia compares axes left-to-right without left-padding.
+        CC_8B_s  = unoscillatedSample.CC_8B  .* xsec_shape
+        CC_hep_s = unoscillatedSample.CC_hep .* xsec_shape
 
         CC = (
             day =
-                (unoscillatedSample.CC_8B  .* oscProbs.nue_8B_day  .* params.integrated_8B_flux .+
-                 unoscillatedSample.CC_hep .* oscProbs.nue_hep_day .* params.integrated_HEP_flux) .*
-                xsec_shape,
+                CC_8B_s  .* oscProbs.nue_8B_day  .* params.integrated_8B_flux .+
+                CC_hep_s .* oscProbs.nue_hep_day .* params.integrated_HEP_flux,
 
             night =
-                ((unoscillatedSample.CC_8B'  .* (params.integrated_8B_flux' .* oscProbs.nue_8B_night  .* exposure_weights)) .+
-                 (unoscillatedSample.CC_hep' .* (params.integrated_HEP_flux  .* oscProbs.nue_hep_night .* exposure_weights))) .*
-                xsec_shape,
+                (CC_8B_s'  .* (params.integrated_8B_flux' .* oscProbs.nue_8B_night  .* exposure_weights)) .+
+                (CC_hep_s' .* (params.integrated_HEP_flux  .* oscProbs.nue_hep_night .* exposure_weights)),
         )
     end
 

@@ -393,3 +393,6 @@ contribution_matrix_*.jl*
 # One-off gallery/presentation scripts
 utils/cbar_gallery.py
 test_semiinclusive.yaml
+
+# Claude Code instructions (local dev tool, not project docs)
+CLAUDE.md

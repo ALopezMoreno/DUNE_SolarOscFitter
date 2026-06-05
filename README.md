@@ -206,6 +206,12 @@ The analysis fits the following parameters:
 - Earth matter density uncertainties
 - Background normalizations
 - Detector response uncertainties
+- CC cross-section shape uncertainties (relative to MARLEY nominal):
+  - `cc_xsec_norm` — overall scale; default `truncated(Normal(1.0, 0.1), 0.1, 2.0)`
+  - `cc_xsec_tilt` — power-law spectral slope, applied as `exp(α₁ × log(E/E_pivot))`; default `Normal(0, 0.1)`
+  - `cc_xsec_curv` — quadratic spectral curvature, applied as `exp(α₂ × log²(E/E_pivot))`; default `Normal(0, 0.05)`
+
+  `E_pivot` is the flux-weighted mean CC event energy; by construction `cc_xsec_tilt` is orthogonal to `cc_xsec_norm`, and `cc_xsec_curv` is orthogonal to both.
 
 > ⚠️ **Warning: Delete Existing Output Files Before Rewriting**
 >

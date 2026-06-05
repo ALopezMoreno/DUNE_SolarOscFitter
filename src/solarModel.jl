@@ -1,25 +1,4 @@
 
-#=
-solarModel.jl
-
-Solar model data loading for neutrino production calculations.
-This module loads solar structure data and neutrino flux information
-required for calculating neutrino production rates and oscillation
-probabilities in the solar matter.
-
-Key Features:
-- Loading of solar density and electron density profiles
-- Neutrino production region data for 8B and HEP processes
-- Calculation of production-weighted average densities
-- Solar neutrino flux data loading and normalization
-- Integration with oscillation probability calculations
-
-The solar model data is essential for calculating MSW (matter) effects
-during neutrino propagation through the Sun's interior.
-
-Author: [Author name]
-=#
-
 # Load solar model data (density profiles and production regions)
 if isfile(solarModelFile)
     solarModel = jldopen(solarModelFile, "r") do file

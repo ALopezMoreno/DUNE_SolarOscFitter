@@ -1,23 +1,3 @@
-#=
-responseSys.jl
-
-Detector response systematic uncertainties for the Solar Oscillation Fitter.
-This module implements systematic uncertainties in the detector response,
-primarily focusing on energy scale calibration and reconstruction effects.
-
-Key Features:
-- Energy scale systematic uncertainty implementation
-- Histogram rebinning for energy scale corrections
-- Framework for additional response systematics (purity, efficiency)
-- Integration with nuisance parameter fitting
-
-Note: This module is currently under development. The main systematic
-implemented is energy scale uncertainty, with placeholders for additional
-response systematics like detector purity and reconstruction efficiency.
-
-Author: [Author name]
-=#
-
 include(joinpath(@__DIR__, "histHelpers.jl"))
 
 # Energy scale systematic uncertainty

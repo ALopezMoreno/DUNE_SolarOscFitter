@@ -1,24 +1,3 @@
-#=
-response.jl
-
-Detector response matrix creation for the Solar Oscillation Fitter.
-This module processes Monte Carlo simulation data to create response matrices
-that map true neutrino energies to reconstructed energies, accounting for
-detector resolution and efficiency effects.
-
-Key Features:
-- Response matrix creation from MC truth and reconstruction data
-- Energy binning and histogram processing
-- Detection efficiency calculations (selection + reconstruction)
-- Support for different neutrino interaction channels (ES, CC)
-- Extended energy binning with infinite bounds for edge effects
-
-The response matrices are essential for converting theoretical predictions
-at true energy into observable distributions at reconstructed energy.
-
-Author: [Author name]
-=#
-
 include(joinpath(@__DIR__, "histHelpers.jl"))
 
 function create_response_matrix(data, bin_info_x, bin_info_y)

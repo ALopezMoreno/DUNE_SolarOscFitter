@@ -1,23 +1,3 @@
-#=
-earthProfile.jl
-
-Earth density profile loading and processing for neutrino oscillation calculations.
-This module loads the Earth's density structure and creates interpolated functions
-for calculating matter effects during neutrino propagation through Earth.
-
-Key Features:
-- Loading of Earth density models from data files
-- Conversion of density profiles to neutrino matter potentials
-- Linear interpolation for continuous density functions
-- Zenith angle binning for path calculations
-- Support for different Earth model parameterizations
-
-The Earth matter potential is crucial for calculating neutrino oscillations
-during nighttime propagation when neutrinos pass through Earth's interior.
-
-Author: [Author name]
-=#
-
 using DelimitedFiles   # For reading Earth model data files
 using Interpolations   # For creating interpolated density functions
 
@@ -76,8 +56,82 @@ end
 earth_model = load_earth_model(earthModelFile)
 global earth = create_interpolated_model(earth_model)
 
-# Set up zenith angle arrays for neutrino path calculations
-# High-resolution array for detailed calculations
-global cosz_calc = collect(range(cosz_bins.min, stop=cosz_bins.max, length=cosz_bins.bin_number * 3))
-# Analysis-resolution array for final binning
-global cosz = collect(range(cosz_bins.min, stop=cosz_bins.max, length=cosz_bins.bin_number))
+# Set up zenith angle arrays for neutrino path calculations.
+#
+# Coarse grid is piecewise-uniform with bin edges at PREM discontinuities so no
+# bin straddles a density jump.  Bins are allocated only within the compact
+# support of the solar exposure (the range of cos(zenith) the detector actually
+# sees); PREM boundaries outside that support are dropped.
+#
+# N_COSZ_SUB fine midpoints per coarse bin are used for oscillation computation,
+# then block-averaged back to coarse resolution.  N_COSZ_SUB=2 is needed only
+# when nBins_cosz < 40; at ≥ 40 the coarse grid already meets the Nyquist
+# requirement set by the slowest oscillation in the fit range.
+
+const _IC_COSZ = -sqrt(max(0.0, 1.0 - (1221.0 / EARTH_RADIUS_KM)^2))  # inner-core boundary
+const _CM_COSZ = -sqrt(max(0.0, 1.0 - (3480.0 / EARTH_RADIUS_KM)^2))  # core-mantle boundary
+
+# Lower bound of the exposure compact support on the night side.
+# Falls back to cosz_bins.min for scripts that don't set solarExposureFile.
+const _COSZ_EXP_MIN = let
+    cosz_floor = cosz_bins.min
+    if @isdefined(solarExposureFile) && isfile(solarExposureFile)
+        raw = readdlm(solarExposureFile, ',')
+        night_cosz = filter(c -> c <= 0.0, Float64.(raw[:, 1]))
+        isempty(night_cosz) ? cosz_floor : minimum(night_cosz)
+    else
+        cosz_floor
+    end
+end
+
+function _alloc_cosz_bins(n_total, seg_lengths)
+    fracs  = seg_lengths ./ sum(seg_lengths)
+    counts = max.(1, floor.(Int, fracs .* n_total))
+    rem    = fracs .* n_total .- counts
+    for _ in 1:(n_total - sum(counts))
+        idx = argmax(rem); counts[idx] += 1; rem[idx] -= 1.0
+    end
+    counts
+end
+
+# Segment breaks: exposure lower bound + any PREM boundaries inside the support.
+const _SEG_BREAKS = let
+    breaks = Float64[_COSZ_EXP_MIN]
+    for b in [_IC_COSZ, _CM_COSZ]          # sorted ascending (most negative first)
+        if _COSZ_EXP_MIN < b < cosz_bins.max
+            push!(breaks, b)
+        end
+    end
+    push!(breaks, cosz_bins.max)
+    breaks
+end
+const _SEG_LENGTHS   = diff(_SEG_BREAKS)
+const _N_COARSE_SEGS = _alloc_cosz_bins(cosz_bins.bin_number, _SEG_LENGTHS)
+
+# Piecewise-uniform coarse bin edges (PREM boundaries on exact edges)
+function _piecewise_cosz_edges(seg_breaks, n_per_seg)
+    edges = [seg_breaks[1]]
+    for i in eachindex(n_per_seg)
+        append!(edges, collect(range(seg_breaks[i], seg_breaks[i+1]; length=n_per_seg[i]+1))[2:end])
+    end
+    edges
+end
+
+const COARSE_COSZ_EDGES = _piecewise_cosz_edges(_SEG_BREAKS, _N_COARSE_SEGS)
+
+# N_COSZ_SUB=2 only when the coarse grid is too sparse to meet Nyquist alone.
+const N_COSZ_SUB = cosz_bins.bin_number < 40 ? 2 : 1
+
+# Fine grid: N_COSZ_SUB midpoints per coarse bin
+global cosz_calc = let
+    cz = Float64[]
+    for i in 1:cosz_bins.bin_number
+        lo, hi = COARSE_COSZ_EDGES[i], COARSE_COSZ_EDGES[i+1]
+        w = hi - lo
+        append!(cz, [lo + (k - 0.5) * w / N_COSZ_SUB for k in 1:N_COSZ_SUB])
+    end
+    cz
+end
+
+# Coarse bin centres for analysis-resolution arrays
+global cosz = [(COARSE_COSZ_EDGES[i] + COARSE_COSZ_EDGES[i+1]) / 2 for i in 1:cosz_bins.bin_number]

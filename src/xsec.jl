@@ -1,23 +1,3 @@
-#=
-xsec.jl
-
-Neutrino interaction cross-section calculations for the Solar Oscillation Fitter.
-This module loads and processes neutrino-nucleus interaction cross-sections for
-both charged current (CC) and elastic scattering (ES) processes.
-
-Key Features:
-- CC cross-section loading from MARLEY calculations for ν_e + 40Ar
-- ES cross-section analytical calculations for ν + e- scattering
-- Energy-dependent cross-section interpolation
-- Separate treatment for electron and other neutrino flavors
-- Threshold energy handling for detector sensitivity
-
-The cross-sections are combined with neutrino fluxes to calculate
-unoscillated interaction rates in the detector.
-
-Author: [Author name]
-=#
-
 using CSV             # For cross-section data loading
 using DataFrames      # For data manipulation
 using Interpolations  # For cross-section interpolation
