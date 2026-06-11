@@ -102,7 +102,7 @@ convergence = AssumeConvergence()
 proposal_algorithm = HamiltonianMC(termination=GeneralisedNoUTurn(max_depth=4))
 hmc_context        = BATContext(ad = ADSelector(:ForwardDiff))
 
-batchSteps = 50
+batchSteps = 200   # checkpoint/output cadence only — tuning persists across batches
 nBatches   = ceil(Int, mcmcSteps / batchSteps)
 
 @logmsg MCMC "Running chains in $nBatches post-tuning batches of $batchSteps steps each."
