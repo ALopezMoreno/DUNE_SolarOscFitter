@@ -75,7 +75,13 @@ thinning:  1   # thinning for bin-importance diagnostics (RunMode: derived)
 
 nBins_Etrue:  40
 range_Etrue:  [1, 21]   # MeV
-nBins_cosz:   50        # cos(zenith) bins from −1 (upward) to 0 (horizontal)
+nBins_cosz:   50        # total cos(zenith) bins from −1 (upward) to 0 (horizontal)
+# Horizon-refined binning: nBins_cosz_fine of the total go into a graded fine zone in
+# [cosz_fine_edge, 0] (where the day-night regeneration first-peak lives); the rest are
+# PREM-aligned coarse bins below. cosz_fine_edge ≈ first-peak cos(z) at the slowest
+# frequency (prior_dm2_21 lower bound ⇒ ≈ −0.12). Set nBins_cosz_fine: 0 for the legacy grid.
+nBins_cosz_fine: 20
+cosz_fine_edge:  -0.15
 
 
 # ── 7. INPUT FILES ───────────────────────────────────────────────────────────

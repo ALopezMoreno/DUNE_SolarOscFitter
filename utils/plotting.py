@@ -1228,23 +1228,21 @@ def plot_binmap(ax, Z, x_edges=None, y_edges=None, title=None,
         vmin, vmax = -m, m
 
     if x_edges is not None and y_edges is not None:
-        extent = (
-            x_edges[0],
-            x_edges[-1],
-            y_edges[0],
-            y_edges[-1],
-        )
-
-        mappable = ax.imshow(
-            Zp,
-            origin="lower",
-            aspect="auto",
-            extent=extent,
-            cmap=cmap,
-            vmin=vmin,
-            vmax=vmax,
-            interpolation="nearest"
-        )
+        # pcolormesh honours NON-uniform bin edges (e.g. the horizon-refined cos z grid),
+        # unlike imshow which assumes uniform spacing. Accept either centres (len n) or
+        # edges (len n+1) for each axis and build proper edges for shading="flat".
+        def _as_edges(e, n):
+            e = np.asarray(e, dtype=float)
+            if e.size == n + 1:
+                return e
+            if e.size == n and n >= 2:                      # centres → edges
+                mid = 0.5 * (e[1:] + e[:-1])
+                return np.concatenate(([2 * e[0] - mid[0]], mid, [2 * e[-1] - mid[-1]]))
+            return np.linspace(e[0], e[-1], n + 1)
+        xe = _as_edges(x_edges, Zp.shape[1])
+        ye = _as_edges(y_edges, Zp.shape[0])
+        mappable = ax.pcolormesh(xe, ye, Zp, cmap=cmap, vmin=vmin, vmax=vmax, shading="flat")
+        ax.set_xlim(xe[0], xe[-1]); ax.set_ylim(ye[0], ye[-1])
     else:
         mappable = ax.imshow(Zp, origin="lower", aspect="auto",
                              cmap=cmap, vmin=vmin, vmax=vmax)
@@ -1281,6 +1279,7 @@ def plot_predictive_spectrum(ax, pp_mean, bands=None, x_centers=None,
                              data=None, data_err=None,
                              total_rate=None,
                              bg_var=None,
+                             inflate=False,
                              title=None, ylabel="Events"):
     """
     T2K-style posterior predictive plot for a 1D energy spectrum.
@@ -1316,12 +1315,12 @@ def plot_predictive_spectrum(ax, pp_mean, bands=None, x_centers=None,
     edges[:-1] = x_centers - step / 2.0
     edges[-1]  = x_centers[-1] + step / 2.0
 
-    # Inflate bands to convert rate credible intervals into PPD count intervals.
+    # Optional inflation to convert rate credible intervals into PPD count intervals.
     # For the n-sigma band: half-width² = half-width_rate² + n²·(μ_total + bg_var)
     # μ_total adds Poisson shot noise; bg_var adds background-subtraction uncertainty.
-    # Together they guarantee PPD band ≥ data error bars (= sqrt(data + bg_var)) everywhere.
+    # Default OFF: bands then show the raw _wquantile parameter+systematic spread only.
     # Bands are stored outermost-first so sigma levels are [nb, nb-1, ..., 1].
-    if bands and total_rate is not None:
+    if inflate and bands and total_rate is not None:
         μ = np.maximum(np.asarray(total_rate, dtype=float), 0.0)
         bv = np.maximum(np.asarray(bg_var, dtype=float), 0.0) if bg_var is not None else 0.0
         nb_bands = len(bands)
@@ -1349,21 +1348,23 @@ def plot_predictive_spectrum(ax, pp_mean, bands=None, x_centers=None,
         for i, (lo, hi) in enumerate(bands):
             alpha = _ALPHAS[-(nb - i)]
             label = _LABELS[-(nb - i)]
-            lo = np.asarray(lo, dtype=float)
-            hi = np.asarray(hi, dtype=float)
+            # Clip at zero — negative signal rates are unphysical. Band edges (and the
+            # mean / data below) are floored at 0; Poisson error bars on the data are kept.
+            lo = np.maximum(np.asarray(lo, dtype=float), 0.0)
+            hi = np.maximum(np.asarray(hi, dtype=float), 0.0)
             lo_step = np.where(above, lo, np.nan)
             hi_step = np.where(above, hi, np.nan)
             ax.fill_between(x_rep, np.repeat(lo_step, 2), np.repeat(hi_step, 2),
                             color="tab:red", alpha=alpha, linewidth=0, label=label)
 
-    mean_plot = np.where(above, pp_mean, np.nan)
+    mean_plot = np.where(above, np.maximum(pp_mean, 0.0), np.nan)
     ax.step(edges, np.r_[mean_plot, mean_plot[-1]], where="post",
             color="royalblue", lw=1.8, label="P-pred. mean")
 
     if data is not None:
         data = np.asarray(data, dtype=float)
         err  = data_err if data_err is not None else np.sqrt(np.maximum(data, 0.0))
-        ax.errorbar(x_centers[above], data[above], yerr=err[above],
+        ax.errorbar(x_centers[above], np.maximum(data[above], 0.0), yerr=err[above],
                     fmt="k.", ms=5, capsize=2, lw=1.0,
                     label="Data (Asimov)", zorder=5)
 
@@ -1378,7 +1379,7 @@ def plot_predictive_spectrum(ax, pp_mean, bands=None, x_centers=None,
 
 def plot_binseries(ax, y, x_edges=None, title=None, ylabel=None,
                    kind="step", marker=None, mask=None,
-                   topk_idx=None, topk_style=None, ylim=None):
+                   topk_idx=None, topk_style=None, ylim=None, bar_kwargs=None):
     """
     Plot a 1D binned series (e.g. CCday_var, CCday_score, corr vs energy).
 
@@ -1408,10 +1409,11 @@ def plot_binseries(ax, y, x_edges=None, title=None, ylabel=None,
     if mask is not None:
         y[~mask] = np.nan
 
+    bk = bar_kwargs or {}
     if x_edges is None:
         x = np.arange(len(y))
         if kind == "bar":
-            artist = ax.bar(x, y)
+            artist = ax.bar(x, y, **bk)
         else:
             artist = ax.plot(x, y, marker=marker)[0]
     else:
@@ -1420,7 +1422,7 @@ def plot_binseries(ax, y, x_edges=None, title=None, ylabel=None,
             artist = ax.step(x_edges, np.r_[y, y[-1]], where="post")[0]
         elif kind == "bar":
             width = x_edges[1]-x_edges[0]
-            artist = ax.bar(x_edges, y, width=width, align="center")
+            artist = ax.bar(x_edges, y, width=width, align="center", **bk)
         else:  # "line"
             artist = ax.plot(x_edges, y, marker=marker)[0]
 
