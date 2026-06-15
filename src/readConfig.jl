@@ -279,6 +279,11 @@ function main()
     # Shared binning (same for all detectors)
     global Etrue_bins = (bin_number=config["nBins_Etrue"], min=config["range_Etrue"][1]*1e-3, max=config["range_Etrue"][2]*1e-3)
     global cosz_bins  = (bin_number=config["nBins_cosz"], min=-1, max=0)
+    # Horizon-refined cos(z) binning: nBins_cosz_fine graded bins in [cosz_fine_edge, 0]
+    # (concentrated where the day-night regeneration first-peak lives), the rest PREM-aligned.
+    # cosz_fine_edge ≈ first-peak cos(z) for the slowest frequency (prior_dm2_21 lower bound).
+    global nBins_cosz_fine = get(config, "nBins_cosz_fine", 0)   # 0 ⇒ legacy uniform-piecewise grid
+    global cosz_fine_edge  = get(config, "cosz_fine_edge", -0.12)
 
     # Per-detector configuration blocks
     if haskey(config, "detectors")

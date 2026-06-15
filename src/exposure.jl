@@ -15,8 +15,12 @@ cosz_y = exposure[:, 2]  # Relative exposure values
 # Uses flat extrapolation beyond data range
 exposure_intp = linear_interpolation(cosz_x, cosz_y, extrapolation_bc=Flat())
 
-# Calculate normalization by integrating over the full zenith range
-lower_limit = cosz_bins.min  # Minimum cos(zenith) = -1 (upward-going)
+# Normalise over the actual bin range, not the full [-1,0] range.
+# The coarse grid may start above cosz_bins.min (e.g. clipped to the exposure
+# compact support). Using cosz_bins.min would include phantom exposure from the
+# flat extrapolation in the denominator, making Σexp_weights < 1 and breaking
+# the day/night 50/50 split for the background.
+lower_limit = COARSE_COSZ_EDGES[1]
 upper_limit = cosz_bins.max  # Maximum cos(zenith) = 0 (horizontal)
 
 # Integrate exposure function over full range for normalization

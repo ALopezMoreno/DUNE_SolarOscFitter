@@ -296,13 +296,32 @@ def load_bin_diagnostics(mcmc_chains, require_all=True, verbose=True):
 
     keys = es_keys + ([] if inclusive_mode else cc_keys)
 
-    per_chain = {k: [] for k in keys}
-    missing = {k: [] for k in keys}
+    # Optional metadata keys (plotting-axis bin edges); present only after re-deriving
+    # with the edge-saving fix. Loaded if available but never required.
+    optional_keys = [
+        "derived_cosz_edges",
+        "derived_Ereco_edges_ES",
+        "derived_Ereco_edges_CC",
+        "derived_BGESnight_pp_mean",
+        "derived_BGCCnight_pp_mean",
+        "derived_data_CCday",
+        "derived_data_CCnight",
+        "derived_signal_CCday",
+        "derived_signal_CCnight",
+        "derived_signal_ESday",
+        "derived_signal_ESnight",
+        "derived_CCbg_comp_day",
+        "derived_CCbg_comp_names",
+    ]
+    load_keys = keys + optional_keys
+
+    per_chain = {k: [] for k in load_keys}
+    missing = {k: [] for k in load_keys}
 
     for c in chains:
         with h5py.File(c + ".jld2", "r") as f:
             have = set(f.keys())
-            for k in keys:
+            for k in load_keys:
                 if k not in have:
                     missing[k].append(c)
                     continue
@@ -312,7 +331,7 @@ def load_bin_diagnostics(mcmc_chains, require_all=True, verbose=True):
                 per_chain[k].append(a)
 
     if require_all:
-        bad = {k: v for k, v in missing.items() if v}
+        bad = {k: v for k, v in missing.items() if v and k in keys}
         if bad:
             raise ValueError(
                 "Missing keys:\n" + "\n".join(f"  {k}: {', '.join(v)}" for k, v in bad.items())

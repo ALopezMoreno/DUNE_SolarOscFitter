@@ -255,6 +255,7 @@ function save_debug_data(unoscillatedSample, responseMatrices, params,
         f["meta/cosz_min"]         = Float64(cosz_bins.min)
         f["meta/cosz_max"]         = Float64(cosz_bins.max)
         f["meta/cosz_n"]           = cosz_bins.bin_number
+        f["meta/cosz_edges"]       = collect(Float64.(COARSE_COSZ_EDGES))   # real (possibly non-uniform) night bin edges
         f["meta/has_CC"]           = has_CC
         f["meta/has_CC_inclusive"] = has_CC_incl
         f["meta/has_angular"]      = det_flags.angular_reco

@@ -64,6 +64,7 @@ with h5py.File(args.infile, "r") as f:
     has_CC_separate = False
     has_CC          = False
     has_CC_incl     = False
+    cosz_edges_real = None   # real (possibly non-uniform) night bin edges, if saved
 
     if full_data:
         Etrue_min       = float(f["meta/Etrue_min"][()])
@@ -78,6 +79,7 @@ with h5py.File(args.infile, "r") as f:
         cosz_min        = float(f["meta/cosz_min"][()])
         cosz_max        = float(f["meta/cosz_max"][()])
         cosz_n          = int(f["meta/cosz_n"][()])
+        cosz_edges_real = f["meta/cosz_edges"][:] if "meta/cosz_edges" in f else None
         has_CC          = bool(f["meta/has_CC"][()])
         has_CC_incl     = bool(f["meta/has_CC_inclusive"][()])
         has_angular     = bool(f["meta/has_angular"][()]) if "meta/has_angular" in f else False
@@ -240,7 +242,7 @@ with PdfPages(out_pdf) as pdf:
     # ══════════════════════════════════════════════════════════════════════════
     if full_data and args.stages == "all":
         E_edges_true = np.linspace(Etrue_min, Etrue_max, Etrue_n + 1)
-        cosz_edges   = np.linspace(cosz_min, cosz_max, cosz_n + 1)
+        cosz_edges   = cosz_edges_real if cosz_edges_real is not None else np.linspace(cosz_min, cosz_max, cosz_n + 1)
 
         fig, axes = plt.subplots(2, 2, figsize=(15, 11), constrained_layout=True)
 
@@ -273,7 +275,7 @@ with PdfPages(out_pdf) as pdf:
     # ══════════════════════════════════════════════════════════════════════════
     if full_data and args.stages == "all":
         E_edges_true = np.linspace(Etrue_min, Etrue_max, Etrue_n + 1)
-        cosz_edges   = np.linspace(cosz_min, cosz_max, cosz_n + 1)
+        cosz_edges   = cosz_edges_real if cosz_edges_real is not None else np.linspace(cosz_min, cosz_max, cosz_n + 1)
 
         fig, axes = plt.subplots(2, 3, figsize=(18, 11), constrained_layout=True)
 
@@ -312,7 +314,7 @@ with PdfPages(out_pdf) as pdf:
     # PAGE 5a: Reco-space spectra (day step + night heatmap, ES and CC)
     # ══════════════════════════════════════════════════════════════════════════
     if full_data and args.stages == "all":
-        cosz_edges   = np.linspace(cosz_min, cosz_max, cosz_n + 1)
+        cosz_edges   = cosz_edges_real if cosz_edges_real is not None else np.linspace(cosz_min, cosz_max, cosz_n + 1)
         E_edges_ES   = np.linspace(Ereco_ES_min, Ereco_ES_max, Ereco_ES_n + 1)
         E_edges_CC   = np.linspace(Ereco_CC_min, Ereco_CC_max, Ereco_CC_n + 1) if Ereco_CC_n > 0 else E_edges_ES
 

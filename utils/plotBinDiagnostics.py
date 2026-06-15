@@ -1,6 +1,8 @@
 import numpy as np
 import argparse
 import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
+from matplotlib.ticker import LogLocator, NullFormatter
 from matplotlib.backends.backend_pdf import PdfPages
 import h5py
 import networkx as nx
@@ -63,20 +65,84 @@ VAR_EPS = 1e-12
 ### ENERGY THRESHOLD AND LIMITS ###
 threshold = 5
 
-limits_CC = [4, 20]
-limits_ES = [2, 20]
+# Energy x-positions: bin centres of length n_E (used as centres for the 1D day
+# series/spectra; plot_binmap only uses first/last for its extent). Prefer the
+# real reco edges saved by `RunMode: derived`; fall back to hard-coded ranges.
+def _energy_centres(key, fb_lo, fb_hi, n_E):
+    if key in diagnostics:
+        e = np.asarray(diagnostics[key], dtype=float)        # n_E+1 edges, MeV
+        if e.size == n_E + 1:
+            return 0.5 * (e[:-1] + e[1:])
+    return np.linspace(fb_lo, fb_hi, n_E)
+
+def _energy_edges(key, fb_lo, fb_hi, n_E):
+    """Full n_E+1 reco energy bin edges (MeV) for pcolormesh / threshold lines."""
+    if key in diagnostics:
+        e = np.asarray(diagnostics[key], dtype=float)
+        if e.size == n_E + 1:
+            return e
+    return np.linspace(fb_lo, fb_hi, n_E + 1)
 ###################################
 
 # =========================
-# Night-time binning shape
+# Night-time binning shape   (saved shape vector is Julia (n_cosz, n_Ereco))
 # =========================
 esnight_shape = [int(i) for i in diagnostics["derived_ESnight_shape"]]
-xedges_es = np.linspace(limits_ES[0], limits_ES[1], esnight_shape[1])
-yedges = np.linspace(-1, 0, esnight_shape[0])
+xedges_es = _energy_centres("derived_Ereco_edges_ES", 2, 20, esnight_shape[1])
+es_E_edges = _energy_edges("derived_Ereco_edges_ES", 2, 20, esnight_shape[1])
+
+def _underlay_day_events(ax, E_edges, ch, fade=0.30, span=0.96, floor=1e-3):
+    """Translucent copy of the page-1 '{ch} day — signal+background' panel (plot 2,1),
+    drawn DIRECTLY on the host axis (no twin): the same stacked log-y spectrum, rescaled
+    into the panel's own y-range so it reads as a faint backdrop. Avoiding a twin axis
+    means no second y-axis AND no constrained-layout size mismatch — so the background
+    can never spill past the frame. The host's own x/y ranges are restored afterwards."""
+    key = f"derived_signal_{ch}day"
+    if key not in diagnostics:
+        return
+    sig = np.nan_to_num(np.asarray(diagnostics[key], dtype=float))
+    if not np.any(sig > 0):
+        return
+    by    = dict(_bg_components(ch) or [])
+    order = [n for n in _BG_ORDER if n in by] + [n for n in by if n not in _BG_ORDER]
+    cum, stacks = np.zeros(len(E_edges) - 1), []
+    for n in order:
+        new = cum + np.nan_to_num(by[n])
+        stacks.append((cum.copy(), new.copy(), _BG_COLOR.get(n, "grey"))); cum = new
+    total = cum
+    # Map log10(events) into the panel's current y-range (clipped to the frame by xlim).
+    xlim, (ylo, yhi) = ax.get_xlim(), ax.get_ylim()
+    vmax = max(np.nanmax(np.maximum(total, floor)), np.nanmax(np.maximum(sig, floor)), floor * 10)
+    lmin, lmax = np.log10(floor), np.log10(vmax)
+    mp = lambda v: ylo + span * (yhi - ylo) * (np.log10(np.maximum(np.asarray(v, float), floor)) - lmin) / (lmax - lmin)
+    for lo, hi, col in stacks:                                       # stacked fills
+        ax.fill_between(E_edges, _estep(mp(np.maximum(lo, floor))), _estep(mp(hi)),
+                        step="post", color=col, alpha=0.25 * fade, lw=0, zorder=0.0)
+    for lo, hi, _c in stacks[:-1]:                                   # thin dividers
+        ax.step(E_edges, _estep(mp(hi)), where="post", color="black", lw=1.0, alpha=0.8 * fade, zorder=0.1)
+    if stacks:                                                       # total outline
+        ax.step(E_edges, _estep(mp(total)), where="post", color="black", lw=2.5, alpha=fade, zorder=0.1)
+    ax.step(E_edges, _estep(mp(np.where(sig > 0, sig, floor))),      # ν signal line
+            where="post", color="blue", lw=2.5, alpha=0.9 * fade, zorder=0.1)
+    ax.set_xlim(xlim); ax.set_ylim(ylo, yhi)        # underlay must not alter the panel's own ranges
+
+# Diagonal-hatch style for the day diagnostic bars (variance AND driver-score panels) so
+# the translucent underlay shows through them. Hatch line thickness is the global
+# hatch.linewidth rcParam; the patch linewidth controls the bar outline.
+plt.rcParams["hatch.linewidth"] = 2.4
+_DIAG_BAR = dict(facecolor="none", edgecolor="C0", hatch="///", linewidth=1.2)
+
+# cosz y-edges for the 2D night maps (piecewise-uniform over the exposure
+# support, NOT a uniform [-1, 0] grid). imshow uses only first/last for extent.
+if "derived_cosz_edges" in diagnostics:
+    yedges = np.asarray(diagnostics["derived_cosz_edges"], dtype=float)
+else:
+    yedges = np.linspace(-1, 0, esnight_shape[0] + 1)
 
 if not inclusive_mode:
     ccnight_shape = [int(i) for i in diagnostics["derived_CCnight_shape"]]
-    xedges_cc = np.linspace(limits_CC[0], limits_CC[1], ccnight_shape[1])
+    xedges_cc = _energy_centres("derived_Ereco_edges_CC", 4, 20, ccnight_shape[1])
+    cc_E_edges = _energy_edges("derived_Ereco_edges_CC", 4, 20, ccnight_shape[1])
 
 ##################################################################################
 ##################################################################################
@@ -158,7 +224,184 @@ SIDEBAR_RECT = (0.915, 0.16, 0.06, 0.77)  # fixed sidebar in right margin
 # Sidebar order: omit CC samples in inclusive mode
 sidebar_order = ("ESnight", "ESday") if inclusive_mode else ("CCnight", "CCday", "ESnight", "ESday")
 
+
+# ============================================================
+# OSCILLATED-SAMPLE PAGE(S) (rendered first), one per channel
+#   2 rows  : signal-only (oscillated, no bkg)  /  signal + background
+#   2 cols  : day = 1D rate vs reconstructed energy
+#             night = 2D map (E_reco on x, cos θ_z solar angle on y, events in colour)
+#   Full reco energy range; red vertical line at the analysis energy threshold.
+#   "signal" = Asimov sample − posterior-mean background (the oscillated+reco signal);
+#   "signal+bkg" = the full Asimov sample.
+# ============================================================
+def _logsafe(arr):
+    """Copy with non-positive entries set to NaN (blank on log scale / pcolormesh)."""
+    a = np.array(arr, dtype=float)
+    a[~(a > 0)] = np.nan
+    return a
+
+def _bg_components(ch):
+    """Per-component background day spectra (list of (name, spectrum)) if saved, else None.
+    Saved as Julia (n_Ereco, n_comp) → h5py (n_comp, n_Ereco); names are a comma string."""
+    key = f"derived_{ch}bg_comp_day"
+    if key not in diagnostics:
+        return None
+    comp = np.atleast_2d(np.asarray(diagnostics[key], dtype=float))   # (n_comp, n_Ereco)
+    nm = diagnostics.get(f"derived_{ch}bg_comp_names", "")
+    nm = nm.item() if hasattr(nm, "item") else nm
+    nm = nm.decode() if isinstance(nm, (bytes, bytearray)) else str(nm)
+    names = nm.split(",") if nm else [f"bkg {i+1}" for i in range(comp.shape[0])]
+    return list(zip(names, comp))
+
+# temp_5.py-style background colours/labels and bottom→top stack order
+_BG_COLOR = {"gamma": "orange", "neutron": "green", "radiological": "red", "alpha": "purple"}
+_BG_LABEL = {"gamma": r"$\gamma$", "neutron": r"$n$", "radiological": "radiological", "alpha": r"$\alpha$"}
+_BG_ORDER = ["gamma", "neutron", "radiological", "alpha"]
+
+def _estep(v):
+    """Append last bin value so a step='post' fill/line covers the final bin edge."""
+    v = np.asarray(v, dtype=float)
+    return np.append(v, v[-1])
+
+def _day_panel(ax, E_edges, signal, comps, floor=1e-3):
+    """temp_5.py log-y style: stacked-fill backgrounds (γ→n→radiological), thin black
+    dividers + thick total outline, ν signal as a thick blue line (not stacked)."""
+    xx = E_edges
+    if comps:
+        by = dict(comps)
+        order = [n for n in _BG_ORDER if n in by] + [n for n in by if n not in _BG_ORDER]
+        cum, tops = np.zeros(len(E_edges) - 1), []
+        for n in order:
+            new = cum + np.nan_to_num(by[n])
+            ax.fill_between(xx, np.maximum(_estep(cum), floor), np.maximum(_estep(new), floor),
+                            step="post", color=_BG_COLOR.get(n, "grey"), alpha=0.25,
+                            label=_BG_LABEL.get(n, n))
+            tops.append(new); cum = new
+        for t in tops[:-1]:                                   # thin dividers between layers
+            ax.step(xx, np.maximum(_estep(t), floor), where="post", color="black", lw=1, alpha=0.8)
+        ax.step(xx, np.maximum(_estep(tops[-1]), floor), where="post", color="black", lw=2.5)  # total
+    sig = np.where(np.asarray(signal, dtype=float) > 0, signal, np.nan)
+    ax.step(xx, _estep(sig), where="post", color="blue", lw=2.5, alpha=0.9, label=r"$\nu$ signal")
+    ax.set_yscale("log")
+    ax.set_ylim(bottom=floor)
+    ax.yaxis.set_minor_locator(LogLocator(subs=np.arange(2, 10), numticks=12))
+    ax.yaxis.set_minor_formatter(NullFormatter())
+    ax.tick_params(axis="y", which="minor", length=4)
+
+def add_sample_page(pdf, ch, E_edges, idx):
+    # Full Asimov sample (signal+bkg) and the clean signal-only sample (no bkg),
+    # both at the Asimov truth and over the full reco range (saved by derive mode).
+    data_day  = np.asarray(diagnostics[f"derived_data_{ch}day"],   dtype=float)
+    sig_day   = np.asarray(diagnostics[f"derived_signal_{ch}day"], dtype=float)
+    data_night = binImportanceHelpers._night_to_plot_layout(diagnostics[f"derived_data_{ch}night"])
+    sig_night  = binImportanceHelpers._night_to_plot_layout(diagnostics[f"derived_signal_{ch}night"])
+    bg_comps   = _bg_components(ch)
+
+    # Skip a channel with no sample (e.g. ES in a CC-only run)
+    if np.nansum(np.abs(data_day)) == 0 and np.nansum(np.abs(data_night)) == 0:
+        return
+    E_thr  = E_edges[idx]                      # lower edge of first above-threshold bin
+    cosz_e = yedges
+    cz_cen = 0.5 * (cosz_e[:-1] + cosz_e[1:])
+
+    # Same grouped/square layout engine as the per-bin diagnostic pages.
+    fig = plt.figure(figsize=(11, 8.5), constrained_layout=True)
+    fig.set_constrained_layout_pads(w_pad=0.01, h_pad=0.01, wspace=0.01, hspace=0.02)
+    fig.get_layout_engine().set(rect=PAGE_RECT)
+    groups = (plotting.GroupSpec(name="day",   ncols=1, wspace=0.03),
+              plotting.GroupSpec(name="night", ncols=1, wspace=0.03))
+    layout = plotting.build_grouped_layout(
+        fig, nrows=2, groups=groups, panel_ratio=1.0, cbar_ratio=0.06,
+        cbar_mode="per_plot", square=True, sharey_within_group=False, hide_inner_ylabel=True,
+    )
+    axs, cax = layout.axs, layout.cax_plot
+
+    rows = [("signal (oscillated, no bkg)", sig_night,  None),
+            ("signal + background",         data_night, bg_comps)]
+
+    for r, (label, dnight, comps) in enumerate(rows):
+        # --- day 1D (left column), temp_5.py log-y style; ν signal line is always
+        #     the no-bkg signal, backgrounds are stacked only on the signal+bkg row ---
+        ax = axs[r, 0]
+        _day_panel(ax, E_edges, sig_day, comps)
+        ax.axvline(E_thr, color="red", lw=1.3)
+        ax.set_xlim(E_edges[0], E_edges[-1])
+        ax.set_xlabel(r"$E_{reco}(MeV)$", fontsize=20)
+        ax.set_ylabel("Events", fontsize=20)
+        ax.tick_params(axis="both", labelsize=18)
+        ax.legend(fontsize=11, loc="upper right", ncol=1, frameon=False)
+        ax.set_title(f"{ch} day — {label}", fontsize=12)
+        fig.delaxes(cax[r, 0])                  # day has no colorbar
+
+        # --- night 2D map (right column), log colour, matched to plot_binmap style ---
+        ax = axs[r, 1]
+        Z = _logsafe(dnight)                   # (n_cosz, n_Ereco)
+        if np.any(Z > 0):
+            vmax = np.nanmax(Z)
+            vmin = max(np.nanmin(Z[Z > 0]), vmax / 1e4)   # 4-decade clip → exposure band visible
+            # pcolormesh with the real (non-uniform) cos z edges so the horizon-refined
+            # fine bins display at their true heights, not squashed into equal pixels.
+            m = ax.pcolormesh(E_edges, cosz_e, Z, cmap="viridis",
+                              norm=LogNorm(vmin=vmin, vmax=vmax), shading="flat")
+            ax.set_xlim(E_edges[0], E_edges[-1]); ax.set_ylim(cosz_e[0], cosz_e[-1])
+            cb = fig.colorbar(m, cax=cax[r, 1]); cb.ax.yaxis.set_ticks_position("right")
+            cb.set_label("Events", rotation=90, fontsize=20); cb.ax.tick_params(labelsize=16)
+            proj = np.nansum(np.maximum(dnight[:, idx:], 0.0), axis=1)   # above-thr cosz profile
+            if np.any(proj > 0):                                         # mark exposure peak
+                ax.axhline(cz_cen[np.nanargmax(proj)], color="w", ls=":", lw=0.9)
+        else:
+            fig.delaxes(cax[r, 1])
+        ax.axvline(E_thr, color="red", lw=1.3)
+        ax.set_xlabel(r"$E_{reco}(MeV)$", fontsize=20)
+        ax.set_ylabel(r"$\cos\theta_z$", fontsize=20)
+        ax.tick_params(axis="both", labelsize=18)
+        ax.set_title(f"{ch} night — {label}", fontsize=12)
+
+    fig.suptitle(f"{ch} oscillated sample: day (energy) and night (energy × solar angle)", y=0.995)
+    pdf.savefig(fig, dpi=300)
+    plt.close(fig)
+
+
+def add_oscmap_page(pdf):
+    """Best-fit (posterior-mean) oscillation map P(νe→νe) for 8B: the day survival curve
+    (1D) and the night regeneration map (2D, true energy × cos z). Computed in derive mode
+    at the posterior-mean parameters; skipped silently if those keys aren't present."""
+    if "derived_oscmap_8B_night" not in diagnostics:
+        return
+    night = np.asarray(diagnostics["derived_oscmap_8B_night"], dtype=float).T   # (n_cosz, n_Etrue)
+    day   = np.asarray(diagnostics["derived_oscmap_8B_day"],   dtype=float)      # (n_Etrue,)
+    if "derived_oscmap_Etrue_edges" in diagnostics:
+        Et = np.asarray(diagnostics["derived_oscmap_Etrue_edges"], dtype=float)
+    else:
+        Et = np.linspace(1.0, 21.0, day.size + 1)
+
+    fig, (axd, axn) = plt.subplots(1, 2, figsize=(11, 4.8), constrained_layout=True,
+                                   gridspec_kw=dict(width_ratios=[1.0, 1.25]))
+    # day survival probability P_ee(E_true)
+    axd.step(Et, np.append(day, day[-1]), where="post", color="C0", lw=2.5)
+    axd.set_xlim(Et[0], Et[-1]); axd.set_ylim(bottom=0.0)
+    axd.set_xlabel(r"$E_{true}$ (MeV)", fontsize=18)
+    axd.set_ylabel(r"$P(\nu_e\!\to\!\nu_e)$", fontsize=18)
+    axd.set_title("day", fontsize=13)
+    axd.tick_params(labelsize=14)
+    # night regeneration map — plot_binmap uses pcolormesh, so the graded cos z bins show
+    plotting.plot_binmap(axn, night, x_edges=0.5 * (Et[:-1] + Et[1:]), y_edges=yedges,
+                         title="night (regeneration)", cmap="viridis",
+                         add_colorbar=True, cbar_kw=dict(label=r"$P(\nu_e\!\to\!\nu_e)$"))
+    axn.set_xlabel(r"$E_{true}$ (MeV)", fontsize=18)   # override plot_binmap's E_reco label
+    axn.set_ylabel(r"$\cos\theta_z$", fontsize=18)
+    fig.suptitle(r"Best-fit oscillation map  $P(\nu_e\!\to\!\nu_e)$  ($^8$B)", y=1.06)
+    pdf.savefig(fig, dpi=300); plt.close(fig)
+
+
 with PdfPages(out_pdf) as pdf:
+    idx_es = int(np.asarray(diagnostics["derived_index_ES"])) - 1
+    if not inclusive_mode:
+        idx_cc = int(np.asarray(diagnostics["derived_index_CC"])) - 1
+        add_sample_page(pdf, "CC", cc_E_edges, idx_cc)
+    add_sample_page(pdf, "ES", es_E_edges, idx_es)
+    add_oscmap_page(pdf)   # best-fit P(νe→νe) day curve + night regeneration map
+
     # ============================================================
     # PAGE 1: VARIANCE (night 2D + day 1D) + narrow totals sidebar
     #   Non-inclusive: CC row + ES row
@@ -205,9 +448,10 @@ with PdfPages(out_pdf) as pdf:
         plotting.plot_binseries(
             axs[0, 1], ccday_var,
             title=r"CC day $\mathrm{Var}(\log\mathcal{L}_{\mathrm{bin}})$",
-            kind="bar",
+            kind="bar", bar_kwargs=_DIAG_BAR,
             x_edges=xedges_cc,
         )
+        _underlay_day_events(axs[0, 1], cc_E_edges, "CC")
         es_row = 1
     else:
         es_row = 0
@@ -226,9 +470,10 @@ with PdfPages(out_pdf) as pdf:
     plotting.plot_binseries(
         axs[es_row, 1], esday_var,
         title=r"ES day $\mathrm{Var}(\log\mathcal{L}_{\mathrm{bin}})$",
-        kind="bar",
+        kind="bar", bar_kwargs=_DIAG_BAR,
         x_edges=xedges_es,
     )
+    _underlay_day_events(axs[es_row, 1], es_E_edges, "ES")
 
     # Remove empty histogram cbar slots
     for r in range(nrows_p1):
@@ -439,13 +684,15 @@ with PdfPages(out_pdf) as pdf:
         plotting.plot_binseries(
             axs[0, 0], ccday_score_sin2,
             title=r"CC day Driver score  $(\sin^2\theta_{12})$",
-            kind="bar", x_edges=xedges_cc,
+            kind="bar", x_edges=xedges_cc, bar_kwargs=_DIAG_BAR,
         )
+        _underlay_day_events(axs[0, 0], cc_E_edges, "CC")
         plotting.plot_binseries(
             axs[1, 0], ccday_score_dm2,
             title=r"CC day Driver score  $(\Delta m^2_{21})$",
-            kind="bar", x_edges=xedges_cc,
+            kind="bar", x_edges=xedges_cc, bar_kwargs=_DIAG_BAR,
         )
+        _underlay_day_events(axs[1, 0], cc_E_edges, "CC")
         es_col = 1
     else:
         es_col = 0
@@ -453,13 +700,15 @@ with PdfPages(out_pdf) as pdf:
     plotting.plot_binseries(
         axs[0, es_col], esday_score_sin2,
         title=r"ES day Driver score  $(\sin^2\theta_{12})$",
-        kind="bar", x_edges=xedges_es,
+        kind="bar", x_edges=xedges_es, bar_kwargs=_DIAG_BAR,
     )
+    _underlay_day_events(axs[0, es_col], es_E_edges, "ES")
     plotting.plot_binseries(
         axs[1, es_col], esday_score_dm2,
         title=r"ES day Driver score  $(\Delta m^2_{21})$",
-        kind="bar", x_edges=xedges_es,
+        kind="bar", x_edges=xedges_es, bar_kwargs=_DIAG_BAR,
     )
+    _underlay_day_events(axs[1, es_col], es_E_edges, "ES")
 
     plotting.add_sidebar_totals_in_margin(
         fig, totals,

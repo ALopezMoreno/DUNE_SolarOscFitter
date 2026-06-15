@@ -12,11 +12,31 @@ def _Znight(Z, transpose_night=False):
     """Optionally transpose 2D (night) maps if stored as (E, cosz) vs (cosz, E)."""
     return Z.T if (transpose_night and Z is not None and Z.ndim == 2) else Z
 
+def _night_to_plot_layout(Z):
+    """
+    Convert an h5py-read night array to plotting layout (n_cosz, n_Ereco).
+
+    JLD2/HDF5 stores Julia arrays column-major and h5py reports the dims reversed:
+      - non-angular night  Julia (n_cosz, n_Ereco)            -> h5py (n_Ereco, n_cosz)            : transpose
+      - angular ES night   Julia (n_scatter, n_Ereco, n_cosz) -> h5py (n_cosz, n_Ereco, n_scatter) : sum scatter (last) axis
+    """
+    if Z is None:
+        return None
+    Z = _A(Z)
+    if Z.ndim == 2:
+        return Z.T
+    if Z.ndim == 3:
+        return Z.sum(axis=-1)
+    return Z
+
 def _reshape_julia_matrix(arr, shape, name=""):
     """
-    Robust reshape for Julia-saved arrays.
-    - Accepts either already-shaped arrays or flattened arrays.
-    - Uses column-major reshape (order='F') to match Julia.
+    Recover a Julia-saved array in its Julia (column-major) logical shape.
+
+    JLD2/HDF5 stores Julia arrays column-major; h5py reports the dims reversed,
+    so a 2D Julia (n_cosz, n_Ereco) array is read as (n_Ereco, n_cosz). Transpose
+    it back rather than reshaping: an order="F" reshape scrambles the data whenever
+    n_cosz != n_Ereco (which happens with the adaptive cosz grid).
     """
     a = _A(arr)
     shape = tuple(shape)
@@ -24,8 +44,12 @@ def _reshape_julia_matrix(arr, shape, name=""):
     if a.shape == shape:
         return a
 
+    # h5py dim-reversal of a 2D Julia array: the read array is the transpose.
+    if a.ndim == 2 and len(shape) == 2 and a.shape == shape[::-1]:
+        return a.T
+
     if a.size == int(np.prod(shape)):
-        return a.reshape(shape, order="F")  # <-- key change
+        return a.reshape(shape, order="F")
 
     raise ValueError(f"{name}: cannot reshape array of shape {a.shape} to {shape}")
 
@@ -246,8 +270,8 @@ def build_posterior_predictive_maps(diagnostics, transpose_night=False):
         ccday_mean = _A(diagnostics["derived_CCday_pp_mean"])
         ccday_var  = np.maximum(_A(diagnostics["derived_CCday_pp_var"]), 0.0)
 
-        ccnight_mean = _A(diagnostics["derived_CCnight_pp_mean"])
-        ccnight_var  = np.maximum(_A(diagnostics["derived_CCnight_pp_var"]), 0.0)
+        ccnight_mean = _night_to_plot_layout(diagnostics["derived_CCnight_pp_mean"])
+        ccnight_var  = np.maximum(_night_to_plot_layout(diagnostics["derived_CCnight_pp_var"]), 0.0)
 
         bg_ccday_mean = _A(diagnostics["derived_BGCCday_pp_mean"]) if "derived_BGCCday_pp_mean" in diagnostics else None
         bg_ccday_var  = _A(diagnostics["derived_BGCCday_pp_var"])  if "derived_BGCCday_pp_var"  in diagnostics else None
@@ -262,9 +286,13 @@ def build_posterior_predictive_maps(diagnostics, transpose_night=False):
             pp_lo3=_A(diagnostics["derived_CCday_pp_lo3"]) if "derived_CCday_pp_lo3" in diagnostics else None,
             pp_hi3=_A(diagnostics["derived_CCday_pp_hi3"]) if "derived_CCday_pp_hi3" in diagnostics else None,
         ))
+        bg_ccnight = _night_to_plot_layout(diagnostics["derived_BGCCnight_pp_mean"]) \
+            if "derived_BGCCnight_pp_mean" in diagnostics else None
         out["CCnight"].update(dict(
-            pp_mean=_Znight(ccnight_mean, transpose_night),
-            pp_var=_Znight(ccnight_var, transpose_night),
+            pp_mean=ccnight_mean,
+            pp_var=ccnight_var,
+            bg_mean=bg_ccnight,
+            signal_pp_mean=(ccnight_mean - bg_ccnight) if bg_ccnight is not None else None,
         ))
 
     # ES (always)
@@ -277,16 +305,10 @@ def build_posterior_predictive_maps(diagnostics, transpose_night=False):
         esday_mean = esday_mean.sum(axis=1)
         esday_var  = esday_var.sum(axis=1)   # used only for page-6 variance display
 
-    esnight_mean = _A(diagnostics["derived_ESnight_pp_mean"])
-    esnight_var  = np.maximum(_A(diagnostics["derived_ESnight_pp_var"]), 0.0)
-
-    esnight_mean = _Znight(esnight_mean, transpose_night)
-    esnight_var  = _Znight(esnight_var,  transpose_night)
-
-    # Collapse scatter-angle axis for night (3D → 2D)
-    if esnight_mean.ndim == 3:
-        esnight_mean = esnight_mean.sum(axis=-1)
-        esnight_var  = esnight_var.sum(axis=-1)
+    # _night_to_plot_layout transposes 2D (non-angular) and collapses the scatter
+    # axis of 3D (angular) night arrays, both -> (n_cosz, n_Ereco).
+    esnight_mean = _night_to_plot_layout(diagnostics["derived_ESnight_pp_mean"])
+    esnight_var  = np.maximum(_night_to_plot_layout(diagnostics["derived_ESnight_pp_var"]), 0.0)
 
     # pp_lo/pp_hi are stored as 1D by Julia (scatter already collapsed, signal-only); absent in old JLD2 files
     bg_esday_mean = _A(diagnostics["derived_BGESday_pp_mean"]) if "derived_BGESday_pp_mean" in diagnostics else None
@@ -302,7 +324,13 @@ def build_posterior_predictive_maps(diagnostics, transpose_night=False):
         pp_lo3=_A(diagnostics["derived_ESday_pp_lo3"]) if "derived_ESday_pp_lo3" in diagnostics else None,
         pp_hi3=_A(diagnostics["derived_ESday_pp_hi3"]) if "derived_ESday_pp_hi3" in diagnostics else None,
     ))
-    out["ESnight"].update(dict(pp_mean=esnight_mean, pp_var=esnight_var))
+    bg_esnight = _night_to_plot_layout(diagnostics["derived_BGESnight_pp_mean"]) \
+        if "derived_BGESnight_pp_mean" in diagnostics else None
+    out["ESnight"].update(dict(
+        pp_mean=esnight_mean, pp_var=esnight_var,
+        bg_mean=bg_esnight,
+        signal_pp_mean=(esnight_mean - bg_esnight) if bg_esnight is not None else None,
+    ))
 
     # --- Asimov data (if stored by derive mode) ---
     idx_es = int(_A(diagnostics["derived_index_ES"])) - 1  # Julia 1-based → Python 0-based
@@ -314,11 +342,7 @@ def build_posterior_predictive_maps(diagnostics, transpose_night=False):
         out["ESday"]["data"] = data_ESday
 
     if "derived_data_ESnight" in diagnostics:
-        data_ESnight = _A(diagnostics["derived_data_ESnight"])
-        data_ESnight = _Znight(data_ESnight, transpose_night)
-        if data_ESnight.ndim == 3:             # angular: collapse scatter-angle axis
-            data_ESnight = data_ESnight.sum(axis=-1)
-        out["ESnight"]["data"] = data_ESnight
+        out["ESnight"]["data"] = _night_to_plot_layout(diagnostics["derived_data_ESnight"])
 
     if not inclusive:
         idx_cc = int(_A(diagnostics["derived_index_CC"])) - 1
@@ -327,9 +351,7 @@ def build_posterior_predictive_maps(diagnostics, transpose_night=False):
             data_CCday[:idx_cc] = 0.0
             out["CCday"]["data"] = data_CCday
         if "derived_data_CCnight" in diagnostics:
-            data_CCnight = _A(diagnostics["derived_data_CCnight"])
-            data_CCnight = _Znight(data_CCnight, transpose_night)
-            out["CCnight"]["data"] = data_CCnight
+            out["CCnight"]["data"] = _night_to_plot_layout(diagnostics["derived_data_CCnight"])
 
     return out
 

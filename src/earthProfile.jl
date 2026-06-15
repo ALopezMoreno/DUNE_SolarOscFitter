@@ -68,8 +68,18 @@ global earth = create_interpolated_model(earth_model)
 # when nBins_cosz < 40; at ≥ 40 the coarse grid already meets the Nyquist
 # requirement set by the slowest oscillation in the fit range.
 
-const _IC_COSZ = -sqrt(max(0.0, 1.0 - (1221.0 / EARTH_RADIUS_KM)^2))  # inner-core boundary
-const _CM_COSZ = -sqrt(max(0.0, 1.0 - (3480.0 / EARTH_RADIUS_KM)^2))  # core-mantle boundary
+# Detect the two largest density discontinuities from the loaded potential profile.
+# potential = density × e_fraction × const, so its jumps track density jumps.
+# Returns the two boundary cosz values sorted ascending (most negative = deepest first).
+const _IC_COSZ, _CM_COSZ = let
+    r      = earth_model[:radius]      # km, centre→surface
+    p      = earth_model[:potential]
+    jumps  = abs.(diff(p))
+    top2   = sort(sortperm(jumps, rev=true)[1:2])   # indices of two largest jumps
+    r_bdry = [(r[i] + r[i+1]) / 2.0 for i in top2]
+    cosz_v = sort([-sqrt(max(0.0, 1.0 - (rb / EARTH_RADIUS_KM)^2)) for rb in r_bdry])
+    cosz_v[1], cosz_v[2]   # (inner-core boundary, core-mantle boundary)
+end
 
 # Lower bound of the exposure compact support on the night side.
 # Falls back to cosz_bins.min for scripts that don't set solarExposureFile.
@@ -94,20 +104,6 @@ function _alloc_cosz_bins(n_total, seg_lengths)
     counts
 end
 
-# Segment breaks: exposure lower bound + any PREM boundaries inside the support.
-const _SEG_BREAKS = let
-    breaks = Float64[_COSZ_EXP_MIN]
-    for b in [_IC_COSZ, _CM_COSZ]          # sorted ascending (most negative first)
-        if _COSZ_EXP_MIN < b < cosz_bins.max
-            push!(breaks, b)
-        end
-    end
-    push!(breaks, cosz_bins.max)
-    breaks
-end
-const _SEG_LENGTHS   = diff(_SEG_BREAKS)
-const _N_COARSE_SEGS = _alloc_cosz_bins(cosz_bins.bin_number, _SEG_LENGTHS)
-
 # Piecewise-uniform coarse bin edges (PREM boundaries on exact edges)
 function _piecewise_cosz_edges(seg_breaks, n_per_seg)
     edges = [seg_breaks[1]]
@@ -117,7 +113,43 @@ function _piecewise_cosz_edges(seg_breaks, n_per_seg)
     edges
 end
 
-const COARSE_COSZ_EDGES = _piecewise_cosz_edges(_SEG_BREAKS, _N_COARSE_SEGS)
+# PREM-aligned segment breaks within [lo, hi] (mantle/core boundaries land on exact edges).
+function _prem_breaks(lo, hi)
+    breaks = Float64[lo]
+    for b in [_IC_COSZ, _CM_COSZ]          # ascending (most negative first)
+        lo < b < hi && push!(breaks, b)
+    end
+    push!(breaks, hi)
+    breaks
+end
+
+# Fine cos(z) edges from `edge` (negative) up to 0. The day-night regeneration is an
+# OSCILLATION in cos(z) whose frequency encodes Δm²₂₁; estimating a frequency cleanly
+# requires UNIFORM sampling, so the fine zone is uniform (p=1) — graded spacing is a
+# varying sample rate that would distort the frequency content. (p>1 horizon-weights the
+# bins; kept as an option but not recommended for this measurement.)
+function _graded_fine_edges(edge, n; p=1.0)
+    a = abs(edge)
+    [-(a * (j / n)^p) for j in n:-1:0]     # increasing: edge … 0; p=1 ⇒ uniform spacing
+end
+
+# Coarse cos(z) edges. With nBins_cosz_fine>0: a graded fine zone in [cosz_fine_edge, 0]
+# (horizon-refined for the day-night first-peak) plus a PREM-aligned coarse zone below;
+# otherwise the legacy uniform-piecewise grid. Total stays at cosz_bins.bin_number.
+const COARSE_COSZ_EDGES = let
+    n_tot = cosz_bins.bin_number
+    if nBins_cosz_fine > 0 && _COSZ_EXP_MIN < cosz_fine_edge < cosz_bins.max
+        n_fine      = min(nBins_cosz_fine, n_tot - 1)
+        n_deep      = n_tot - n_fine
+        deep_breaks = _prem_breaks(_COSZ_EXP_MIN, cosz_fine_edge)
+        deep_edges  = _piecewise_cosz_edges(deep_breaks, _alloc_cosz_bins(n_deep, diff(deep_breaks)))
+        fine_edges  = _graded_fine_edges(cosz_fine_edge, n_fine)
+        vcat(deep_edges, fine_edges[2:end])    # share the cosz_fine_edge node
+    else
+        breaks = _prem_breaks(_COSZ_EXP_MIN, cosz_bins.max)
+        _piecewise_cosz_edges(breaks, _alloc_cosz_bins(n_tot, diff(breaks)))
+    end
+end
 
 # N_COSZ_SUB=2 only when the coarse grid is too sparse to meet Nyquist alone.
 const N_COSZ_SUB = cosz_bins.bin_number < 40 ? 2 : 1

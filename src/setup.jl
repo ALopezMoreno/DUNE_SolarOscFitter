@@ -245,10 +245,15 @@ for (det_name, det) in detector_configs
         det.ES_mode && @logmsg Setup "  Total ES data above threshold: $(sci_notation(sum(ES_combined[index_ES_det:end])))"
         if det.CC_mode && (!det.inclusive_analysis || det.semi_inclusive_analysis)
             CC_total_above = sum(CC_combined[index_CC_det:end])
-            CC_sig_above   = CC_total_above - CC_bg_aboveThreshold
+            # CC_combined uses 0.5×BG (day) + 0.5×BG×Σexp_weights (night).
+            # Subtract the same factored BG so the signal printout is correct
+            # even when Σexp_weights < 1 (e.g. when cosz grid clips at the
+            # exposure support boundary rather than -1).
+            _cc_bg_factored = CC_bg_aboveThreshold * 0.5 * (1.0 + sum(exposure_weights))
+            CC_sig_above    = CC_total_above - _cc_bg_factored
             @logmsg Setup "  Total CC data above threshold: $(sci_notation(CC_total_above))"
             @logmsg Setup "    of which signal: $(sci_notation(CC_sig_above))"
-            @logmsg Setup "    of which BG: $(sci_notation(CC_bg_aboveThreshold))"
+            @logmsg Setup "    of which BG: $(sci_notation(_cc_bg_factored))"
         end
     end
     @logmsg Setup @sprintf("  D-N asymmetry ES: %.4f%%", eff_asymm_ES * 100)

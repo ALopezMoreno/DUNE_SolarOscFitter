@@ -73,6 +73,65 @@ else
     @logmsg Setup ("Calculating DN-asymmetry for chain *$(prevFile)*")
 end
 
+# This script predates the multi-detector refactor and operates on a single
+# detector. Mirror the backward-compatibility shim in setup.jl: use the first
+# detector's LikelihoodInputs (for rates + Asimov data) and its per-bin closure.
+if length(detector_outputs) > 1
+    @warn "derive_variables_from_chain.jl is single-detector; using only the first of $(length(detector_outputs)) detectors: $(first(keys(detector_outputs)))"
+end
+_li        = first(values(detector_outputs)).likelihood_inputs
+_perbin_fn = first(values(detector_perbin_fns))
+
+# Reference per-bin log-likelihood at the Asimov truth. In background-dominated
+# bins the per-bin LLH is O(1e6), so the two-pass variance Var = E[ℓ²] − E[ℓ]²
+# loses all precision to catastrophic cancellation (the cancellation floor exceeds
+# the tiny signal variance, leaving pure floating-point noise). Subtracting this
+# per-bin reference makes the accumulated deviations O(1); variance and covariance
+# are invariant under a per-bin constant shift, so the statistics are unchanged.
+_refbin      = _perbin_fn(true_params)
+ℓref_CCnight = _refbin.CC_night
+ℓref_CCday   = _refbin.CC_day
+ℓref_ESnight = _refbin.ES_night
+ℓref_ESday   = _refbin.ES_day
+
+# Clean signal-only (no-bkg) samples over the FULL reco range, evaluated at the
+# Asimov truth. data − bkg is unusable here because bkg ~ 1e11 below threshold and the
+# posterior-mean bkg differs from the true bkg by ~0.02% → a ~1e8 subtraction residual
+# swamps the signal. At the truth, signal and bkg are exactly consistent, so
+# signal = rate − bkg is exact. Night bkg = 0.5·BG·exposure_weights.
+_r_true        = expected_rates(_li, true_params)
+signal_CCday   = _r_true.CC_day   .- 0.5 .* _r_true.BG_CC_tot
+signal_CCnight = _r_true.CC_night .- 0.5 .* (_r_true.BG_CC_tot' .* exposure_weights)
+if angular_reco
+    # Angular ES night is 3D; the bkg-subtraction layout differs. ES is not the focus
+    # of this run — store the raw rate (bkg left in) rather than risk a shape error.
+    signal_ESday   = _r_true.ES_day
+    signal_ESnight = _r_true.ES_night
+else
+    signal_ESday   = _r_true.ES_day   .- 0.5 .* _r_true.BG_ES_tot
+    signal_ESnight = _r_true.ES_night .- 0.5 .* (_r_true.BG_ES_tot' .* exposure_weights)
+end
+
+# Per-component CC background day spectra at Asimov truth, for stacked plots.
+# Each raw component (_li.BG.CC[i]) is already ×10×CC_exposure; apply the truth-norm
+# conversion (CC_conversions = norm/2.2e-6) and the 0.5 day factor, mirroring
+# normalize_backgrounds. Names come from the detector's CC background file basenames.
+_det_cfg     = first(values(detector_configs))
+_cc_comp_day = Vector{Vector{Float64}}()
+let ni = 1
+    for (i, beh) in enumerate(_li.BG.CC_par_counts)
+        if beh != 0
+            nrm = true_params[Symbol("$(_li.det_name)_CC_bg_norm_$ni")]
+            push!(_cc_comp_day, 0.5 .* _li.BG.CC[i] .* (nrm / 2.2e-6))
+            ni += 1
+        else
+            push!(_cc_comp_day, 0.5 .* _li.BG.CC[i])
+        end
+    end
+end
+CCbg_comp_day   = isempty(_cc_comp_day) ? zeros(Float64, length(signal_CCday), 0) : reduce(hcat, _cc_comp_day)
+CCbg_comp_names = join([replace(split(basename(f), "_")[end], ".csv" => "") for f in _det_cfg.CC_filepaths_BG], ",")
+
 param_data, weights, stepno, chainid = loadAllBatches(prevFile * ".jld2")
 
 param_fields = collect(keys(param_data))
@@ -169,8 +228,9 @@ for i in 1:n_total
     global BGESday_mean, BGESday_m2, BGCCday_mean, BGCCday_m2
 
     temp_pars = NamedTuple{Tuple(param_fields)}((param_data[field][i] for field in param_fields))
+    _r = expected_rates(_li, temp_pars)
     expectedRate_ES_day, expectedRate_CC_day, expectedRate_ES_night, expectedRate_CC_night, BG_ES_tot, BG_CC_tot =
-        propagateSamples(unoscillatedSample, responseMatrices, temp_pars, solarModel, bin_edges, backgrounds)
+        _r.ES_day, _r.CC_day, _r.ES_night, _r.CC_night, _r.BG_ES_tot, _r.BG_CC_tot
 
     #-- Get asymmetry --#
     BG_ES_expected = sum(BG_ES_tot[index_ES:end])
@@ -297,12 +357,13 @@ for i in 1:n_total
         BG_CC_tot = BG_CC_tot,
     )
 
-    perbin = per_bin_llh(temp_pars, rates=rates)
+    perbin = _perbin_fn(temp_pars; rates=rates)
 
-    ℓ_CCnight = perbin.CC_night  # Matrix (Ereco × cosz)
-    ℓ_CCday   = perbin.CC_day    # Vector (Ereco)
-    ℓ_ESnight = perbin.ES_night
-    ℓ_ESday   = perbin.ES_day
+    # Centre on the Asimov-truth reference (see ℓref_* above) for numerical stability.
+    ℓ_CCnight = perbin.CC_night .- ℓref_CCnight  # Matrix (cosz × Ereco)
+    ℓ_CCday   = perbin.CC_day   .- ℓref_CCday    # Vector (Ereco)
+    ℓ_ESnight = perbin.ES_night .- ℓref_ESnight
+    ℓ_ESday   = perbin.ES_day   .- ℓref_ESday
 
     # Allocate ES per-bin accumulators on first thinned sample
     if S1_ESnight === nothing
@@ -505,29 +566,38 @@ if !isempty(ESday_sample_list)
     end
 end
 
+# --- Best-fit (posterior-mean) oscillation map P(νe→νe) over (cos z, E_true) ---
+# Weighted posterior mean of each sampled parameter; fixed params come from the Asimov
+# truth so the NamedTuple has every field compute_shared_osc_probs expects. One osc eval.
+_wtot          = sum(weights)
+_bestfit_means = NamedTuple{Tuple(param_fields)}(
+    Tuple(sum(param_data[f][i] * weights[i] for i in 1:n_total) / _wtot for f in param_fields))
+_bestfit_pars  = merge(true_params, _bestfit_means)
+_oscmap        = compute_shared_osc_probs(_bestfit_pars, solarModel)
+
 # Save output — ES always present; CC only in non-inclusive mode
 derived = Dict(
     :ES_asymmetry  => ES_asymmetries,
     :inclusive_mode => inclusive_analysis,  # flag for Python utilities
 
-    # --- ES per-bin llh stats ---
-    :ESnight_mean_llh => esnight_sin2.mean,
+    # --- ES per-bin llh stats (mean restored to absolute scale by adding ℓref back) ---
+    :ESnight_mean_llh => esnight_sin2.mean .+ ℓref_ESnight,
     :ESnight_var_llh  => esnight_sin2.var,
     :ESnight_corr_llh_sin2_th12 => esnight_sin2.corr,
     :ESnight_corr_llh_dm2_21    => esnight_dm2.corr,
 
-    :ESday_mean_llh => esday_sin2.mean,
+    :ESday_mean_llh => esday_sin2.mean .+ ℓref_ESday,
     :ESday_var_llh  => esday_sin2.var,
     :ESday_corr_llh_sin2_th12 => esday_sin2.corr,
     :ESday_corr_llh_dm2_21    => esday_dm2.corr,
 
     # --- ES per-sample TOTAL llh stats ---
-    :ESnight_tot_mean_llh => [esnight_tot_sin2.mean],
+    :ESnight_tot_mean_llh => [esnight_tot_sin2.mean + sum(ℓref_ESnight)],
     :ESnight_tot_var_llh  => [esnight_tot_sin2.var],
     :ESnight_tot_corr_llh_sin2_th12 => [esnight_tot_sin2.corr],
     :ESnight_tot_corr_llh_dm2_21    => [esnight_tot_dm2.corr],
 
-    :ESday_tot_mean_llh => [esday_tot_sin2.mean],
+    :ESday_tot_mean_llh => [esday_tot_sin2.mean + sum(ℓref_ESday)],
     :ESday_tot_var_llh  => [esday_tot_sin2.var],
     :ESday_tot_corr_llh_sin2_th12 => [esday_tot_sin2.corr],
     :ESday_tot_corr_llh_dm2_21    => [esday_tot_dm2.corr],
@@ -547,6 +617,14 @@ derived = Dict(
     # --- ES background moments for signal-only display and data error bars ---
     :BGESday_pp_mean => BGESday_pp_mean,
     :BGESday_pp_var  => BGESday_pp_var,
+    # Night bg per (cosz, Ereco): the night background is 0.5·BG·exposure_weights, i.e.
+    # the day background (0.5·BG) scaled per zenith bin. exposure_weights is fixed, so
+    # E[bg_night] = exposure_weights ⊗ E[bg_day] exactly. Used for signal-only night rates.
+    :BGESnight_pp_mean => exposure_weights .* BGESday_pp_mean',
+
+    # --- Clean signal-only (oscillated, no bkg) samples at Asimov truth, full reco range ---
+    :signal_ESday   => signal_ESday,
+    :signal_ESnight => signal_ESnight,
 
     # --- ES shapes for de-serialisation ---
     :ESnight_shape    => collect(size(esnight_sin2.mean)),
@@ -555,10 +633,22 @@ derived = Dict(
     :ESnight_pp_shape => collect(size(ESnight_pp_mean)),
 
     # --- Asimov data and threshold indices for P-predictive plots ---
-    :data_ESday   => measuredRate_ES_day,
-    :data_ESnight => measuredRate_ES_night,
+    :data_ESday   => _li.nObserved.ES_day,
+    :data_ESnight => _li.nObserved.ES_night,
     :index_ES     => index_ES,
     :index_CC     => index_CC,
+
+    # --- Bin edges for plotting axes ---
+    # cosz grid is piecewise-uniform (PREM segments) over the exposure support,
+    # NOT a uniform [-1, 0] grid. Energies converted GeV → MeV for the plotters.
+    :cosz_edges     => collect(COARSE_COSZ_EDGES),
+    :Ereco_edges_ES => collect(range(Ereco_bins_ES.min, Ereco_bins_ES.max, length=Ereco_bins_ES.bin_number + 1)) .* 1e3,
+    :Ereco_edges_CC => collect(range(Ereco_bins_CC.min, Ereco_bins_CC.max, length=Ereco_bins_CC.bin_number + 1)) .* 1e3,
+
+    # --- Best-fit oscillation map: P(νe→νe) over (cos z, E_true), 8B production ---
+    :oscmap_8B_day      => collect(Float64.(_oscmap.nue_8B_day)),
+    :oscmap_8B_night    => Matrix{Float64}(_oscmap.nue_8B_night),
+    :oscmap_Etrue_edges => collect(range(Etrue_bins.min, Etrue_bins.max, length=Etrue_bins.bin_number + 1)) .* 1e3,
 )
 
 # CC entries only in non-inclusive mode
@@ -566,24 +656,24 @@ if !inclusive_analysis
     merge!(derived, Dict(
         :CC_asymmetry => CC_asymmetries,
 
-        # --- CC per-bin llh stats ---
-        :CCnight_mean_llh => ccnight_sin2.mean,
+        # --- CC per-bin llh stats (mean restored to absolute scale by adding ℓref back) ---
+        :CCnight_mean_llh => ccnight_sin2.mean .+ ℓref_CCnight,
         :CCnight_var_llh  => ccnight_sin2.var,
         :CCnight_corr_llh_sin2_th12 => ccnight_sin2.corr,
         :CCnight_corr_llh_dm2_21    => ccnight_dm2.corr,
 
-        :CCday_mean_llh => ccday_sin2.mean,
+        :CCday_mean_llh => ccday_sin2.mean .+ ℓref_CCday,
         :CCday_var_llh  => ccday_sin2.var,
         :CCday_corr_llh_sin2_th12 => ccday_sin2.corr,
         :CCday_corr_llh_dm2_21    => ccday_dm2.corr,
 
         # --- CC per-sample TOTAL llh stats ---
-        :CCnight_tot_mean_llh => [ccnight_tot_sin2.mean],
+        :CCnight_tot_mean_llh => [ccnight_tot_sin2.mean + sum(ℓref_CCnight)],
         :CCnight_tot_var_llh  => [ccnight_tot_sin2.var],
         :CCnight_tot_corr_llh_sin2_th12 => [ccnight_tot_sin2.corr],
         :CCnight_tot_corr_llh_dm2_21    => [ccnight_tot_dm2.corr],
 
-        :CCday_tot_mean_llh => [ccday_tot_sin2.mean],
+        :CCday_tot_mean_llh => [ccday_tot_sin2.mean + sum(ℓref_CCday)],
         :CCday_tot_var_llh  => [ccday_tot_sin2.var],
         :CCday_tot_corr_llh_sin2_th12 => [ccday_tot_sin2.corr],
         :CCday_tot_corr_llh_dm2_21    => [ccday_tot_dm2.corr],
@@ -603,6 +693,16 @@ if !inclusive_analysis
         # --- CC background moments for signal-only display and data error bars ---
         :BGCCday_pp_mean => BGCCday_pp_mean,
         :BGCCday_pp_var  => BGCCday_pp_var,
+        # Night bg per (cosz, Ereco) = exposure_weights ⊗ day bg (see ES note above).
+        :BGCCnight_pp_mean => exposure_weights .* BGCCday_pp_mean',
+
+        # --- Clean signal-only (oscillated, no bkg) samples at Asimov truth, full reco range ---
+        :signal_CCday   => signal_CCday,
+        :signal_CCnight => signal_CCnight,
+
+        # --- Per-component CC background day spectra (n_Ereco × n_comp) + names, for stacks ---
+        :CCbg_comp_day   => CCbg_comp_day,
+        :CCbg_comp_names => CCbg_comp_names,
 
         # --- CC shapes for de-serialisation ---
         :CCnight_shape    => collect(size(ccnight_sin2.mean)),
@@ -611,8 +711,8 @@ if !inclusive_analysis
         :CCnight_pp_shape => collect(size(CCnight_pp_mean)),
 
         # --- Asimov data for P-predictive plots ---
-        :data_CCday   => measuredRate_CC_day,
-        :data_CCnight => measuredRate_CC_night,
+        :data_CCday   => _li.nObserved.CC_day,
+        :data_CCnight => _li.nObserved.CC_night,
     ))
 end
 
