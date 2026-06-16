@@ -95,6 +95,12 @@ const _COSZ_EXP_MIN = let
 end
 
 function _alloc_cosz_bins(n_total, seg_lengths)
+    # max.(1, …) forces ≥1 bin per segment, so a zone with fewer bins than PREM
+    # segments would overflow (sum(counts) > n_total) and the correction loop below,
+    # whose range goes empty, could not claw it back → wrong total edge count.
+    n_total >= length(seg_lengths) ||
+        error("_alloc_cosz_bins: $n_total bins cannot cover $(length(seg_lengths)) PREM " *
+              "segments (need ≥1 each). Lower nBins_cosz_fine or raise nBins_cosz.")
     fracs  = seg_lengths ./ sum(seg_lengths)
     counts = max.(1, floor.(Int, fracs .* n_total))
     rem    = fracs .* n_total .- counts
@@ -150,6 +156,10 @@ const COARSE_COSZ_EDGES = let
         _piecewise_cosz_edges(breaks, _alloc_cosz_bins(n_tot, diff(breaks)))
     end
 end
+
+# The coarse grid must have exactly nBins_cosz+1 edges, else cosz, cosz_calc and
+# exposure_weights desync (silent mis-binning / shape errors downstream).
+@assert length(COARSE_COSZ_EDGES) == cosz_bins.bin_number + 1 "COARSE_COSZ_EDGES has $(length(COARSE_COSZ_EDGES)) edges, expected $(cosz_bins.bin_number + 1)"
 
 # N_COSZ_SUB=2 only when the coarse grid is too sparse to meet Nyquist alone.
 const N_COSZ_SUB = cosz_bins.bin_number < 40 ? 2 : 1
