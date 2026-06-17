@@ -312,6 +312,13 @@ def load_bin_diagnostics(mcmc_chains, require_all=True, verbose=True):
         "derived_signal_ESnight",
         "derived_CCbg_comp_day",
         "derived_CCbg_comp_names",
+        # best-fit oscillation map + day-night survival-ratio panel
+        "derived_oscmap_8B_day",
+        "derived_oscmap_8B_night",
+        "derived_oscmap_Etrue_edges",
+        "derived_exposure_weights",
+        "derived_BGCCday_pp_mean",
+        "derived_BGESday_pp_mean",
     ]
     load_keys = keys + optional_keys
 

@@ -165,7 +165,12 @@ def filled_stairs(ax, edges, y, fill_color, edge_color, label=None, lw=LW):
 def line_stairs(ax, edges, y, color, label=None, lw=LW):
     ax.stairs(y, edges, color=color, linewidth=lw, label=label, baseline=None)
 
-def heatmap(ax, Z, x_edges, y_edges, xlabel, ylabel, title, cmap="cividis"):
+def heatmap(ax, Z, x_edges, y_edges, xlabel, ylabel, title, cmap="cividis", density=False):
+    # density=True: divide by the y-bin width (Δcos z) so EXTENSIVE rate maps show a density
+    # that is continuous across non-uniform cos z bins (per-bin events ∝ Δcos z otherwise).
+    Z = np.asarray(Z, dtype=float)
+    if density:
+        Z = Z / np.diff(np.asarray(y_edges, dtype=float))[:, None]
     im = ax.pcolormesh(x_edges, y_edges, Z, cmap=cmap, shading="flat")
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
@@ -302,7 +307,7 @@ with PdfPages(out_pdf) as pdf:
             if Z is not None:
                 heatmap(ax, Z, E_edges_true, cosz_edges,
                         r"$E_{\rm true}$ [MeV]", r"$\cos\theta_z$", title,
-                        cmap="cividis")
+                        cmap="cividis", density=True)
             else:
                 ax.set_visible(False)
 
@@ -337,7 +342,7 @@ with PdfPages(out_pdf) as pdf:
         ax = axes[1, 0]
         if has_ES_mode and ereco_ES_night.shape[0] > 0:
             heatmap(ax, ereco_ES_night, E_edges_ES, cosz_edges,
-                    r"$E_{reco}^{ES}$ [MeV]", r"$\cos\theta_z$", "ES night spectrum", cmap="cividis")
+                    r"$E_{reco}^{ES}$ [MeV]", r"$\cos\theta_z$", "ES night spectrum", cmap="cividis", density=True)
         else:
             ax.text(0.5, 0.5, "N/A", ha="center", va="center", transform=ax.transAxes, fontsize=12)
             ax.set_title("ES night spectrum")
@@ -359,7 +364,7 @@ with PdfPages(out_pdf) as pdf:
         ax = axes[1, 1]
         if has_CC_separate and ereco_CC_night.shape[0] > 0 and ereco_CC_night.shape[1] > 0:
             heatmap(ax, ereco_CC_night, E_edges_CC, cosz_edges,
-                    r"$E_{reco}^{CC}$ [MeV]", r"$\cos\theta_z$", "CC night spectrum", cmap="cividis")
+                    r"$E_{reco}^{CC}$ [MeV]", r"$\cos\theta_z$", "CC night spectrum", cmap="cividis", density=True)
         else:
             ax.text(0.5, 0.5, "N/A", ha="center", va="center", transform=ax.transAxes, fontsize=12)
             ax.set_title("CC night spectrum")
