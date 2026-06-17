@@ -649,6 +649,10 @@ derived = Dict(
     :oscmap_8B_day      => collect(Float64.(_oscmap.nue_8B_day)),
     :oscmap_8B_night    => Matrix{Float64}(_oscmap.nue_8B_night),
     :oscmap_Etrue_edges => collect(range(Etrue_bins.min, Etrue_bins.max, length=Etrue_bins.bin_number + 1)) .* 1e3,
+
+    # Per-cos z exposure fraction (∫exposure over each bin). Lets the plotter divide the
+    # night signal by exposure to recover the day-night survival ratio in reco space.
+    :exposure_weights   => collect(Float64.(vec(exposure_weights))),
 )
 
 # CC entries only in non-inclusive mode

@@ -1,7 +1,7 @@
 import numpy as np
 import argparse
 import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm
+from matplotlib.colors import LogNorm, TwoSlopeNorm
 from matplotlib.ticker import LogLocator, NullFormatter
 from matplotlib.backends.backend_pdf import PdfPages
 import h5py
@@ -165,14 +165,30 @@ def Znight(Z):
     return Z.T if TRANSPOSE_NIGHT else Z
 
 
+def _cosz_density(Z, cosz_edges, power=1):
+    """Night maps (n_cosz, n_E) of EXTENSIVE quantities scale with the cos z bin width, so
+    with non-uniform bins the per-bin colour dips in the narrow (fine) bins purely from
+    geometry. Divide each row by Δcos z**power to show a DENSITY that is continuous across
+    the binning change: rates ∝ Δcz (power=1), per-bin Var(logL) ∝ Δcz² (power=2), driver
+    score = √Var·|corr| ∝ Δcz (power=1). power=0 is a no-op for INTENSIVE quantities
+    (correlations and probabilities — already binning-independent)."""
+    if power == 0:
+        return np.asarray(Z, dtype=float)
+    w = np.diff(np.asarray(cosz_edges, dtype=float))      # (n_cosz,)
+    return np.asarray(Z, dtype=float) / (w[:, None] ** power)
+
+
 # ----------------------------
 # Pull maps from bin_maps -- We work with a -llh so the correlations flip sign
+# Night variance/score scale with cos z bin width (Var ∝ Δcz², score ∝ Δcz); divide it out
+# so the colour is a density, continuous across the non-uniform bins. Correlations are
+# intensive (ratio) and the day panels use uniform E, so neither is rescaled.
 # ----------------------------
-esnight_var        = bin_maps["ESnight"]["var_llh"]
+esnight_var        = _cosz_density(bin_maps["ESnight"]["var_llh"], yedges, 2)
 esnight_corr_sin2  = -bin_maps["ESnight"]["corr_sin2"]
 esnight_corr_dm2   = -bin_maps["ESnight"]["corr_dm2"]
-esnight_score_sin2 = bin_maps["ESnight"]["score_sin2_norm"]
-esnight_score_dm2  = bin_maps["ESnight"]["score_dm2_norm"]
+esnight_score_sin2 = _cosz_density(bin_maps["ESnight"]["score_sin2_norm"], yedges, 1)
+esnight_score_dm2  = _cosz_density(bin_maps["ESnight"]["score_dm2_norm"], yedges, 1)
 
 esday_var        = bin_maps["ESday"]["var_llh"]
 esday_corr_sin2  = -bin_maps["ESday"]["corr_sin2"]
@@ -181,11 +197,11 @@ esday_score_sin2   = bin_maps["ESday"]["score_sin2_norm"]
 esday_score_dm2    = bin_maps["ESday"]["score_dm2_norm"]
 
 if not inclusive_mode:
-    ccnight_var        = bin_maps["CCnight"]["var_llh"]
+    ccnight_var        = _cosz_density(bin_maps["CCnight"]["var_llh"], yedges, 2)
     ccnight_corr_sin2  = -bin_maps["CCnight"]["corr_sin2"]
     ccnight_corr_dm2   = -bin_maps["CCnight"]["corr_dm2"]
-    ccnight_score_sin2 = bin_maps["CCnight"]["score_sin2_norm"]   # within-sample normalized
-    ccnight_score_dm2  = bin_maps["CCnight"]["score_dm2_norm"]
+    ccnight_score_sin2 = _cosz_density(bin_maps["CCnight"]["score_sin2_norm"], yedges, 1)   # within-sample normalized
+    ccnight_score_dm2  = _cosz_density(bin_maps["CCnight"]["score_dm2_norm"], yedges, 1)
 
     ccday_var        = bin_maps["CCday"]["var_llh"]
     ccday_corr_sin2  = -bin_maps["CCday"]["corr_sin2"]
@@ -335,7 +351,7 @@ def add_sample_page(pdf, ch, E_edges, idx):
 
         # --- night 2D map (right column), log colour, matched to plot_binmap style ---
         ax = axs[r, 1]
-        Z = _logsafe(dnight)                   # (n_cosz, n_Ereco)
+        Z = _logsafe(_cosz_density(dnight, cosz_e))   # events / Δcos z (continuous across bin widths)
         if np.any(Z > 0):
             vmax = np.nanmax(Z)
             vmin = max(np.nanmin(Z[Z > 0]), vmax / 1e4)   # 4-decade clip → exposure band visible
@@ -345,7 +361,7 @@ def add_sample_page(pdf, ch, E_edges, idx):
                               norm=LogNorm(vmin=vmin, vmax=vmax), shading="flat")
             ax.set_xlim(E_edges[0], E_edges[-1]); ax.set_ylim(cosz_e[0], cosz_e[-1])
             cb = fig.colorbar(m, cax=cax[r, 1]); cb.ax.yaxis.set_ticks_position("right")
-            cb.set_label("Events", rotation=90, fontsize=20); cb.ax.tick_params(labelsize=16)
+            cb.set_label(r"Events / $\Delta\cos\theta_z$", rotation=90, fontsize=20); cb.ax.tick_params(labelsize=16)
             proj = np.nansum(np.maximum(dnight[:, idx:], 0.0), axis=1)   # above-thr cosz profile
             if np.any(proj > 0):                                         # mark exposure peak
                 ax.axhline(cz_cen[np.nanargmax(proj)], color="w", ls=":", lw=0.9)
@@ -394,6 +410,79 @@ def add_oscmap_page(pdf):
     pdf.savefig(fig, dpi=300); plt.close(fig)
 
 
+def _recover_exposure_weights(ch):
+    """Per-cos z exposure fraction. Prefer the saved array; else recover it from the saved
+    background, since the derive builds BG_night(c,e) = exposure_weights(c) · BG_day(e) exactly,
+    so exposure_weights = BG_night[:, e0] / BG_day[e0] for any e0 with appreciable background."""
+    if "derived_exposure_weights" in diagnostics:
+        return np.asarray(diagnostics["derived_exposure_weights"], dtype=float)
+    bn = diagnostics.get(f"derived_BG{ch}night_pp_mean")
+    bd = diagnostics.get(f"derived_BG{ch}day_pp_mean")
+    if bn is None or bd is None:
+        return None
+    bn = np.asarray(bn, dtype=float)   # h5py (n_Ereco, n_cosz)
+    bd = np.asarray(bd, dtype=float)   # (n_Ereco,)
+    e0 = int(np.nanargmax(bd))
+    if not np.isfinite(bd[e0]) or bd[e0] <= 0:
+        return None
+    return bn[e0, :] / bd[e0]
+
+
+def add_dnratio_page(pdf):
+    """Day-night asymmetry A = 2(P_day − P_night)/(P_day + P_night): truth (vs E_true, from the
+    best-fit osc map) beside the reconstructed signal (vs E_reco). Forming the asymmetry cancels
+    flux × cross-section (and the smooth solar MSW), and the per-cos z exposure cancels too — what
+    remains is the Earth day-night structure, so the two panels show directly how much of it
+    survives the energy reconstruction. Skipped if the required keys are absent."""
+    need = ["derived_oscmap_8B_night", "derived_oscmap_8B_day"]
+    if any(k not in diagnostics for k in need):
+        return
+    ch, E_edges = (("CC", cc_E_edges) if (not inclusive_mode and "derived_signal_CCnight" in diagnostics)
+                   else ("ES", es_E_edges))
+    if f"derived_signal_{ch}night" not in diagnostics or f"derived_signal_{ch}day" not in diagnostics:
+        return
+    expw = _recover_exposure_weights(ch)
+    if expw is None:
+        return
+
+    # truth asymmetry over E_true:  A = 2(P_day − P_night)/(P_day + P_night)
+    on = np.asarray(diagnostics["derived_oscmap_8B_night"], dtype=float).T    # (n_cosz, n_Etrue)
+    od = np.asarray(diagnostics["derived_oscmap_8B_day"],   dtype=float)       # (n_Etrue,)
+    true_asym = 2.0 * (od[None, :] - on) / (od[None, :] + on)
+    Et = (np.asarray(diagnostics["derived_oscmap_Etrue_edges"], dtype=float)
+          if "derived_oscmap_Etrue_edges" in diagnostics else np.linspace(1.0, 21.0, on.shape[1] + 1))
+
+    # reco asymmetry over E_reco. The no-regeneration "day equivalent" at each cos z is
+    # exposure × signal_day; the exposure cancels in the asymmetry, leaving A in terms of the
+    # response-averaged ⟨P_day⟩, ⟨P_night⟩ — i.e. the reco-smeared day-night asymmetry.
+    sn = binImportanceHelpers._night_to_plot_layout(diagnostics[f"derived_signal_{ch}night"])  # (n_cosz, n_Ereco)
+    sd = np.asarray(diagnostics[f"derived_signal_{ch}day"], dtype=float)                        # (n_Ereco,)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        day_eq    = expw[:, None] * sd[None, :]               # night signal expected with no regeneration
+        reco_asym = 2.0 * (day_eq - sn) / (day_eq + sn)
+    reco_asym[~np.isfinite(reco_asym)] = np.nan
+    reco_asym[:, sd < 1e-2 * np.nanmax(sd)] = np.nan          # blank bins with negligible signal
+
+    # shared diverging scale centred at 0
+    allv = np.concatenate([true_asym[np.isfinite(true_asym)].ravel(),
+                           reco_asym[np.isfinite(reco_asym)].ravel()])
+    d = float(np.nanpercentile(np.abs(allv), 99)) if allv.size else 0.05
+    d = max(d, 1e-3)
+    norm = TwoSlopeNorm(vcenter=0.0, vmin=-d, vmax=d)
+
+    fig, (axt, axr) = plt.subplots(1, 2, figsize=(11, 4.8), constrained_layout=True)
+    axt.pcolormesh(Et, yedges, true_asym, cmap="RdBu_r", norm=norm, shading="flat")
+    axt.set_title("truth  ($E_{true}$)", fontsize=12)
+    axt.set_xlabel(r"$E_{true}$ (MeV)", fontsize=16); axt.set_ylabel(r"$\cos\theta_z$", fontsize=16)
+    m = axr.pcolormesh(E_edges, yedges, reco_asym, cmap="RdBu_r", norm=norm, shading="flat")
+    axr.set_title(f"{ch} reconstructed  ($E_{{reco}}$)", fontsize=12)
+    axr.set_xlabel(r"$E_{reco}$ (MeV)", fontsize=16)
+    fig.colorbar(m, ax=[axt, axr], fraction=0.046, pad=0.02,
+                 label=r"$2(P_{\nu_e}^{\,\mathrm{day}}-P_{\nu_e}^{\,\mathrm{night}})/(P_{\nu_e}^{\,\mathrm{day}}+P_{\nu_e}^{\,\mathrm{night}})$")
+    fig.suptitle("Day-night asymmetry — oscillation structure surviving reconstruction")
+    pdf.savefig(fig, dpi=300, bbox_inches="tight"); plt.close(fig)
+
+
 with PdfPages(out_pdf) as pdf:
     idx_es = int(np.asarray(diagnostics["derived_index_ES"])) - 1
     if not inclusive_mode:
@@ -401,6 +490,7 @@ with PdfPages(out_pdf) as pdf:
         add_sample_page(pdf, "CC", cc_E_edges, idx_cc)
     add_sample_page(pdf, "ES", es_E_edges, idx_es)
     add_oscmap_page(pdf)   # best-fit P(νe→νe) day curve + night regeneration map
+    add_dnratio_page(pdf)  # day-night survival ratio: truth (E_true) vs reconstructed (E_reco)
 
     # ============================================================
     # PAGE 1: VARIANCE (night 2D + day 1D) + narrow totals sidebar
@@ -442,7 +532,7 @@ with PdfPages(out_pdf) as pdf:
         )
         plotting.add_group_colorbar(
             fig, m_cc_var, cax[0, 0],
-            r"$\mathrm{Var}(\log\mathcal{L}_{\mathrm{bin}})$",
+            r"$\mathrm{Var}(\log\mathcal{L}_{\mathrm{bin}})\,/\,\Delta\cos\theta_z^{2}$",
             ticks_right=True
         )
         plotting.plot_binseries(
@@ -464,7 +554,7 @@ with PdfPages(out_pdf) as pdf:
     )
     plotting.add_group_colorbar(
         fig, m_es_var, cax[es_row, 0],
-        r"$\mathrm{Var}(\log\mathcal{L}_{\mathrm{bin}})$",
+        r"$\mathrm{Var}(\log\mathcal{L}_{\mathrm{bin}})\,/\,\Delta\cos\theta_z^{2}$",
         ticks_right=True
     )
     plotting.plot_binseries(
@@ -626,8 +716,8 @@ with PdfPages(out_pdf) as pdf:
             vmin=vmin_score_dm2, vmax=vmax_score_dm2, cmap="cividis",
             add_colorbar=False, x_edges=xedges_cc, y_edges=yedges, topk=top_cc_dm
         )
-        plotting.add_group_colorbar(fig, m_cc_s2, cax[0, 0], r"$D(\sin^2\theta_{12})$", ticks_right=True)
-        plotting.add_group_colorbar(fig, m_cc_dm, cax[1, 0], r"$D(\Delta m^2_{21})$", ticks_right=True)
+        plotting.add_group_colorbar(fig, m_cc_s2, cax[0, 0], r"$D(\sin^2\theta_{12})\,/\,\Delta\cos\theta_z$", ticks_right=True)
+        plotting.add_group_colorbar(fig, m_cc_dm, cax[1, 0], r"$D(\Delta m^2_{21})\,/\,\Delta\cos\theta_z$", ticks_right=True)
         es_col = 1
     else:
         es_col = 0
@@ -644,8 +734,8 @@ with PdfPages(out_pdf) as pdf:
         vmin=vmin_score_dm2, vmax=vmax_score_dm2, cmap="cividis",
         add_colorbar=False, x_edges=xedges_es, y_edges=yedges, topk=top_es_dm
     )
-    plotting.add_group_colorbar(fig, m_es_s2, cax[0, es_col], r"$D(\sin^2\theta_{12})$", ticks_right=True)
-    plotting.add_group_colorbar(fig, m_es_dm, cax[1, es_col], r"$D(\Delta m^2_{21})$", ticks_right=True)
+    plotting.add_group_colorbar(fig, m_es_s2, cax[0, es_col], r"$D(\sin^2\theta_{12})\,/\,\Delta\cos\theta_z$", ticks_right=True)
+    plotting.add_group_colorbar(fig, m_es_dm, cax[1, es_col], r"$D(\Delta m^2_{21})\,/\,\Delta\cos\theta_z$", ticks_right=True)
 
     plotting.add_sidebar_totals_in_margin(
         fig, totals,
@@ -826,14 +916,19 @@ with PdfPages(out_pdf) as pdf:
         axs = layout.axs
         cax = layout.cax_plot
 
+        # Night rate maps scale with cos z bin width (rate ∝ Δcz, its variance ∝ Δcz²);
+        # show as a DENSITY so the colour is continuous across the non-uniform bins.
+        cz_pow = 1 if pp_label == "Signal rate" else 2
+        cz_lab = pp_label + (r" / $\Delta\cos\theta_z$" if cz_pow == 1 else r" / $\Delta\cos\theta_z^2$")
         if not inclusive_mode:
+            ccn = _cosz_density(Znight(ccnight_pp), yedges, cz_pow)
             m_ccn = plotting.plot_binmap(
-                axs[0, 0], Znight(ccnight_pp),
+                axs[0, 0], ccn,
                 title=r"CC night — " + pp_label,
-                vmin=0.0, vmax=float(np.nanmax(Znight(ccnight_pp))), cmap="cividis",
+                vmin=0.0, vmax=float(np.nanmax(ccn)), cmap="cividis",
                 add_colorbar=False, x_edges=xedges_cc, y_edges=yedges,
             )
-            plotting.add_group_colorbar(fig, m_ccn, cax[0, 0], pp_label, ticks_right=True)
+            plotting.add_group_colorbar(fig, m_ccn, cax[0, 0], cz_lab, ticks_right=True)
             if use_t2k_day:
                 plotting.plot_predictive_spectrum(
                     axs[0, 1], ccday_pp_mean_pg, bands=ccday_bands_pg, x_centers=xedges_cc,
@@ -854,13 +949,14 @@ with PdfPages(out_pdf) as pdf:
         else:
             es_row = 0
 
+        esn = _cosz_density(Znight(esnight_pp), yedges, cz_pow)
         m_esn = plotting.plot_binmap(
-            axs[es_row, 0], Znight(esnight_pp),
+            axs[es_row, 0], esn,
             title=r"ES night — " + pp_label,
-            vmin=0.0, vmax=float(np.nanmax(Znight(esnight_pp))), cmap="cividis",
+            vmin=0.0, vmax=float(np.nanmax(esn)), cmap="cividis",
             add_colorbar=False, x_edges=xedges_es, y_edges=yedges,
         )
-        plotting.add_group_colorbar(fig, m_esn, cax[es_row, 0], pp_label, ticks_right=True)
+        plotting.add_group_colorbar(fig, m_esn, cax[es_row, 0], cz_lab, ticks_right=True)
         if use_t2k_day:
             plotting.plot_predictive_spectrum(
                 axs[es_row, 1], esday_pp_mean_pg, bands=esday_bands_pg, x_centers=xedges_es,
