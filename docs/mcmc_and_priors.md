@@ -41,6 +41,18 @@ All priors are defined in `mcmc.jl` and constructed from the distributions in `c
 | ⁸B flux (ν/cm²/s) | `prior_8B_flux` | `truncated(Normal(5.25e6, 0.28e6), 1.5e6, 1e7)` | SNO NC measurement (5.3% uncertainty) |
 | HEP flux (ν/cm²/s) | `prior_HEP_flux` | `Uniform(0, 2e4)` | Conservative upper bound |
 
+### CC cross-section shape parameters
+
+Unless `fix_cc_xsec: true`, three nuisance parameters describe the CC cross-section shape relative to the MARLEY nominal:
+
+| Parameter | Config key | Default prior | Role |
+|-----------|-----------|---------------|------|
+| `cc_xsec_norm` | `prior_cc_xsec_norm` | `truncated(Normal(1.0, 0.1), 0.1, 2.0)` | Overall scale |
+| `cc_xsec_tilt` | `prior_cc_xsec_tilt` | `Normal(0.0, 0.1)` | Power-law slope `exp(α₁·log(E/E_pivot))` |
+| `cc_xsec_curv` | `prior_cc_xsec_curv` | `Normal(0.0, 0.05)` | Curvature `exp(α₂·log²(E/E_pivot))` |
+
+`E_pivot` is the flux-weighted mean CC event energy, which makes the tilt orthogonal to the norm and the curvature orthogonal to both.
+
 ### Earth density systematics
 
 When `earth_potential_uncertainties: true`, one nuisance parameter per Earth layer is added:
@@ -77,9 +89,9 @@ for batch in 1:n_batches
 end
 ```
 
-Each batch of `batchSteps` steps (default 50) is appended as `batch_N` inside a single JLD2 file. The Python utilities (`posteriorHelpers.py`) handle both the flat (legacy) and batched formats transparently.
+Each batch of `batchSteps` steps (200, set in `mcmc.jl`) is appended as `batch_N` inside a single JLD2 file. The batch size only sets the checkpoint/output cadence — tuning state persists across batches. The Python utilities (`posteriorHelpers.py`) handle both the flat (legacy) and batched formats transparently.
 
-**Resuming runs:** Setting `prevFile` in config loads the serialised `_chainState.bin` from a previous run and passes it as the initial state, so chains continue from where they stopped rather than re-tuning from scratch.
+**Resuming runs:** Setting `prevFile` in config loads the serialised `_chainState.bin` from a previous run and passes it as the initial state, so chains continue from where they stopped rather than re-tuning from scratch. On resume, `warmup_process()` runs a throwaway likelihood evaluation first to warm the heap — without it, large resumed runs hit a severe GC collapse.
 
 **Important:** Always delete the output JLD2 file before starting a new run. JLD2 append semantics can silently mix batches from different runs into one file.
 

@@ -55,7 +55,7 @@ Implemented as `SMatrix{3,3}` (StaticArrays) so the 3×3 algebra is stack-alloca
 
 ## 3. Solar day probability (MSW effect)
 
-**Function:** `mswProb(energy, mixingPars, n_e)` (`osc.jl:74–87`)
+**Function:** `mswProb(energy, mixingPars, n_e)` (`osc.jl:77–90`)
 
 Computes P(νₑ→νₑ) for neutrinos propagating adiabatically through solar matter. Reference: Wolfenstein (1978), Mikheyev & Smirnov (1985); θ₁₃ correction from Barger et al.
 
@@ -111,7 +111,7 @@ P(νₑ→νₑ) = ½ · (1 − sin²θ₁₃)² · (1 + cos(2θ₁₂) · cos(2
 
 ## 4. LMA matter angle
 
-**Function:** `LMA_angle(energy, mixingPars, N_e)` (`osc.jl:90–101`)
+**Function:** `LMA_angle(energy, mixingPars, N_e)` (`osc.jl:96–101`)
 
 Computes the effective 1-2 mixing angle in matter at a single production density:
 
@@ -128,7 +128,7 @@ The `arccos` argument is clamped to [−1, 1] to handle floating-point rounding 
 
 Solar neutrinos are not produced at a single point. They are created across a range of solar radii with a production PDF (`solarModel.prodFractionBoron` or `prodFractionHep`).
 
-### Slow integration: `osc_prob_day` (`osc.jl:98–120`)
+### Slow integration: `osc_prob_day` (`osc.jl:104–120`)
 
 Evaluates `mswProb` at every density point in `solarModel.n_e` (a grid over solar radii), then averages weighted by the production fraction:
 
@@ -152,7 +152,7 @@ Single call to `mswProb(energy, params, n_e)` with the scalar average density. O
 
 ## 6. Day→Night correction (IYSW formula)
 
-**Functions:** `osc_prob_both_slow`, `osc_prob_both_fast` (`osc.jl:133–207`)
+**Functions:** `osc_prob_both_slow`, `osc_prob_both_fast` (`osc.jl:139–207`)
 
 The night-time probability relates to the day probability via the Ioannisian–Yu–Smirnov–Wyler (IYSW) formula (Phys.Lett. B 643, 2006):
 

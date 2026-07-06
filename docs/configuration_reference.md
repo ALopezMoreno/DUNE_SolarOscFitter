@@ -16,6 +16,24 @@ All parameters are read from `config.yaml` by `src/readConfig.jl`. Optional keys
 | `nuFast` | Bool | required | `true` = use external C++ nuFast library (overrides `fastFit`). Incompatible with multithreading. |
 | `singleChannel` | Bool or String | `false` | `false` = both channels. `"ES"` = ES only. `"CC"` = CC only. |
 | `inclusiveMode` | Bool | `false` | `true` = fold CC signal into ES Ereco bins; disable separate CC likelihood. |
+| `semiInclusiveMode` | Bool | `false` | `true` = forward hemisphere treated inclusively (CC folded into ES bins) while the backward hemisphere keeps a separate CC likelihood. Requires `singleChannel: false`; mutually exclusive with `inclusiveMode`. |
+
+---
+
+## Multi-detector configuration
+
+Detector-level keys can be grouped under a `detectors:` section, one named block per detector, instead of being placed flat at the top level:
+
+```yaml
+detectors:
+  HD:
+    ES_exposure: 40
+    CC_exposure: 40
+    # ... all per-detector keys ...
+active_detectors: ["HD"]   # optional; defaults to all blocks in detectors:
+```
+
+Per-detector keys are: `singleChannel`, `inclusiveMode`, `semiInclusiveMode`, `use_scattering_info`, `ES_cos_cut`, the exposures, the reconstruction-sample and background file lists with their normalisations/systematics, and the Ereco binning/threshold keys (`nBins_Ereco_*`, `range_Ereco_*`, `Ereco_min_*`, `nBins_cos_scatter`). A flat config without a `detectors:` section is parsed as a single detector named `default`.
 
 ---
 
@@ -29,8 +47,8 @@ Used only when `Asimov: true` to generate the fake dataset.
 | `true_sin2_th13` | Float | True sin²θ₁₃ (dimensionless) |
 | `true_dm2_21` | Float | True Δm²₂₁ (eV²) |
 | `true_integrated_HEP_flux` | Float | True HEP flux (ν/cm²/s) |
-
-The true ⁸B flux is taken as the mean of `prior_8B_flux` (not a separate config key).
+| `true_8B_flux` | Float | (optional) True ⁸B flux (ν/cm²/s). Defaults to `mean(prior_8B_flux)`. Set it away from the prior centre to study bias from flux mis-expectation. |
+| `true_cc_xsec_norm` | Float | (optional, default `1.0`) True CC cross-section normalisation. |
 
 ---
 
@@ -45,6 +63,10 @@ Strings are evaluated as Julia `Distributions.jl` expressions.
 | `prior_dm2_21` | Prior on Δm²₂₁ (eV²). Default: `Uniform(2e-5, 3e-4)`. |
 | `prior_8B_flux` | Prior on integrated ⁸B flux (ν/cm²/s). Default: `truncated(Normal(5.25e6, 0.28e6), 1.5e6, 1e7)`. |
 | `prior_HEP_flux` | Prior on integrated HEP flux (ν/cm²/s). Default: `Uniform(0, 2e4)`. |
+| `prior_cc_xsec_norm` | Prior on the CC cross-section normalisation (relative to MARLEY). Default: `truncated(Normal(1.0, 0.1), 0.1, 2.0)`. |
+| `prior_cc_xsec_tilt` | Prior on the CC cross-section power-law tilt α₁, applied as `exp(α₁·log(E/E_pivot))`. Default: `Normal(0.0, 0.1)`. |
+| `prior_cc_xsec_curv` | Prior on the CC cross-section quadratic curvature α₂, applied as `exp(α₂·log²(E/E_pivot))`. Default: `Normal(0.0, 0.05)`. |
+| `fix_cc_xsec` | Bool (default `false`). `true` = fix the three CC cross-section shape parameters at their true values instead of fitting them. |
 
 ---
 
@@ -87,6 +109,7 @@ Strings are evaluated as Julia `Distributions.jl` expressions.
 | `CC_background_normalisations` | Float[] | Per-background flux normalisation (cm⁻²s⁻¹). Length must match `CC_background_files`. |
 | `ES_background_systematics` | Float[] | Fractional uncertainty on each ES background. `0` = fixed (no nuisance parameter). |
 | `CC_background_systematics` | Float[] | Fractional uncertainty on each CC background. |
+| `CC_xsec_scale` | Float | (default `1.0`) Fixed scale factor on the CC cross section relative to the MARLEY prediction. Applied to both Asimov data and prediction (unlike `cc_xsec_norm`, which is a fitted nuisance). |
 
 ---
 
@@ -102,7 +125,10 @@ Strings are evaluated as Julia `Distributions.jl` expressions.
 | `range_Ereco_CC` | [Float, Float] | CC reco energy range [MeV]. |
 | `Ereco_min_ES` | Float | ES energy threshold [MeV]. Events below this bin are excluded from the likelihood. |
 | `Ereco_min_CC` | Float | CC energy threshold [MeV]. |
+| `TPC_threshold` | Float | (default `0.2`) True electron-recoil detection threshold [MeV]; lower integration limit of the ES cross-section. Must match the MC generation threshold. Distinct from the `Ereco_min_ES` analysis cut. |
 | `nBins_cosz` | Int | Number of cos(zenith) bins for day/night split (range −1 to 0). |
+| `nBins_cosz_fine` | Int | (default `0`) Horizon-refined cos(z) binning: number of graded bins in `[cosz_fine_edge, 0]`, concentrated where the day-night regeneration first peak lives; the rest of the grid is PREM-aligned. `0` = legacy uniform-piecewise grid. |
+| `cosz_fine_edge` | Float | (default `−0.12`) Lower edge of the fine cos(z) zone. Should sit at ≈ the first-peak cos(z) for the slowest oscillation frequency (lower bound of `prior_dm2_21`). |
 | `nBins_cos_scatter` | Int | Number of cos(scatter angle) bins for ES angular reconstruction. |
 | `use_scattering_info` | Bool | `true` = enable angular reconstruction likelihood. Changes ES rate shapes from 1D/2D to 2D/3D. |
 | `ES_cos_cut` | Float | Optional (default −1.0). Forward-hemisphere angular cut: events with cos(θ_scatter) < this value are masked. −1.0 = no cut; 0.0 = forward hemisphere only. |
@@ -125,4 +151,3 @@ Strings are evaluated as Julia `Distributions.jl` expressions.
 | `reconstruction_sample_CC` | String | CSV file (Etrue, Ereco, mask) for CC response matrix. |
 | `ES_background_files` | String[] | CSV files for each ES background component. |
 | `CC_background_files` | String[] | CSV files for each CC background component. |
-| `data_file` | String | (unused) Placeholder for real data when `Asimov: false`. |

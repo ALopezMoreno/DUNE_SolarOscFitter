@@ -84,7 +84,7 @@ Selection efficiency per Ereco bin is computed from the MC mask:
 ```
 eff[i] = (events passing mask in bin i) / (all events in bin i)
 ```
-This is already folded into the input MC files (detection efficiency = 1 after cuts). For CC, a flat 0.9 reconstruction efficiency is applied on top (hardcoded; TODO: read from histFile).
+This is already folded into the input MC files (detection efficiency = 1 after cuts). The CC channel likewise uses the mask-derived selection efficiency directly; no additional flat reconstruction efficiency is applied.
 
 **Output:** `responseMatrices` named tuple stored as a global.
 

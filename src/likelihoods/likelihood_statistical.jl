@@ -176,7 +176,8 @@ function barlowBeestonLogLikelihood(nExpected, nMeasured, sigmaVar)
                     llh += beta * e - m + m * log(m / (beta*e)) + (beta - 1)^2 / (2*s^2) 
                 end
             elseif e == 0
-                # BB formula is undefined at e=0; substitute half a count (Wald lower bound).
+                # BB formula is undefined at e=0; substitute half a count (the effective 1σ
+                # scale of an empty Poisson bin) so the penalty stays finite.
                 # NOTE: intentional regularisation — revisit once a proper background floor is added.
                 e = 0.5
                 if s == 0
@@ -191,7 +192,8 @@ function barlowBeestonLogLikelihood(nExpected, nMeasured, sigmaVar)
             if e == 0
                 llh += 0
             else
-                # BB formula is undefined at m=0; substitute half a count (Wald lower bound).
+                # BB formula is undefined at m=0; substitute half a count (the effective 1σ
+                # scale of an empty Poisson bin) so the penalty stays finite.
                 # NOTE: intentional regularisation — revisit once a proper background floor is added.
                 m = 0.5
                 if s == 0
