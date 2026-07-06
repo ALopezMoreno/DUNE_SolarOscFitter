@@ -41,7 +41,7 @@ function ES_xsec_nue(enu)
     Uses the standard formula for ν_e + e- → ν_e + e- scattering
     integrated over the kinematically allowed recoil energy range.
     """
-    Emin = E_threshold.ES  # Minimum detectable electron recoil energy
+    Emin = tpc_threshold  # true TPC detection threshold (GeV); set in config, must match MC
 
     # Maximum kinematically allowed electron recoil energy
     T_max = 2 * enu^2 / (m_e + 2 * enu)
@@ -71,8 +71,8 @@ function ES_xsec_nuother(enu)
     Uses the standard formula for ν_μ,τ + e- → ν_μ,τ + e- scattering
     with different coupling constants than electron neutrinos.
     """
-    Emin = E_threshold.ES  # Minimum detectable electron recoil energy
-    
+    Emin = tpc_threshold  # true TPC detection threshold (GeV); set in config, must match MC
+
     # Return zero cross-section below threshold
     if enu <= Emin
         return 0

@@ -1,6 +1,7 @@
 using Test
 
 # Bring in likelihood implementation
+include(joinpath(@__DIR__, "..", "src", "core.jl"))   # _params_by_prefix + physics constants
 include(joinpath(@__DIR__, "..", "src", "likelihoods", "likelihood_core.jl"))
 include(joinpath(@__DIR__, "..", "src", "likelihoods", "likelihood_debug.jl"))
 include(joinpath(@__DIR__, "..", "src", "likelihoods", "likelihood_statistical.jl"))

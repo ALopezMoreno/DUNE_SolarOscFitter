@@ -190,6 +190,7 @@ function save_settings_to_file(filename::String)
 
         # Shared binning
         write(file, "----- Shared Binning -----\n")
+        write(file, "TPC threshold: $(tpc_threshold*1e3) MeV\n")
         write(file, "Etrue bins: $(Etrue_bins)\n")
         write(file, "cos(z) bins: $cosz_bins\n\n")
 
@@ -276,6 +277,10 @@ function main()
     # Solar angle exposure over time
     global solarExposureFile = config["solar_exposure_file"]
 
+    # True TPC detection threshold (GeV) — lower integration limit of the ES cross-section.
+    # Must match the MC generation threshold. Distinct from the Ereco_min_ES analysis cut.
+    global tpc_threshold = Float64(get(config, "TPC_threshold", 0.2)) * 1e-3
+
     # Shared binning (same for all detectors)
     global Etrue_bins = (bin_number=config["nBins_Etrue"], min=config["range_Etrue"][1]*1e-3, max=config["range_Etrue"][2]*1e-3)
     global cosz_bins  = (bin_number=config["nBins_cosz"], min=-1, max=0)
@@ -334,7 +339,7 @@ function main()
     global sin2_th12_true = config["true_sin2_th12"]
     global sin2_th13_true = config["true_sin2_th13"]
     global dm2_21_true = config["true_dm2_21"]
-    global integrated_8B_flux_true = mean(prior_8B_flux)
+    global integrated_8B_flux_true = Float64(get(config, "true_8B_flux", mean(prior_8B_flux)))
     global integrated_HEP_flux_true = config["true_integrated_HEP_flux"]
     global cc_xsec_norm_true = Float64(get(config, "true_cc_xsec_norm", 1.0))
 
