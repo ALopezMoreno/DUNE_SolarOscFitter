@@ -133,7 +133,7 @@ When `e = 0` and `m > 0`, or `m = 0` and `e > 0`, the BB formula is undefined. A
 e = 0.5   # if e == 0 and m > 0
 m = 0.5   # if m == 0 and e > 0
 ```
-This approximates the Wald lower-bound credible interval. These substitutions are intentional and will be revisited once a proper background floor is in place (see `CLAUDE.md` → Known limitations).
+The half count acts as the effective 1σ scale of an empty Poisson bin (in the Gaussian approximation an n = 0 bin would get σ = √n = 0, i.e. infinite confidence), keeping the mismatch penalty finite and reasonably sized. These substitutions are intentional and will be revisited once a proper background floor is in place.
 
 ---
 

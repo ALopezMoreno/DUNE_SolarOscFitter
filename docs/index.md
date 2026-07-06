@@ -44,4 +44,4 @@ propagateSamples()
 | [mcmc_and_priors.md](mcmc_and_priors.md) | HMC setup, prior definitions, batch MCMC, Earth systematics approximation |
 | [configuration_reference.md](configuration_reference.md) | Every `config.yaml` key: type, default, effect |
 
-For operational instructions (how to run, Python utilities, known limitations) see [CLAUDE.md](../CLAUDE.md).
+For operational instructions (installation, how to run, Python plotting utilities) see the top-level [README.md](../README.md).

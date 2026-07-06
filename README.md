@@ -91,7 +91,7 @@ Key configuration options:
 
 ```yaml
 # Analysis mode
-RunMode: "MCMC"          # "MCMC", "LLH", or "derived"
+RunMode: "MCMC"          # "MCMC", "LLH", "derived", or "PROFILE"
 Asimov: true             # true for simulated data, false for real data
 singleChannel: false     # false (both), "ES", or "CC"
 
@@ -112,6 +112,8 @@ TPC_threshold: 0.2       # True electron-recoil detection threshold (MeV); lower
 true_8B_flux: 5.53e6     # Asimov 8B flux; defaults to mean(prior_8B_flux) if omitted.
                          # Set != prior centre to study bias from flux mis-expectation.
 ```
+
+Detector-level keys can also be grouped into named blocks under a `detectors:` section (with an optional `active_detectors` list) to fit several detector configurations simultaneously. See [docs/configuration_reference.md](docs/configuration_reference.md) for every key, and [docs/index.md](docs/index.md) for the developer documentation.
 
 ### 3. Output Visualization
 
