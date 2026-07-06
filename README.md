@@ -43,7 +43,7 @@ pip install matplotlib numpy pandas scipy h5py seaborn mplhep cmasher cmap \
             networkx corner Pillow termcolor peanuts
 ```
 
-`plotting.py`, `posteriorHelpers.py`, and `binImportanceHelpers.py` are local modules inside `utils/`. Run plotting scripts from within that directory, or set `PYTHONPATH`:
+`plotting/` (a package: shared style, corner plots, contours, layouts), `style.py`, `posteriorHelpers.py`, and `binImportanceHelpers.py` are local modules inside `utils/`. Run plotting scripts from within that directory, or set `PYTHONPATH`:
 
 ```bash
 cd utils && python plotOutput.py ...
@@ -102,6 +102,15 @@ nSteps: 15000            # Steps per chain
 # Detector configuration
 CC_exposure: 40          # Module-years
 ES_exposure: 40          # Module-years
+
+# Shared binning
+TPC_threshold: 0.2       # True electron-recoil detection threshold (MeV); lower
+                         # integration limit of the ES cross-section. Must match
+                         # the MC generation threshold (distinct from Ereco_min_ES).
+
+# Asimov truth overrides
+true_8B_flux: 5.53e6     # Asimov 8B flux; defaults to mean(prior_8B_flux) if omitted.
+                         # Set != prior centre to study bias from flux mis-expectation.
 ```
 
 ### 3. Output Visualization
@@ -111,6 +120,18 @@ ES_exposure: 40          # Module-years
 ```bash
 python3 utils/plotOutput.py --help
 python3 utils/plotOutput.py outFileName
+```
+
+Both `plotOutput.py` and `compareOutput.py` apply a Gaussian smoothing of
+`--smooth` sigma (in bins, default 0.5) to the 2D histograms before drawing
+contours. This affects the displayed credible regions; the value used is
+printed at startup. Set `--smooth 0` for raw histograms.
+
+#### Compare two posteriors (overlaid corner)
+
+```bash
+python3 utils/compareOutput.py --help
+python3 utils/compareOutput.py -a chainsA -b chainsB --labels "Run A" "Run B"
 ```
 #### Bin diagnostic results (derived mode)
 
@@ -137,6 +158,7 @@ SolarOscFitter/
 │   └── ...
 ├── utils/                 # Python plotting utilities
 │   ├── plotOutput.py     # MCMC result visualization
+│   ├── compareOutput.py  # Compare two posteriors
 │   └── plotLLH.py        # Likelihood scan plots
 ├── inputs/               # Input data files
 ├── outputs/              # Analysis results
@@ -221,6 +243,17 @@ The analysis fits the following parameters:
 >
 > To avoid inconsistent results, always remove old output files manually before running
 > a job that rewrites them.
+
+
+## Testing
+
+Run the unit tests (likelihood correctness and wiring) with the project environment:
+
+```bash
+julia --project tests/runtests.jl
+```
+
+Benchmarks and profiling runs are opt-in via `JULIA_LIKELIHOOD_BENCH=1` and `JULIA_PROFILE=1`.
 
 
 ## Performance Tips

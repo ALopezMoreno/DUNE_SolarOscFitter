@@ -396,3 +396,9 @@ test_semiinclusive.yaml
 
 # Claude Code instructions (local dev tool, not project docs)
 CLAUDE.md
+
+# Cluster run outputs (large chain data)
+cluster_output/
+
+# Generated osc-grid convergence reference (consumed by plotOscReference.jl / checkOscGridConvergence.jl)
+utils/osc_convergence_reference.jld2
