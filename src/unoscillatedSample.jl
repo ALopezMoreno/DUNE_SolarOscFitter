@@ -84,7 +84,6 @@ Uses shared global `Etrue_bins`. Returns:
 - `energies_GeV`: Etrue bin centres (GeV)
 """
 function build_unoscillated_sample(det)
-    global E_threshold = det.E_threshold   # read by ES_xsec_nue / ES_xsec_nuother in xsec.jl
     ES_normalisation = det.ES_normalisation
     CC_normalisation = det.CC_normalisation
 

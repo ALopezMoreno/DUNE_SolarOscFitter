@@ -51,16 +51,17 @@ end
 end
 
 @testset "check_earth_norm_bounds – behaviour" begin
-    # If you have check_earth_norm_bounds in likelihood_debug.jl
-    params_ok = Dict(
-        :earth_norm_1 => 0.5,
-        :earth_norm_2 => 1.9,
-        :other        => 3.0,
+    # check_earth_norm_bounds extracts earth_norm_* via _params_by_prefix, which
+    # operates on NamedTuple field names (not Dict keys).
+    params_ok = (
+        earth_norm_1 = 0.5,
+        earth_norm_2 = 1.9,
+        other        = 3.0,
     )
     @test check_earth_norm_bounds(params_ok)
 
-    params_low = Dict(:earth_norm_1 => -0.01)
-    params_high = Dict(:earth_norm_1 => 2.01)
+    params_low  = (earth_norm_1 = -0.01,)
+    params_high = (earth_norm_1 = 2.01,)
 
     @test !check_earth_norm_bounds(params_low)
     @test !check_earth_norm_bounds(params_high)
@@ -81,29 +82,33 @@ function fake_likelihood_inputs()
         CC_night = [1.0 1.0; 2.0 2.0],
     )
 
-    # fake propagate function: ignore parameters, just return fixed arrays
-    fake_f = function (MC_no_osc, Mreco, parameters, SSM, energies, BG)
+    # fake propagate function: ignore parameters, just return fixed arrays.
+    # Must accept the precomputed_osc kwarg and return a 7-tuple (the last slot
+    # is the CC-inclusive spectrum, unused here) to match expected_rates.
+    fake_f = function (MC_no_osc, Mreco, parameters, SSM, energies, BG; precomputed_osc=nothing)
         ES_day   = [1.0, 2.0]
         CC_day   = [3.0, 4.0]
         ES_night = [1.0 2.0; 3.0 4.0]
         CC_night = [1.0 1.0; 2.0 2.0]
         BG_ES    = [0.1, 0.2]
         BG_CC    = [0.3, 0.4]
-        return ES_day, CC_day, ES_night, CC_night, BG_ES, BG_CC
+        CC_incl  = nothing
+        return ES_day, CC_day, ES_night, CC_night, BG_ES, BG_CC, CC_incl
     end
 
     inputs = LikelihoodInputs(
-        nObserved,     # ereco_data (you use it as nObserved)
-        nothing,       # bin_edges
-        nothing,       # responseMatrices
-        nothing,       # solarModel
-        nothing,       # unoscillatedSample
-        nothing,       # backgrounds
-        fake_f,        # propagateSamples
+        nObserved,     # nObserved
+        nothing,       # energies
+        nothing,       # Mreco
+        nothing,       # SSM
+        nothing,       # MC_no_osc
+        nothing,       # BG
+        fake_f,        # f (propagation closure)
         true,          # ES_mode
         true,          # CC_mode
         1,             # index_ES
         1,             # index_CC
+        "TEST",        # det_name
     )
 
     return inputs
@@ -111,7 +116,7 @@ end
 
 @testset "expected_rates – wiring & shapes" begin
     inputs = fake_likelihood_inputs()
-    params = Dict(:theta => 1.0)  # no earth_norm, so always allowed
+    params = (theta = 1.0,)  # no earth_norm, so always allowed
 
     rates = expected_rates(inputs, params)
 
@@ -126,7 +131,7 @@ end
 
 @testset "make_likelihood – ES/CC composition" begin
     inputs = fake_likelihood_inputs()
-    params = Dict(:theta => 1.0)
+    params = (theta = 1.0,)
 
     # full ES + CC likelihood
     total_llh = make_likelihood(inputs;
@@ -172,9 +177,9 @@ end
         CC_llh = llh_CC_poisson,
     )
 
-    params_ok   = Dict(:earth_norm_1 => 1.0)
-    params_bad1 = Dict(:earth_norm_1 => -0.1)
-    params_bad2 = Dict(:earth_norm_1 => 2.1)
+    params_ok   = (earth_norm_1 = 1.0,)
+    params_bad1 = (earth_norm_1 = -0.1,)
+    params_bad2 = (earth_norm_1 = 2.1,)
 
     @test total_llh(params_ok)   > -Inf
     @test total_llh(params_bad1) == -Inf

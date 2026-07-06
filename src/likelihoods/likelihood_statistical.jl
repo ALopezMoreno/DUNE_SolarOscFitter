@@ -10,11 +10,12 @@ function poissonLogLikelihood(nExpected::AbstractVector{<:Real}, nMeasured::Abst
             if raw_e > -1e-3
                 @warn "poissonLogLikelihood: bin $i negative within numerical noise (e=$raw_e)"
             else
-                error("poissonLogLikelihood: bin $i significantly negative (e=$raw_e)")
+                throw(ArgumentError("poissonLogLikelihood: bin $i significantly negative (e=$raw_e)"))
             end
         end
         e = 0.5 * (raw_e + 1e-9 + sqrt((raw_e - 1e-9)^2 + 1e-18))
         m = Float64(nMeasured[i])
+        m < 0 && throw(ArgumentError("poissonLogLikelihood: bin $i measured count negative (m=$m)"))
 
         term = ifelse(
             m > 0,
@@ -38,6 +39,7 @@ function perbin_poissonLogLikelihood(nExpected::AbstractArray,
     @inbounds for I in eachindex(nExpected)
         e = nExpected[I]
         m = Float64(nMeasured[I])
+        m < 0 && throw(ArgumentError("perbin_poissonLogLikelihood: bin $I measured count negative (m=$m)"))
 
         if m > 0
             # Use the same floor as poissonLogLikelihood so the per-bin diagnostic
