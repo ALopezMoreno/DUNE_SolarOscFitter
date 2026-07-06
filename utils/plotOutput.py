@@ -21,8 +21,11 @@ parser.add_argument('-d', '--diagnostics', action='store_true',
 parser.add_argument('-e', '--expanded', action="store_true", help="Make additional corner plots including other parameters of interest: HEP flux (discovery), 8B flux, DN_asymmetry")
 parser.add_argument('-f', '--full_output', action="store_true", help="Make additional corner plot over **all** parameters (default corner.py plot).")
 parser.add_argument('-p', '--parameters', nargs='+', help="Choose parameters to be plotted (default corner.py plot).")
-parser.add_argument('-b', '--burnin', type=int, default=5_000, help="Burnin steps to discard (default: 20000).")
+parser.add_argument('-b', '--burnin', type=int, default=100, help="Burnin steps to discard (default: 100).")
 parser.add_argument('--bins', type=int, default=60, help="Number of 2D histogram bins per axis (default: 60).")
+parser.add_argument('--smooth', type=float, default=0.5,
+                    help="Gaussian smoothing sigma (in bins) applied to the 2D histograms before "
+                         "drawing contours; affects the displayed credible regions (default: 0.5).")
 parser.add_argument('--exclude', nargs='*', type=int, default=[20],
                     help="Chain IDs to exclude (default: 20). Use --exclude with no args to keep all chains.")
 parser.add_argument('--cbar', type=str, default=None,
@@ -46,6 +49,8 @@ burnin = args.burnin
 cbar = args.cbar
 bins = args.bins
 exclude = args.exclude if args.exclude is not None else []
+smooth = args.smooth
+print(f"[info] 2D histogram smoothing: sigma={smooth} bins (change with --smooth)")
 
 # Check if at least one file is provided
 if not mcmc_chains:
@@ -106,9 +111,10 @@ def _fix_axes_default(axes, variables):
             axes[2, k].set_ylim(0.2, 1.4)
 
 def _save(fig, tag, output_name):
-    path = f'images/corner_output{tag}.pdf' if output_name is None else f'{output_name}{tag}.pdf'
+    stem = output_name.removesuffix('.pdf') if output_name else None
+    path = f'images/corner_output{tag}.pdf' if stem is None else f'{stem}{tag}.pdf'
     print(f"saving output as {path}")
-    fig.savefig(path, dpi=300, format='pdf', bbox_inches='tight')
+    plotting.save_figure(fig, path, dpi=300, format='pdf', bbox_inches='tight')
     plt.close(fig)
 
 _diag_params   = plot_params['diagnostics']
@@ -123,7 +129,7 @@ if diagnostics:
         variables, data, externalContours=True,
         colorlist=_diag_params['color'], linecolors=_diag_params['linecolor'],
         fill=_diag_params['fill'], cbar=_boot_cmap, diagnostics='bootstrap',
-        bins2D=bins,
+        bins2D=bins, smooth=smooth,
     )
     _fix_axes_diag(axes, data, variables)
     _save(fig, '_bootstrap', output_name)
@@ -133,7 +139,7 @@ if diagnostics:
         variables, data, externalContours=True,
         colorlist=_diag_params['color'], linecolors=_diag_params['linecolor'],
         fill=_diag_params['fill'], cbar=None, diagnostics='stab',
-        bins2D=bins,
+        bins2D=bins, smooth=smooth,
     )
     _fix_axes_diag(axes, data, variables)
     _save(fig, '_stab', output_name)
@@ -144,7 +150,7 @@ else:
         variables, data, externalContours=True,
         colorlist=_normal_params['color'], linecolors=_normal_params['linecolor'],
         fill=_normal_params['fill'], cbar=cbar, diagnostics=None,
-        bins2D=bins,
+        bins2D=bins, smooth=smooth,
     )
     _fix_axes_default(axes, variables)
     _save(fig, '', output_name)
@@ -174,10 +180,10 @@ if customParameters is not None:
     # Save figs
     if output_name is None:
         print(f"saving output as images/corner_output_{customParameters}.pdf")
-        fig.savefig(f"images/corner_output_{param_str}.pdf", dpi=300, format='pdf', bbox_inches='tight')
+        plotting.save_figure(fig, f"images/corner_output_{param_str}.pdf", dpi=300, format='pdf', bbox_inches='tight')
     else:
         print("saving output as " + output_name + f"_{param_str}.pdf")
-        fig.savefig(output_name + f"_{param_str}.pdf", dpi=300, format='pdf', bbox_inches='tight')
+        plotting.save_figure(fig, output_name + f"_{param_str}.pdf", dpi=300, format='pdf', bbox_inches='tight')
 
     end_time = time.time()
 
@@ -226,6 +232,7 @@ if full:
 
     _trace_path = (output_name or 'images/corner_output') + '_traces.pdf'
     from matplotlib.backends.backend_pdf import PdfPages
+    plotting.ensure_parent_dir(_trace_path)
     with PdfPages(_trace_path) as _pdf:
 
         # Page 1: osc parameters in 2×2, legend in bottom-right cell
@@ -266,10 +273,10 @@ if full:
     # Save figs
     if output_name is None:
         print("saving output as images/corner_output_all.pdf")
-        fig.savefig('images/corner_output_all.pdf', dpi=300, format='pdf', bbox_inches='tight')
+        plotting.save_figure(fig, 'images/corner_output_all.pdf', dpi=300, format='pdf', bbox_inches='tight')
     else:
         print("saving output as " + output_name + "_all.pdf")
-        fig.savefig(output_name + '_all.pdf', dpi=300, format='pdf', bbox_inches='tight')
+        plotting.save_figure(fig, output_name + '_all.pdf', dpi=300, format='pdf', bbox_inches='tight')
 
     end_time = time.time()
 
@@ -303,6 +310,7 @@ if expanded:
         cbar=cbar,
         diagnostics=None,
         bins2D=bins,
+        smooth=smooth,
     )
 
     # get axis limits
@@ -356,107 +364,13 @@ if expanded:
         # Save figs
     if output_name is None:
         print(f"saving output as images/corner_output_expanded.pdf")
-        fig.savefig(f"images/corner_output_expanded.pdf", dpi=300, format='pdf', bbox_inches='tight')
+        plotting.save_figure(fig, f"images/corner_output_expanded.pdf", dpi=300, format='pdf', bbox_inches='tight')
     else:
         print("saving output as " + output_name + "_expanded.pdf")
-        fig.savefig(output_name + "_expanded.pdf", dpi=300, format='pdf', bbox_inches='tight')
+        plotting.save_figure(fig, output_name + "_expanded.pdf", dpi=300, format='pdf', bbox_inches='tight')
 
     end_time = time.time()
 
     # Calculate and print the elapsed time
     elapsed_time = end_time - start_time
     print(f"Execution time: {elapsed_time:.2f} seconds")
-
-
-exit()
-import h5py
-#
-# posterior = np.vstack((sin2_th12_all, sin2_th13_all, dm2_21_all, stepno_all, B8flux_all))
-# 
-# 
-covariance = np.cov(data)
-print(data.keys())
-exit()
-# 
-# Save the covariance matrix to a JLD2 file
-with h5py.File('outputs/posterior_covariance.jld2', 'w') as f:
-    f.create_dataset('posterior_cov', data=covariance)
-# 
-# 
-# data = [sin2_th12_all, sin2_th13_all, dm2_21_all * 1e4]
-
-
-
-if diagnostics:
-    print(colored("Running in diagnostics mode. 2D hists will use a logarithmic colormap", "yellow"))
-
-    # If running in diagnostics, show full histogram so that bin population is visible
-    fig, axes, l = plotting.plot_corner(variables, data, weights=weights_all, externalContours=True,
-                                        color='dimgray', linecolor='w', fill=False)
-
-    # Fix axes limits to data
-    lim0 = [np.min(data[0]), np.max(data[0])]
-    lim1 = [np.min(data[1]), np.max(data[1])]
-    lim2 = [np.min(data[2]), np.max(data[2])]
-
-    axes[0, 0].set_xlim(lim0[0], lim0[1])
-    axes[1, 0].set_xlim(lim0[0], lim0[1])
-    axes[2, 0].set_xlim(lim0[0], lim0[1])
-
-    axes[2, 0].set_ylim(lim2[0], lim2[1])
-    axes[2, 1].set_ylim(lim2[0], lim2[1])
-    axes[2, 2].set_xlim(lim2[0], lim2[1])
-
-
-
-
-if diagnostics:
-    poisson_noise = [np.sqrt(lev)/lev for lev in l[::-1]]
-
-    for i, level in enumerate(poisson_noise):
-        frac_uncertainty = level * 100  # Convert to percentage
-
-        # Create the base message
-        message = f"Fractional poissonian error at {i+1}σ is {frac_uncertainty:.1f}%"
-
-        # Add conditional message
-        if frac_uncertainty < (i+1)*5:
-            full_message = message + ". Statistics are sufficient to draw this contour."
-            print(colored(full_message, 'green'))
-        else:
-            full_message = message + ". Not enough statistics to draw this contour. Try running larger chains."
-            print(colored(full_message, 'red'))
-
-exit()
-
-
-
-print("Plotting traces")
-mask = (chains_all == chain_indexes[0])
-for field in data:
-    plt.figure()
-    # Loop over every unique chain index
-    for idx in chain_indexes:
-         mask = (chains_all == idx)
-         print(f"Chain {idx}: {len(stepno_all[mask])} steps")
-         plt.plot(stepno_all[mask], field[mask], label=f'Chain {idx}')
-    plt.xlabel("Step Number")
-    plt.ylabel("Field Value")
-    plt.title("Chain Plot for Field")
-    plt.legend()
-    plt.show()
-
-for field in data:
-    # Calculate the difference between contiguous elements
-    differences = np.diff(field[mask])
-    
-    # Count how many times the difference is zero
-    zero_diff_count = np.sum(differences == 0)
-    print(f"Number of zero differences: {zero_diff_count}")
-    
-    # Plot the differences
-    plt.plot(stepno_all[mask][1:], differences)  # stepno_all[mask][1:] to align with differences length
-    plt.title("Differences between contiguous elements")
-    plt.xlabel("Step Number")
-    plt.ylabel("Difference")
-    plt.show()

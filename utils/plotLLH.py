@@ -1,16 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import mplhep as hep
 import pandas as pd
-from cmap import Colormap
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 from matplotlib.ticker import ScalarFormatter
-import plotting
+import plotting  # applies shared CMS/LaTeX style on import
 import os
 import argparse
-
-plt.rcParams['text.usetex'] = True
-hep.style.use("CMS")
 
 parser = argparse.ArgumentParser(description="Display LLH scan and optionally specify an output file.")
 
@@ -23,11 +17,6 @@ args = parser.parse_args()
 inFile = args.input
 outFile = args.output
 
-lower = -10
-
-th12th13_path = inFile + "_llh_sin2th12_sin2th13.csv"
-th12dm21_path = inFile + "_llh_sin2th12_delt2m21.csv"
-th13dm21_path = inFile + "_llh_sin2th13_delt2m21.csv"
 
 def read_llh(file_path):
     with open(file_path, 'r') as file:
@@ -45,100 +34,76 @@ def read_llh(file_path):
     matrix = matrix_data.to_numpy()
     return lim_dim1, lim_dim2, matrix
 
-lim_th12, lim_th13, matrix1 = read_llh(th12th13_path)
 
+# Injected (Asimov true) parameter values, marked with the red cross/lines.
+# dm2_21 is given in the plotted (x10^-4 eV^2) units.
+DM21_SCALE = 1e4
+TRUTH = {
+    'sin2_th12': 0.307,
+    'sin2_th13': 0.022,
+    'dm2_21':    0.75,
+}
+LABELS = {
+    'sin2_th12': r'$\sin^2\theta_{12}$',
+    'sin2_th13': r'$\sin^2\theta_{13}$',
+    'dm2_21':    r'$\Delta m^2_{21} (\times 10^{-4}eV^2)$',
+}
+
+# (csv suffix, x-axis key, y-axis key, contour linewidth)
+PANELS = [
+    ('_llh_sin2th12_sin2th13.csv', 'sin2_th12', 'sin2_th13', 2.0),
+    ('_llh_sin2th12_delt2m21.csv', 'sin2_th12', 'dm2_21',    2.5),
+    ('_llh_sin2th13_delt2m21.csv', 'sin2_th13', 'dm2_21',    2.0),
+]
+
+
+def plot_llh_panel(ax, fig, path, xkey, ykey, linewidth):
+    """Render one 2D -logL scan panel onto ``ax``."""
+    lim_x, lim_y, matrix = read_llh(path)
+
+    # The dm2_21 axis is plotted in (x10^-4 eV^2) units.
+    scale_y = ykey == 'dm2_21'
+    if scale_y:
+        lim_y = [lim_y[0] * DM21_SCALE, lim_y[1] * DM21_SCALE]
+
+    im = ax.imshow(matrix.T, cmap=plotting.parula_map, aspect='auto', origin='lower',
+                   extent=[lim_x[0], lim_x[1], lim_y[0], lim_y[1]])
+
+    X = np.linspace(lim_x[0], lim_x[1], matrix.shape[1])
+    Y = np.linspace(lim_y[0], lim_y[1], matrix.shape[0])
+    XX, YY = np.meshgrid(X, Y)
+    ax.contour(XX, YY, matrix.T - np.max(matrix),
+               levels=[-9, -4, -1], colors='white',
+               linewidths=linewidth, linestyles='-')
+
+    truth_x, truth_y = TRUTH[xkey], TRUTH[ykey]
+    ax.plot(truth_x, truth_y, 'r+', markersize=10, markeredgewidth=2)
+    ax.axhline(y=truth_y, color='r', linestyle='dashed', linewidth=1)
+    ax.axvline(x=truth_x, color='r', linestyle='dashed', linewidth=1)
+    ax.set_xlabel(LABELS[xkey])
+    ax.set_ylabel(LABELS[ykey])
+    ax.set_box_aspect(1)
+
+    # Panels against the dm2_21 axis use a plain (non-offset) x-tick format.
+    if scale_y:
+        ax.xaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+        ax.ticklabel_format(axis='x', style='plain')
+        ax.xaxis.offsetText.set_visible(False)
+
+    fig.colorbar(im, ax=ax, label=r'$-\log\mathcal{L}$', fraction=0.05, pad=0.1)
+    return im
 
 
 fig, axs = plt.subplots(1, 3, figsize=(20, 5))
-
-# First plot
-im1 = axs[0].imshow(matrix1.T, cmap=plotting.parula_map, aspect='auto', origin='lower',
-                     extent=[lim_th12[0], lim_th12[1], lim_th13[0], lim_th13[1]])#, vmin=np.max([lower, np.min(matrix1)]), vmax=0)
-
-X = np.linspace(lim_th12[0], lim_th12[1], matrix1.shape[1])
-Y = np.linspace(lim_th13[0], lim_th13[1], matrix1.shape[0])
-XX, YY = np.meshgrid(X, Y)
-contours = axs[0].contour(XX, YY, matrix1.T - np.max(matrix1), 
-                         levels=[-9, -4, -1],
-                         colors='white', 
-                         linewidths=2, linestyles='-') 
-
-axs[0].plot(0.307, 0.022, 'r+', markersize=10, markeredgewidth=2)
-axs[0].axhline(y=0.022, color='r', linestyle='dashed', linewidth=1) 
-axs[0].axvline(x=0.307, color='r', linestyle='dashed', linewidth=1) 
-axs[0].set_ylabel(r'$\sin^2\theta_{13}$')
-axs[0].set_xlabel(r'$\sin^2\theta_{12}$')
-axs[0].set_box_aspect(1)
-
-# Create a colorbar for the first subplot
-fig.colorbar(im1, ax=axs[0], label=r'$-\log\mathcal{L}$', fraction=0.05, pad=0.1)
-
-
-
-lim_th12, lim_dm21, matrix2 = read_llh(th12dm21_path)
-
-
-# Second plot
-im2 = axs[1].imshow(matrix2.T, cmap=plotting.parula_map, aspect='auto', origin='lower',
-                     extent=[lim_th12[0], lim_th12[1], lim_dm21[0]*10000, lim_dm21[1]*10000])#, vmin=np.max([lower, np.min(matrix2)]), vmax=0)
-
-X = np.linspace(lim_th12[0], lim_th12[1], matrix2.shape[1])
-Y = np.linspace(lim_dm21[0]*10000, lim_dm21[1]*10000, matrix2.shape[0])
-XX, YY = np.meshgrid(X, Y)
-contours = axs[1].contour(XX, YY, matrix2.T - np.max(matrix2), 
-                         levels=[-9, -4, -1],
-                         colors='white', 
-                         linewidths=2.5, linestyles='-') 
-
-axs[1].plot(0.307, 0.75, 'r+', markersize=10, markeredgewidth=2)
-axs[1].axhline(y=0.75, color='r', linestyle='dashed', linewidth=1) 
-axs[1].axvline(x=0.307, color='r', linestyle='dashed', linewidth=1) 
-axs[1].set_xlabel(r'$\sin^2\theta_{12}$')
-axs[1].set_ylabel(r'$\Delta m^2_{21} (\times 10^{-4}eV^2)$')
-axs[1].xaxis.set_major_formatter(ScalarFormatter(useMathText=True))
-axs[1].ticklabel_format(axis='x', style='plain')
-axs[1].xaxis.offsetText.set_visible(False)
-axs[1].set_box_aspect(1)
-
-# Create a colorbar for the second subplot
-fig.colorbar(im2, ax=axs[1], label=r'$-\log\mathcal{L}$', fraction=0.05, pad=0.1)
-
-# Read the likelihood data for sin2_th13 vs dm2_21
-lim_th13, lim_dm21, matrix3 = read_llh(th13dm21_path)
-
-# Third plot
-im3 = axs[2].imshow(matrix3.T, cmap=plotting.parula_map, aspect='auto', origin='lower',
-                    extent=[lim_th13[0], lim_th13[1], lim_dm21[0]*10000, lim_dm21[1]*10000])#, vmin=np.max([lower, np.min(matrix3)]), vmax=0)
-
-X = np.linspace(lim_th13[0], lim_th13[1], matrix3.shape[1])
-Y = np.linspace(lim_dm21[0]*10000, lim_dm21[1]*10000, matrix3.shape[0])
-XX, YY = np.meshgrid(X, Y)
-contours = axs[2].contour(XX, YY, matrix3.T - np.max(matrix3),
-                         levels=[-9, -4, -1],
-                         colors='white', 
-                         linewidths=2, linestyles='-') 
-
-axs[2].plot(0.022, 0.75, 'r+', markersize=10, markeredgewidth=2)
-axs[2].axhline(y=0.75, color='r', linestyle='dashed', linewidth=1) 
-axs[2].axvline(x=0.022, color='r', linestyle='dashed', linewidth=1) 
-axs[2].set_xlabel(r'$\sin^2\theta_{13}$')
-axs[2].set_ylabel(r'$\Delta m^2_{21} (\times 10^{-4}eV^2)$')
-axs[2].xaxis.set_major_formatter(ScalarFormatter(useMathText=True))
-axs[2].ticklabel_format(axis='x', style='plain')
-axs[2].xaxis.offsetText.set_visible(False)
-axs[2].set_box_aspect(1)
-
-# Create a colorbar for the third subplot
-fig.colorbar(im3, ax=axs[2], label=r'$-\log\mathcal{L}$', fraction=0.05, pad=0.1)
-
-
+for ax, (suffix, xkey, ykey, linewidth) in zip(axs, PANELS):
+    plot_llh_panel(ax, fig, inFile + suffix, xkey, ykey, linewidth)
 
 plt.tight_layout()
 
 # Adjust layout and save the figure
 if outFile:
-    fig.savefig(outFile + "_llh.pdf", dpi=300, format='pdf')
+    plotting.save_figure(fig, outFile + "_llh.pdf", dpi=300, format='pdf')
 
-fig.savefig('images/' + os.path.basename(inFile) + "_llh.pdf", dpi=300, format='pdf')
+plotting.save_figure(fig, 'images/' + os.path.basename(inFile) + "_llh.pdf", dpi=300, format='pdf')
 
 plt.show()
