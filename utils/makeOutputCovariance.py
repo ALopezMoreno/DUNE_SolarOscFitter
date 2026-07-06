@@ -62,7 +62,7 @@ if plot_cov:
     fig, ax = plotting.plot_covariance(covariance, labels=variables, colormap='coolwarm')
     if output_name is None:
         print("saving image as images/posterior_covariance.pdf")
-        fig.savefig("images/posterior_covariance.pdf", dpi=300, format='pdf')
+        plotting.save_figure(fig, "images/posterior_covariance.pdf", dpi=300, format='pdf')
     else:
         print("saving image as " + output_name + ".pdf")
-        fig.savefig(output_name + ".pdf", dpi=300, format='pdf')
+        plotting.save_figure(fig, output_name + ".pdf", dpi=300, format='pdf')

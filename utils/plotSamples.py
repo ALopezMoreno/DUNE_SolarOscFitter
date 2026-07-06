@@ -7,23 +7,15 @@ from cmap import Colormap
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from matplotlib.ticker import ScalarFormatter
 from scipy.stats import gaussian_kde
-import plotting
+import plotting  # applies shared CMS/LaTeX style on import
 import os
 
-plt.rcParams['text.usetex'] = True
-hep.style.use("CMS")
 
-
+# Fermi coupling constant G_F (GeV^-2), used for the MSW matter-potential overlay.
 G_f = 5.4489e-5
 
 
 def plot_95_percent_contour(ax, x_data, y_data, color, alpha=1, linestyles=['-'], fill=True):
-    # Optionally use a subset of the data for large datasets
-    #if len(x_data) > 10000:  # Arbitrary threshold for large datasets
-    #    indices = np.random.choice(len(x_data), int(len(x_data) * 0.5), replace=False)
-    #    x_data = x_data[indices]
-    #    y_data = y_data[indices]
-
     # Perform kernel density estimation
     xy = np.vstack([x_data, y_data])
     kde = gaussian_kde(xy)
@@ -236,7 +228,7 @@ ax2.legend(loc='upper right')
 plt.tight_layout()
 
 # Show the plot
-plt.savefig('images/oscillated_sample_etrue.png', dpi=300)
+plotting.save_figure(plt.gcf(), 'images/oscillated_sample_etrue.png', dpi=300)
 
 # Load MC
 enu_ES_nuother, ereco_ES_nuother = np.genfromtxt("inputs/Enu_Ereco_ES_nuother_smeared.csv", delimiter=',', skip_header=True).T
@@ -389,4 +381,4 @@ ax2.legend(loc='lower right')
 plt.tight_layout()
 
 # Show the plot
-plt.savefig('images/oscillated_sample_ereco.png', dpi=300)
+plotting.save_figure(plt.gcf(), 'images/oscillated_sample_ereco.png', dpi=300)

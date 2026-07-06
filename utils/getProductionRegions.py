@@ -3,12 +3,9 @@ sys.path.append('../PEANUTS')
 
 import peanuts
 import matplotlib.pyplot as plt
-import mplhep as hep
 import h5py
 
-
-plt.rcParams['text.usetex'] = True
-hep.style.use("CMS")
+import style  # applies the shared CMS/LaTeX style on import
 
 model = peanuts.SolarModel(solar_model_file="../PEANUTS/Data/nudistr_b16_agss09.dat")
 

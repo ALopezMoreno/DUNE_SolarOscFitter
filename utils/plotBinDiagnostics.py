@@ -128,8 +128,8 @@ def _underlay_day_events(ax, E_edges, ch, fade=0.30, span=0.96, floor=1e-3):
 
 # Diagonal-hatch style for the day diagnostic bars (variance AND driver-score panels) so
 # the translucent underlay shows through them. Hatch line thickness is the global
-# hatch.linewidth rcParam; the patch linewidth controls the bar outline.
-plt.rcParams["hatch.linewidth"] = 2.4
+# hatch.linewidth rcParam (set in style.apply_style); the patch linewidth controls
+# the bar outline.
 _DIAG_BAR = dict(facecolor="none", edgecolor="C0", hatch="///", linewidth=1.2)
 
 # cosz y-edges for the 2D night maps (piecewise-uniform over the exposure
@@ -378,36 +378,98 @@ def add_sample_page(pdf, ch, E_edges, idx):
     plt.close(fig)
 
 
-def add_oscmap_page(pdf):
-    """Best-fit (posterior-mean) oscillation map P(νe→νe) for 8B: the day survival curve
-    (1D) and the night regeneration map (2D, true energy × cos z). Computed in derive mode
-    at the posterior-mean parameters; skipped silently if those keys aren't present."""
+def add_oscmap_dn_page(pdf):
+    """Best-fit (posterior-mean) 8B oscillation map P(νe→νe) and day-night asymmetry on one
+    2×2 page, using the same grouped layout as the other diagnostic pages:
+
+        row 0 — probabilities:  day survival curve P(E_true)  |  night regeneration map (E_true × cos z)
+        row 1 — asymmetry A = 2(P_day−P_night)/(P_day+P_night):  truth (E_true)  |  reconstructed (E_reco)
+
+    Forming the asymmetry cancels flux × cross-section and the per-cos z exposure, leaving the Earth
+    day-night structure; the reco panel shows how much survives the energy reconstruction. The
+    probability row is drawn whenever the osc-map keys exist; the asymmetry row is added only when the
+    signal/exposure keys are present (otherwise a probabilities-only 1×2 page is produced)."""
     if "derived_oscmap_8B_night" not in diagnostics:
         return
+
+    # --- probability-row data ---
     night = np.asarray(diagnostics["derived_oscmap_8B_night"], dtype=float).T   # (n_cosz, n_Etrue)
     day   = np.asarray(diagnostics["derived_oscmap_8B_day"],   dtype=float)      # (n_Etrue,)
-    if "derived_oscmap_Etrue_edges" in diagnostics:
-        Et = np.asarray(diagnostics["derived_oscmap_Etrue_edges"], dtype=float)
-    else:
-        Et = np.linspace(1.0, 21.0, day.size + 1)
+    Et = (np.asarray(diagnostics["derived_oscmap_Etrue_edges"], dtype=float)
+          if "derived_oscmap_Etrue_edges" in diagnostics else np.linspace(1.0, 21.0, day.size + 1))
 
-    fig, (axd, axn) = plt.subplots(1, 2, figsize=(11, 4.8), constrained_layout=True,
-                                   gridspec_kw=dict(width_ratios=[1.0, 1.25]))
-    # day survival probability P_ee(E_true)
+    # --- asymmetry-row data (optional) ---
+    ch, E_edges = (("CC", cc_E_edges) if (not inclusive_mode and "derived_signal_CCnight" in diagnostics)
+                   else ("ES", es_E_edges))
+    have_sig = (f"derived_signal_{ch}night" in diagnostics and f"derived_signal_{ch}day" in diagnostics)
+    expw = _recover_exposure_weights(ch) if have_sig else None
+    have_asym = have_sig and expw is not None
+
+    if have_asym:
+        true_asym = 2.0 * (day[None, :] - night) / (day[None, :] + night)        # (n_cosz, n_Etrue)
+        sn = binImportanceHelpers._night_to_plot_layout(diagnostics[f"derived_signal_{ch}night"])  # (n_cosz, n_Ereco)
+        sd = np.asarray(diagnostics[f"derived_signal_{ch}day"], dtype=float)                        # (n_Ereco,)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            day_eq    = expw[:, None] * sd[None, :]               # night signal expected with no regeneration
+            reco_asym = 2.0 * (day_eq - sn) / (day_eq + sn)
+        reco_asym[~np.isfinite(reco_asym)] = np.nan
+        reco_asym[:, sd < 1e-2 * np.nanmax(sd)] = np.nan          # blank bins with negligible signal
+        # shared diverging scale centred at 0
+        allv = np.concatenate([true_asym[np.isfinite(true_asym)].ravel(),
+                               reco_asym[np.isfinite(reco_asym)].ravel()])
+        d = float(np.nanpercentile(np.abs(allv), 99)) if allv.size else 0.05
+        d = max(d, 1e-3)
+
+    # --- 2×2 grouped layout (same engine/kwargs as add_sample_page) ---
+    nrows = 2 if have_asym else 1
+    fig = plt.figure(figsize=(11, 8.5 if have_asym else 4.8), constrained_layout=True)
+    fig.set_constrained_layout_pads(w_pad=0.01, h_pad=0.01, wspace=0.01, hspace=0.02)
+    fig.get_layout_engine().set(rect=PAGE_RECT)
+    groups = (plotting.GroupSpec(name="left",  ncols=1, wspace=0.03),
+              plotting.GroupSpec(name="right", ncols=1, wspace=0.03))
+    layout = plotting.build_grouped_layout(
+        fig, nrows=nrows, groups=groups, panel_ratio=1.0, cbar_ratio=0.06,
+        cbar_mode="per_plot", square=True, sharey_within_group=False, hide_inner_ylabel=True,
+    )
+    axs, cax = layout.axs, layout.cax_plot
+
+    # --- row 0: probabilities (day curve | night map) ---
+    axd = axs[0, 0]
     axd.step(Et, np.append(day, day[-1]), where="post", color="C0", lw=2.5)
     axd.set_xlim(Et[0], Et[-1]); axd.set_ylim(bottom=0.0)
     axd.set_xlabel(r"$E_{true}$ (MeV)", fontsize=18)
     axd.set_ylabel(r"$P(\nu_e\!\to\!\nu_e)$", fontsize=18)
-    axd.set_title("day", fontsize=13)
+    axd.set_title("day", fontsize=12)
     axd.tick_params(labelsize=14)
-    # night regeneration map — plot_binmap uses pcolormesh, so the graded cos z bins show
-    plotting.plot_binmap(axn, night, x_edges=0.5 * (Et[:-1] + Et[1:]), y_edges=yedges,
-                         title="night (regeneration)", cmap="viridis",
-                         add_colorbar=True, cbar_kw=dict(label=r"$P(\nu_e\!\to\!\nu_e)$"))
-    axn.set_xlabel(r"$E_{true}$ (MeV)", fontsize=18)   # override plot_binmap's E_reco label
-    axn.set_ylabel(r"$\cos\theta_z$", fontsize=18)
-    fig.suptitle(r"Best-fit oscillation map  $P(\nu_e\!\to\!\nu_e)$  ($^8$B)", y=1.06)
-    pdf.savefig(fig, dpi=300); plt.close(fig)
+    fig.delaxes(cax[0, 0])                                    # day curve has no colorbar
+
+    m_p = plotting.plot_binmap(axs[0, 1], night, x_edges=Et, y_edges=yedges,
+                               title="night (regeneration)", cmap="viridis", add_colorbar=False)
+    axs[0, 1].set_xlabel(r"$E_{true}$ (MeV)", fontsize=18)    # override plot_binmap's E_reco label
+    axs[0, 1].set_ylabel(r"$\cos\theta_z$", fontsize=18)
+    plotting.add_group_colorbar(fig, m_p, cax[0, 1], r"$P(\nu_e\!\to\!\nu_e)$", ticks_right=True)
+
+    # --- row 1: day-night asymmetry (truth | reconstructed), one shared diverging colorbar ---
+    if have_asym:
+        asym_lab = (r"$2(P_{\nu_e}^{\,\mathrm{day}}-P_{\nu_e}^{\,\mathrm{night}})"
+                    r"/(P_{\nu_e}^{\,\mathrm{day}}+P_{\nu_e}^{\,\mathrm{night}})$")
+        plotting.plot_binmap(axs[1, 0], true_asym, x_edges=Et, y_edges=yedges,
+                             title=r"truth  ($E_{true}$)", cmap="RdBu_r",
+                             vmin=-d, vmax=d, add_colorbar=False)
+        axs[1, 0].set_xlabel(r"$E_{true}$ (MeV)", fontsize=18)
+        axs[1, 0].set_ylabel(r"$\cos\theta_z$", fontsize=18)
+        fig.delaxes(cax[1, 0])                                # shared colorbar lives on the right panel
+        m_r = plotting.plot_binmap(axs[1, 1], reco_asym, x_edges=E_edges, y_edges=yedges,
+                                   title=f"{ch} reconstructed  ($E_{{reco}}$)", cmap="RdBu_r",
+                                   vmin=-d, vmax=d, add_colorbar=False)
+        axs[1, 1].set_xlabel(r"$E_{reco}$ (MeV)", fontsize=18)
+        axs[1, 1].set_ylabel(r"$\cos\theta_z$", fontsize=18)
+        plotting.add_group_colorbar(fig, m_r, cax[1, 1], asym_lab, ticks_right=True)
+
+    fig.suptitle(r"Best-fit oscillation map  $P(\nu_e\!\to\!\nu_e)$  and day-night asymmetry  ($^8$B)",
+                 y=0.995)
+    pdf.savefig(fig, dpi=300)
+    plt.close(fig)
 
 
 def _recover_exposure_weights(ch):
@@ -428,69 +490,14 @@ def _recover_exposure_weights(ch):
     return bn[e0, :] / bd[e0]
 
 
-def add_dnratio_page(pdf):
-    """Day-night asymmetry A = 2(P_day − P_night)/(P_day + P_night): truth (vs E_true, from the
-    best-fit osc map) beside the reconstructed signal (vs E_reco). Forming the asymmetry cancels
-    flux × cross-section (and the smooth solar MSW), and the per-cos z exposure cancels too — what
-    remains is the Earth day-night structure, so the two panels show directly how much of it
-    survives the energy reconstruction. Skipped if the required keys are absent."""
-    need = ["derived_oscmap_8B_night", "derived_oscmap_8B_day"]
-    if any(k not in diagnostics for k in need):
-        return
-    ch, E_edges = (("CC", cc_E_edges) if (not inclusive_mode and "derived_signal_CCnight" in diagnostics)
-                   else ("ES", es_E_edges))
-    if f"derived_signal_{ch}night" not in diagnostics or f"derived_signal_{ch}day" not in diagnostics:
-        return
-    expw = _recover_exposure_weights(ch)
-    if expw is None:
-        return
-
-    # truth asymmetry over E_true:  A = 2(P_day − P_night)/(P_day + P_night)
-    on = np.asarray(diagnostics["derived_oscmap_8B_night"], dtype=float).T    # (n_cosz, n_Etrue)
-    od = np.asarray(diagnostics["derived_oscmap_8B_day"],   dtype=float)       # (n_Etrue,)
-    true_asym = 2.0 * (od[None, :] - on) / (od[None, :] + on)
-    Et = (np.asarray(diagnostics["derived_oscmap_Etrue_edges"], dtype=float)
-          if "derived_oscmap_Etrue_edges" in diagnostics else np.linspace(1.0, 21.0, on.shape[1] + 1))
-
-    # reco asymmetry over E_reco. The no-regeneration "day equivalent" at each cos z is
-    # exposure × signal_day; the exposure cancels in the asymmetry, leaving A in terms of the
-    # response-averaged ⟨P_day⟩, ⟨P_night⟩ — i.e. the reco-smeared day-night asymmetry.
-    sn = binImportanceHelpers._night_to_plot_layout(diagnostics[f"derived_signal_{ch}night"])  # (n_cosz, n_Ereco)
-    sd = np.asarray(diagnostics[f"derived_signal_{ch}day"], dtype=float)                        # (n_Ereco,)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        day_eq    = expw[:, None] * sd[None, :]               # night signal expected with no regeneration
-        reco_asym = 2.0 * (day_eq - sn) / (day_eq + sn)
-    reco_asym[~np.isfinite(reco_asym)] = np.nan
-    reco_asym[:, sd < 1e-2 * np.nanmax(sd)] = np.nan          # blank bins with negligible signal
-
-    # shared diverging scale centred at 0
-    allv = np.concatenate([true_asym[np.isfinite(true_asym)].ravel(),
-                           reco_asym[np.isfinite(reco_asym)].ravel()])
-    d = float(np.nanpercentile(np.abs(allv), 99)) if allv.size else 0.05
-    d = max(d, 1e-3)
-    norm = TwoSlopeNorm(vcenter=0.0, vmin=-d, vmax=d)
-
-    fig, (axt, axr) = plt.subplots(1, 2, figsize=(11, 4.8), constrained_layout=True)
-    axt.pcolormesh(Et, yedges, true_asym, cmap="RdBu_r", norm=norm, shading="flat")
-    axt.set_title("truth  ($E_{true}$)", fontsize=12)
-    axt.set_xlabel(r"$E_{true}$ (MeV)", fontsize=16); axt.set_ylabel(r"$\cos\theta_z$", fontsize=16)
-    m = axr.pcolormesh(E_edges, yedges, reco_asym, cmap="RdBu_r", norm=norm, shading="flat")
-    axr.set_title(f"{ch} reconstructed  ($E_{{reco}}$)", fontsize=12)
-    axr.set_xlabel(r"$E_{reco}$ (MeV)", fontsize=16)
-    fig.colorbar(m, ax=[axt, axr], fraction=0.046, pad=0.02,
-                 label=r"$2(P_{\nu_e}^{\,\mathrm{day}}-P_{\nu_e}^{\,\mathrm{night}})/(P_{\nu_e}^{\,\mathrm{day}}+P_{\nu_e}^{\,\mathrm{night}})$")
-    fig.suptitle("Day-night asymmetry — oscillation structure surviving reconstruction")
-    pdf.savefig(fig, dpi=300, bbox_inches="tight"); plt.close(fig)
-
-
+plotting.ensure_parent_dir(out_pdf)
 with PdfPages(out_pdf) as pdf:
     idx_es = int(np.asarray(diagnostics["derived_index_ES"])) - 1
     if not inclusive_mode:
         idx_cc = int(np.asarray(diagnostics["derived_index_CC"])) - 1
         add_sample_page(pdf, "CC", cc_E_edges, idx_cc)
     add_sample_page(pdf, "ES", es_E_edges, idx_es)
-    add_oscmap_page(pdf)   # best-fit P(νe→νe) day curve + night regeneration map
-    add_dnratio_page(pdf)  # day-night survival ratio: truth (E_true) vs reconstructed (E_reco)
+    add_oscmap_dn_page(pdf)   # osc map P(nu_e->nu_e) + day-night asymmetry (combined 2x2 page)
 
     # ============================================================
     # PAGE 1: VARIANCE (night 2D + day 1D) + narrow totals sidebar

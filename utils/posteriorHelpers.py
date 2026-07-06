@@ -65,7 +65,7 @@ def _read_jld2_flat(h5file, keys):
     return {k: np.array(h5file[k][()]) if k in h5file else np.array([]) for k in keys}
 
 
-def load_posterior(mcmc_chains, parameters, burnin=20_000, test=None, exclude_chains=None):
+def load_posterior(mcmc_chains, parameters, burnin=100, test=None, exclude_chains=None):
     valid_chains = []
     for mcmc_chain in mcmc_chains:
         if not os.path.exists(mcmc_chain + ".jld2"):
@@ -112,8 +112,11 @@ def load_posterior(mcmc_chains, parameters, burnin=20_000, test=None, exclude_ch
             # Detect all parameter names if requested
             if parameters == "all":
                 skip_keys = {'stepno', 'chainid', 'weights'}
-                first_batch = sorted([k for k in f.keys() if k.startswith("batch_")], key=lambda x: int(x.split("_")[1]))[0]
-                sample_keys = f[first_batch].keys() if batched else f.keys()
+                if batched:
+                    first_batch = sorted([k for k in f.keys() if k.startswith("batch_")], key=lambda x: int(x.split("_")[1]))[0]
+                    sample_keys = f[first_batch].keys()
+                else:
+                    sample_keys = f.keys()
                 parameters = [k for k in sample_keys if k not in skip_keys]
                 results.update({param: [] for param in parameters})
 

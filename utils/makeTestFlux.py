@@ -4,12 +4,10 @@ sys.path.append('../PEANUTS')
 import numpy as np
 import peanuts
 import matplotlib.pyplot as plt
-import mplhep as hep
 import h5py
 from scipy.interpolate import interp1d
 
-plt.rcParams['text.usetex'] = True
-hep.style.use("CMS")
+import style  # applies the shared CMS/LaTeX style on import
 
 ntotal_es = 70 *1e3
 ntotal_cc = 125 *1e3
@@ -82,6 +80,6 @@ ax.set_xlim(0, 20)
 
 
 ax.legend()
-plt.savefig('images/agss09_events', dpi=200, format='pdf')
+style.save_figure(plt.gcf(), 'images/agss09_events', dpi=200, format='pdf')
 
 plt.show()
