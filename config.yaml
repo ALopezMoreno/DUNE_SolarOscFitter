@@ -11,8 +11,8 @@
 
 # ── 1. RUN CONTROL ──────────────────────────────────────────────────────────
 
-outFile:  "outputs/20_may_CC_HD-central-20yrs_test"  # output file prefix
-# prevFile: "outputs/my_previous_run"              # resume from saved chain state
+outFile:  "outputs/NEWCHAIN"   # output file prefix. Not used in derived mode
+# prevFile: "outputs/OLDCHAIN"  # resume from saved chain state OR load for derived mode
 
 RunMode:  "MCMC"   # MCMC | LLH | derived | PROFILE
 Asimov:   true
@@ -25,10 +25,12 @@ nuFast:   false   # C++ nuFast oscillation library (incompatible with multithrea
 # Ground-truth values used to generate Asimov data.
 
 true_sin2_th12:           0.307     # solar mixing angle
-true_sin2_th13:           0.0224    # reactor mixing angle (δCP and θ₂₃ fixed)
+true_sin2_th13:           0.022     # reactor mixing angle (δCP and θ₂₃ fixed)
 true_dm2_21:              6e-5      # solar Δm² (eV²)  [PDG: 7.53e-5, SNO: 5.11e-5]
 true_integrated_HEP_flux: 8250.0   # HEP flux (ν/cm²/s)
 true_cc_xsec_norm:        1.0       # CC xsec scale relative to MARLEY
+true_8B_flux: 5.53e6              # override Asimov flux; default = mean(prior_8B_flux)
+                                    # set != prior centre to study bias from flux mis-expectation
 
 
 # ── 3. PRIORS ───────────────────────────────────────────────────────────────
@@ -57,7 +59,7 @@ prior_cc_xsec_curv: Normal(0.0, 0.05)                       # quadratic curvatur
 nChains:           10     # parallel HMC chains  (≈ number of CPU cores)
 nSteps:            1000   # post-tuning steps per chain
 nTuning:           50     # steps per tuning cycle
-maxTuningAttempts: 30      # tuning cycles  (0 = skip tuning)
+maxTuningAttempts: 30     # tuning cycles  (0 = skip tuning -- recommended for HMC)
 
 earth_potential_uncertainties: true   # marginalise over Earth density profile
 
@@ -72,6 +74,14 @@ thinning:  1   # thinning for bin-importance diagnostics (RunMode: derived)
 
 # ── 6. SHARED BINNING ───────────────────────────────────────────────────────
 # True-energy and zenith binning shared across all detectors.
+
+# True electron recoil detection threshold of the TPC (MeV).
+# This sets the lower integration limit of the ES cross-section — it is the
+# minimum recoil energy a produced electron can have and still be detected.
+# MUST match the Geant4/LArSoft energy threshold used in MC generation.
+# Do not confuse with Ereco_min_ES/CC, which are analysis cuts on reconstructed
+# energy and are handled separately by the likelihood.
+TPC_threshold: 0.2   # MeV
 
 nBins_Etrue:  40
 range_Etrue:  [1, 21]   # MeV
@@ -183,8 +193,8 @@ detectors:
       - "inputs/inputs_neutronOnly_may2026/Nbkg/3D/data_file_Nbkg_1mFidu_discri_100Emin_Bottom.csv"
       - "inputs/inputs_neutronOnly_may2026/Nbkg/3D/data_file_Nbkg_1mFidu_discri_100Emin_shortW.csv"
     CC_background_files:
-      - "inputs/CC_HD_central_sergio_may_2026_neutron.csv"
-      - "inputs/CC_HD_central_sergio_may_2026_gamma.csv"
+      - "inputs/CC_HD_central_sergio_may_2026_smeared_2.5_neutron.csv"
+      - "inputs/CC_HD_central_sergio_may_2026_smeared_2.5_gamma.csv"
       - "inputs/CC_HD_central_sergio_may_2026_radiological.csv"
 
     ES_background_normalisations: [2.2e-6, 2.2e-6]
