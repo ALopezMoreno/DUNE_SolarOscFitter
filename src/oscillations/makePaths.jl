@@ -5,6 +5,7 @@
 using Statistics      # For statistical calculations
 using StaticArrays    # For efficient static arrays
 using Interpolations  # For density profile interpolation
+using QuadGK: gauss   # Gauss-Legendre nodes/weights for segment-average density
 
 # Earth model parameters
 global EARTH_RADIUS = 6371  # Earth radius in km
@@ -211,13 +212,14 @@ function make_potential_for_integrand(cosz, earth_potential_function, n=3)
         a = jump_positions[i]
         b = jump_positions[i+1]
 
-        # nodes = optimal_integration_nodes(f, a, b) # NOT SURE THIS IS WORKING
-        nodes = collect(range(a, stop=b, length=n + 2))
+        # Gauss-Legendre quadrature for the length-weighted average density across
+        # the segment. This runs once at path-construction time (not per fit step,
+        # see setup.jl), so the extra accuracy is free at fit time. GL nodes are
+        # strictly interior to (a,b), so unlike a uniform grid they never land on
+        # the jump discontinuity and need no endpoint override.
+        nodes, gl_weights = gauss(n + 2, a, b)
         values = f(nodes)
-
-        # set the pre and post jump values
-        values[1]   = jumps[i].b  
-        values[end] = jumps[i+1].a
+        avgRho = sum(gl_weights .* values) / (b - a)
 
         # Create a candidate pair from the segment boundaries.
         # Using the left jump's "b" and the right jump's "a".
@@ -259,7 +261,7 @@ function make_potential_for_integrand(cosz, earth_potential_function, n=3)
             error("No matching layer found for segment ", i, " with candidate jumps: ", string(candidate), "\nLayer candidates:\n", layer_candidates)
         end
 
-        push!(segments, Segment(seg_index, a, b, nodes, values, b - a, mean(values)))
+        push!(segments, Segment(seg_index, a, b, nodes, values, b - a, avgRho))
     end
 
     return Path(jumps, segments)

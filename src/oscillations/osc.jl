@@ -297,7 +297,7 @@ module BargerOsc
 
 
     function osc_reduce(Mix, matter_matrices, path, e, anti::Bool)
-        X = mapreduce((p, (m, n)) -> osc_kernel(Mix, m, n, e, p), *, path, reverse(matter_matrices))
+        X = mapreduce((p, (m, n)) -> osc_kernel(Mix, m, n, e, p), *, path, matter_matrices)
         A = abs2.(Mix' * X)
         return A
     end
@@ -389,11 +389,11 @@ module NumOsc
 
     function osc_reduce(Mix_dagger, matter_matrices, path, e, anti::Bool)
         @inbounds begin
-            first_p, first_mn = path[1], matter_matrices[end]
+            first_p, first_mn = path[1], matter_matrices[1]
             X = osc_kernel(first_mn[1], first_mn[2], e, first_p)  # 3x3 SMatrix
             for i in 2:length(path)
                 p = path[i]
-                m, n = matter_matrices[end - i + 1]
+                m, n = matter_matrices[i]
                 X = X * osc_kernel(m, n, e, p)  # SMatrix * SMatrix
             end
             A = abs2.(Mix_dagger * X)
@@ -435,10 +435,10 @@ module NumOsc
         # Returns only the [1,1] element (ν_e→ν_e probability).
         @inline function osc_reduce_from_lookup(Mix_dagger, lookup_buf, indices, path, e)
             @inbounds begin
-                first_mn = lookup_buf[indices[end]]
+                first_mn = lookup_buf[indices[1]]
                 X = osc_kernel(first_mn[1], first_mn[2], e, path[1])
                 for i in 2:length(path)
-                    mn = lookup_buf[indices[end - i + 1]]
+                    mn = lookup_buf[indices[i]]
                     X = X * osc_kernel(mn[1], mn[2], e, path[i])
                 end
                 return abs2.(Mix_dagger * X)[1, 1]
@@ -666,11 +666,11 @@ module nu4NumOsc
 
     function osc_reduce(Mix, Mix_dagger, matter_matrices, path, e, anti::Bool)
         @inbounds begin
-            first_p, first_mn = path[1], matter_matrices[end]
-            X = osc_kernel(first_mn[1], first_mn[2], e, first_p) 
+            first_p, first_mn = path[1], matter_matrices[1]
+            X = osc_kernel(first_mn[1], first_mn[2], e, first_p)
             for i in 2:length(path)
                 p = path[i]
-                m, n = matter_matrices[end - i + 1]
+                m, n = matter_matrices[i]
                 X = X * osc_kernel(m, n, e, p)
             end
             A = abs2.(Mix_dagger * X)
