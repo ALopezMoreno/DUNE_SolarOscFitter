@@ -389,7 +389,9 @@ end
 # mem_usages, times, stop_tracking = track_memory(0.1)
 
 # @printf("Executing main()...\n")
-main()   # Execution of the main function
+if abspath(PROGRAM_FILE) == @__FILE__
+    main()
+end
 
 # @printf("Stopping memory tracking...\n")
 # Stop the memory tracker and wait for the task to finish.
