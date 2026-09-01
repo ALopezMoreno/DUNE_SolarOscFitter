@@ -22,6 +22,23 @@ Author: [Author name]
 include(joinpath(@__DIR__, "histHelpers.jl"))
 
 """
+    warn_if_bg_arrays_mismatched(channel, filepaths, norms, sys)
+
+`build_backgrounds` zips the background file list against its normalisation/systematic
+arrays, so a shorter `norms`/`sys` array is a supported way to use only the first N
+background files. Warn when that happens so an accidental length mismatch (e.g. a typo'd
+config) doesn't silently drop backgrounds unnoticed.
+"""
+function warn_if_bg_arrays_mismatched(channel, filepaths, norms, sys)
+    if !(length(filepaths) == length(norms) == length(sys))
+        n = min(length(filepaths), length(norms), length(sys))
+        @warn "$channel background arrays have mismatched lengths " *
+              "(files=$(length(filepaths)), norms=$(length(norms)), sys=$(length(sys))); " *
+              "only using the first $n."
+    end
+end
+
+"""
     build_backgrounds(det, Ereco_bins_ES_extended, Ereco_bins_CC_extended)
         -> (backgrounds, ES_bg_norms_true, CC_bg_norms_true, ES_bg_norms_pars, CC_bg_norms_pars)
 
@@ -45,6 +62,9 @@ function build_backgrounds(det, Ereco_bins_ES_extended, Ereco_bins_CC_extended)
     CC_bg_norms        = det.CC_bg_norms
     ES_bg_sys          = det.ES_bg_sys
     CC_bg_sys          = det.CC_bg_sys
+
+    warn_if_bg_arrays_mismatched("ES", det.ES_filepaths_BG, ES_bg_norms, ES_bg_sys)
+    warn_if_bg_arrays_mismatched("CC", det.CC_filepaths_BG, CC_bg_norms, CC_bg_sys)
 
     df_ES_list = extract_dataframes(det.ES_filepaths_BG)
     df_CC_list = extract_dataframes(det.CC_filepaths_BG)
