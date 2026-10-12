@@ -9,6 +9,7 @@ include(joinpath(@__DIR__, "..", "src", "likelihoods", "likelihood_builder.jl"))
 
 # Unit tests for correctness
 include(joinpath(@__DIR__, "test_likelihood_correctness.jl"))
+include(joinpath(@__DIR__, "test_es_xsec.jl"))
 include(joinpath(@__DIR__, "test_osc_night.jl"))
 
 # End-to-end likelihood regression (full setup, one process per variant; a few minutes)

@@ -24,31 +24,19 @@ const MATTER_POTENTIAL_CONST = 1.5264932436e-4                      #
 const m32 = 2.43e-3                                                 #
 # Electron mass in GeV/c^2                                          #
 const m_e = 5.11e-4                                                 #
-# Weinberg angle (sin^2(θ_W))                                      #
-const sin2nuW = 0.231                                               #
+# MS-bar weak mixing angle at M_Z, sin^2(θ̂_W(M_Z)) (PDG 2024)      #
+const sin2nuW = 0.23129                                             #
                                                                     #
 #####################################################################
 
 # Neutrino-electron scattering cross-section constants
 # These determine the interaction strength for different neutrino flavors
 
-# EW radiative corrections from Bahcall, Kamionkowski & Sirlin (1995), PRD 51, 6146.
-# rho_nc: NC current renormalization (~0.8% from W/Z/top/Higgs loops).
-# kappa: effective low-q² enhancement of sin²θ_W relative to the MS-bar value at M_Z
-#        (~3.3%, dominant effect is running from M_Z to q²≈0 for solar neutrinos).
-# Higgs-loop contribution to kappa is ~0.03% (negligible individually).
-# Values are for m_top = 173 GeV, m_H = 125 GeV; see BKS95 Table 1 and
-# PDG Electroweak Model Review for updated sin²θ_W(q²=0).
-const rho_nc   = 1.0081
-const kappa_ew = 1.0329   # = sin²θ_W(q²→0, MS-bar) / sin²θ_W(M_Z, MS-bar) ≈ 0.23867 / 0.231
-
-# Radiatively corrected coupling constants for electron neutrinos (ν_e + e^- scattering)
-const g1_nue = sqrt(rho_nc) * (1/2 + kappa_ew * sin2nuW)
-const g2_nue = sqrt(rho_nc) * kappa_ew * sin2nuW
-
-# Radiatively corrected coupling constants for other neutrino flavors (ν_μ,τ + e^- scattering)
-const g1_nuother = sqrt(rho_nc) * (-1/2 + kappa_ew * sin2nuW)
-const g2_nuother = sqrt(rho_nc) * kappa_ew * sin2nuW
+# EW radiative corrections from Bahcall, Kamionkowski & Sirlin (1995), PRD 51, 6146,
+# Appendix A. rho_nc renormalises the neutral-current amplitude only (Eq. A2);
+# the energy-dependent kappa(T) multiplying sin2nuW is in xsec.jl (Eqs. A4-A7).
+# The QED corrections of their Appendix B are not included.
+const rho_nc = 1.0126
 
 # Reference cross-section in cm^2
 const sigma_0 = 88.06e-46 #1.939e-13 * (1.97e-16)^2 # in cm^-2
