@@ -139,6 +139,10 @@ function build_backgrounds(det, Ereco_bins_ES_extended, Ereco_bins_CC_extended)
         end
     end
 
+    # Concrete element types (the push! loops above build Vector{Any}).
+    ES_bg    = Vector{Vector{Float64}}([Float64.(x) for x in ES_bg])
+    CC_bg    = Vector{Vector{Float64}}([Float64.(x) for x in CC_bg])
+    ES_sides = Int[s for s in ES_sides]
     backgrounds = (ES=ES_bg, CC=CC_bg, sides=ES_sides,
                    ES_par_counts=ES_bg_par_counts, CC_par_counts=CC_bg_par_counts)
 

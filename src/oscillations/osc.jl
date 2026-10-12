@@ -7,18 +7,22 @@ This module implements comprehensive neutrino oscillation calculations for solar
 neutrinos, including both daytime (solar matter effects) and nighttime (Earth
 matter effects) propagation.
 
-Key Features:
-- MSW (Mikheyev-Smirnov-Wolfenstein) effect in solar matter
-- Earth matter effects for nighttime propagation  
-- Both analytical (Barger) and numerical propagation methods
-- Fast and slow calculation modes for different precision needs
+Contents:
+- Day: adiabatic MSW survival probability in the Sun (`mswProb`), at the mean
+  production density or averaged over the production region (`osc_prob_day_c2m`)
+- Night: the IYSW relation P_N = P_D + c₁₃² cos2θ₁₂ᵐ (P₁ₑ − c₁₂²c₁₃²)
+  (`osc_prob_both_fast`, `osc_prob_both_slow`)
+- NumOsc: 3-flavour numerical Earth propagation per path (the `nightOsc: false`
+  calculation, and the reference that NightOsc is tested against)
+- nu4NumOsc: 4-state (one sterile) numerical propagation, not wired into the fit
+
+The default night-time Earth crossing is NightOsc (osc_night.jl).
 
 Oscillation framework adapted from Newthrino by Philipp Eller (special thanks
 for his support and openness when sharing his code):
 (add_github_repo_when_public)
 
-Barger solution and modifications to calculate the solar night-time propagation
-added by Andres Lopez Moreno
+Modifications to calculate the solar night-time propagation added by Andres Lopez Moreno
 
 Author: Andres Lopez Moreno, based on Philipp Eller's Newthrino
 =#
@@ -48,7 +52,8 @@ end
 
 
 # Fermi constant in units of Ne/Na
-const G_f = 5.4489e-5
+const G_f = 1.5264932436e-4 / (2 * sqrt(2))
+const PHASE_CONST = 2.5338653580781976
 
 #################################################################################
 # Common functions in the calculation of the oscillation probability
@@ -89,47 +94,6 @@ function mswProb(energy, mixingPars, n_e)
     return probs, c2th12m
 end
 
-
-# Effective mixing angle θ₁₂ in matter (LMA solution).
-# β = 2√2 G_F N_e E cos²θ₁₃ / Δm²₂₁ is the ratio of matter to vacuum potential.
-# cos(2θ_m) = (cos2θ₁₂ - β) / √((cos2θ₁₂ - β)² + sin²2θ₁₂).
-function LMA_angle(energy, mixingPars, N_e)
-    th12 = mixingPars.θ₁₂
-    beta = (2 .* sqrt(2) .* 5.4489e-5 .* cos(mixingPars.θ₁₃)^2 .* N_e .* energy) ./ mixingPars.Δm²₂₁
-    matterAngle = (cos(2 * th12) .- beta) ./ sqrt.((cos(2 * th12) .- beta) .^ 2 .+ sin(2 * th12)^2)
-    return 0.5 .* acos.(clamp.(matterAngle, -1.0, 1.0))
-end
-
-
-function osc_prob_day(energy::Float64, params, solarModel; process="8B")
-    # Calculate the neutrino oscillation probabilities integrating over the production region
-    enuOscProb, _ = mswProb(energy, params, solarModel.n_e)
-
-    # Select the appropriate production fraction based on the process
-    prodFraction = process == "8B" ? solarModel.prodFractionBoron :
-                   process == "hep" ? solarModel.prodFractionHep :
-                   error("Invalid process specified. Please use '8B' or 'hep'.")
-
-    # integrate over production region
-    weighted_sum = sum(prodFraction .* enuOscProb)
-    total_weight = sum(prodFraction)
-
-    prob_nue = weighted_sum / total_weight
-
-    return prob_nue
-end
-
-
-function osc_prob_day_fast(energy::Float64, params, solarModel; process="8B")
-    # Calculate the neutrino oscillation probabilities averaging over the production region
-    n_e = process == "8B" ? solarModel.avgNeBoron :
-          process == "hep" ? solarModel.avgNeHep :
-          error("Invalid process specified. Please use '8B' or 'hep'.")
-
-    enuOscProb, _ = mswProb(energy, params, n_e)
-
-    return enuOscProb
-end
 
 # Use relationship between P_1e and P_day from Ioannisian, Yu, Smirnov and Wyler:
 # P_night = P_day + DeltaP where
@@ -207,146 +171,23 @@ function osc_prob_both_fast(E::AbstractVector{<:Real}, matrix_p_1e::AbstractMatr
 end
 
 
-function osc_prob_night(E::Vector{Float64}, matrix_p_1e::Matrix{Float64}, mixingPars, prod_density::Float64)
-    th13 = mixingPars.θ₁₃
-
-    solarAngle = permutedims(LMA_angle(E, mixingPars, prod_density))
-    probs = cos(th13)^2 * ((cos.(2 .* solarAngle) .* matrix_p_1e) .+ cos(th13)^2 .* sin.(solarAngle) .^ 2) .+ sin(th13)^4
-
-    return probs
-end
-
-################################################################################
-# Barger propagation
-################################################################################
-
-module BargerOsc
-    using LinearAlgebra, StaticArrays
-
-    @inline function osc_kernel2(U::SMatrix{3,3,<:Complex}, H::SVector{3,<:Real}, e::Real, l::Real)
-        phase_factors = exp.(2.5338653580781976 * 1im * (l / e) .* H)
-        p = U * sum(P[i] * phase_factors[i] for i in eachindex(P)) * U'
+# Day-time P(νe→νe) and the production-averaged cos2θ₁₂ᵐ that multiplies the night
+# regeneration term, at energies E. fast=true evaluates both at the production-weighted mean
+# density; fast=false averages them over the production region (exact, since the night term is
+# linear in cos2θ₁₂ᵐ).
+function osc_prob_day_c2m(E::AbstractVector{<:Real}, mixingPars, solarModel; process="8B", fast::Bool=true)
+    if fast
+        n_e = process == "8B" ? solarModel.avgNeBoron :
+              process == "hep" ? solarModel.avgNeHep :
+              error("Invalid process specified. Please use '8B' or 'hep'.")
+        return mswProb(E, mixingPars, n_e)
     end
-
-
-    function get_eigen(U, H_vac, H, e, rho)
-        m²₁ = H_vac[1, 1]
-        Δm²₂₁ = -H_vac[2, 2]
-        Δm²₃₁ = -H_vac[3, 3]
-        dVac = [m²₁, Δm²₂₁, Δm²₃₁]
-
-        dmVacVac = MMatrix{3,3}(H_vac)
-        for i in 1:3
-            for j in 1:3
-                dmVacVac[i, j] = dVac[i] - dVac[j]
-            end
-        end
-
-        fac = -e * rho
-
-        # Get eigenvalues from Barger's Formula
-
-        α = fac + Δm²₂₁ + Δm²₃₁
-        β = Δm²₂₁ * Δm²₃₁ + fac * (Δm²₂₁ * (1 - abs2(U[1, 2])) + Δm²₃₁ * (1 - abs2(U[1, 3])))
-        γ = fac * Δm²₂₁ * Δm²₃₁ * abs2(U[1, 1])
-
-        brac = sqrt(α^2 - 3 * β)
-
-        arg = (2 * α^3 - 9 * α * β + 27 * γ) / (2 * brac^3)
-
-        θ⁰ = acos.(clamp(arg, -1.0 + 1e-12, 1.0 - 1e-12)) # Clamp to avoid numerical issues with acos outside of [-1, 1]
-        θ⁺ = θ⁰ + 2π
-        θ⁻ = θ⁰ - 2π
-
-        λ₁ = -(2 / 3) * brac * cos(θ⁰ / 3) + m²₁ - α / 3
-        λ₂ = -(2 / 3) * brac * cos(θ⁻ / 3) + m²₁ - α / 3
-        λ₃ = -(2 / 3) * brac * cos(θ⁺ / 3) + m²₁ - α / 3
-
-        # WE'RE WELL BELOW THE EIGENVALUE CROSSING SO WE DON'T NEED TO WORRY ABOUT ORDERING THE EIGENVALUES. FIX OTHERWISE
-        # Get eigenvector matrix from Lagrange's formula
-
-        H₁ = H - Diagonal(fill(λ₁, 3))
-        H₂ = H - Diagonal(fill(λ₂, 3))
-        H₃ = H - Diagonal(fill(λ₃, 3))
-
-        P₁ = (H₂ * H₃) / ((λ₁ - λ₂) * (λ₁ - λ₃))
-        P₂ = (H₃ * H₁) / ((λ₂ - λ₁) * (λ₂ - λ₃))
-        P₃ = (H₁ * H₂) / ((λ₃ - λ₁) * (λ₃ - λ₂))
-
-        return [P₁, P₂, P₃], [λ₁, λ₂, λ₃]
-    end
-
-
-    function get_H(U, H_vac, e, rho, anti::Bool=false)
-        H = MMatrix{3,3}(H_vac)
-
-        if anti
-            fac = -rho * e
-        else
-            fac = +rho * e
-        end
-
-        v = U[1, :]
-        H += fac * v * v'
-
-        H = Hermitian(SMatrix(H))
-
-        tmpMat, tempVec = get_eigen(U, H_vac, H, e, rho) # --- test speed wrt num ---
-        return tmpMat, tempVec
-    end
-
-
-    function osc_reduce(Mix, matter_matrices, path, e, anti::Bool)
-        X = mapreduce((p, (m, n)) -> osc_kernel(Mix, m, n, e, p), *, path, matter_matrices)
-        A = abs2.(Mix' * X)
-        return A
-    end
-
-    module Slow
-        using LinearAlgebra
-        using ...Osc: oscPars, get_matrices
-        using ..BargerOsc: get_H, osc_reduce
-
-        function matter_osc_per_e(U, H_eff, e, rho_Array, l_Array, anti)
-            matter_matrices = map(rho_vec -> (get_H.(Ref(U), Ref(H_eff), e, rho_vec, anti)), rho_Array)
-            stack(map((path, matter) -> (osc_reduce(U, matter, path, e, anti)), l_Array, matter_matrices))
-        end
-
-        function osc_prob_earth(E::AbstractVector{<:Real}, params::oscPars, lookup_density, paths; anti=false)
-            U, H = get_matrices(params)
-            # We work on the mass basis
-
-            rho_Array = [[s.avgRho for s in path.segments] for path in paths]
-            l_Array = [[s.length for s in path.segments] for path in paths]
-
-            p1e = stack(map(e -> matter_osc_per_e(U, H, e, rho_Array, l_Array, anti), E))[1, 1, :, :]
-        end
-
-    end
-
-    module Fast
-        using LinearAlgebra
-        using ...Osc: oscPars, get_matrices
-        using ..BargerOsc: get_H, osc_reduce
-
-        function matter_osc_per_e(lookup_density, U, H_eff, e, index_array, l_Array, anti)
-            lookup_matrices = map(rho_vec -> (get_H.(Ref(U), Ref(H_eff), e, rho_vec, anti)), lookup_density)
-            matter_matrices = map(indices -> lookup_matrices[indices], index_array)
-
-            stack(map((path, matter) -> (osc_reduce(U, matter, path, e, anti)), l_Array, matter_matrices))
-        end
-
-        function osc_prob_earth(E::AbstractVector{<:Real}, params::oscPars, lookup_density, paths; anti=false)
-            U, H = get_matrices(params)
-            # We work on the mass basis
-
-            index_array = [[s.index for s in path.segments] for path in paths]
-            l_Array = [[s.length for s in path.segments] for path in paths]
-
-            p1e = stack(map(e -> matter_osc_per_e(lookup_density, U, H, e, index_array, l_Array, anti), E))[1, 1, :, :]
-        end
-
-    end
+    prodFraction = process == "8B" ? solarModel.prodFractionBoron :
+                   process == "hep" ? solarModel.prodFractionHep :
+                   error("Invalid process specified. Please use '8B' or 'hep'.")
+    w = prodFraction ./ sum(prodFraction)
+    probs, c2m = mswProb(E, mixingPars, permutedims(solarModel.n_e))   # (n_E, n_radii)
+    return probs * w, c2m * w
 end
 
 
@@ -356,9 +197,10 @@ end
 
 module NumOsc
     using LinearAlgebra, StaticArrays
+    import ..PHASE_CONST
 
     @inline function osc_kernel(U::SMatrix{3,3,<:Complex}, H::SVector{3,<:Real}, e::Real, l::Real)
-        phase_factors = exp.(2.5338653580781976im * (l / e) .* H) 
+        phase_factors = exp.(PHASE_CONST * 1im * (l / e) .* H) 
         tmp = U .* phase_factors'  
         return tmp * adjoint(U)
     end
@@ -485,6 +327,7 @@ end
 ################################################################################
 module nu4NumOsc
     using LinearAlgebra, StaticArrays
+    import ..G_f, ..PHASE_CONST
 
     # we need to redefine the mixing matrix an oscpars to accept new parameters:
     struct oscPars
@@ -509,7 +352,7 @@ module nu4NumOsc
 
 
     @inline function osc_kernel(U::SMatrix{4,4,<:Complex}, H::SVector{4,<:Real}, e::Real, l::Real)
-        phase_factors = exp.(2.5338653580781976im * (l / e) .* H) 
+        phase_factors = exp.(PHASE_CONST * 1im * (l / e) .* H) 
         tmp = U .* phase_factors'  
         return tmp * adjoint(U)
     end
@@ -651,8 +494,8 @@ module nu4NumOsc
         
         n_n = n_e * 0.7
 
-        rho_e =  n_e .* 5.4489e-5 .* 2 .* sqrt(2)
-        rho_n =  n_n .* 5.4489e-5 .* 2 .* sqrt(2)
+        rho_e =  n_e .* G_f .* 2 .* sqrt(2)
+        rho_n =  n_n .* G_f .* 2 .* sqrt(2)
 
         U, H = get_matrices(params)
 

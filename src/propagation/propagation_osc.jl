@@ -1,25 +1,36 @@
 
 include(joinpath(@__DIR__, "..", "oscillations", "osc.jl"))
+import .Osc: oscPars, osc_prob_day_c2m
 
+include(joinpath(@__DIR__, "..", "oscillations", "osc_night.jl"))
+import .NightOsc
 
-import .Osc: oscPars, osc_prob_both_slow
+include(joinpath(@__DIR__, "osc_setup.jl"))
 
 # Set energy bin centers for calculation
-global E_calc = (bin_edges_calc[1:end-1] + bin_edges_calc[2:end]) / 2.0
+const E_calc = (bin_edges_calc[1:end-1] + bin_edges_calc[2:end]) / 2.0
 
-# Choose fast or slow Earth propagation based on configuration. Choose oscillations calculator (nuFast only works on fast mode)
-if nuFast
-    include(joinpath(@__DIR__, "..", "oscillations", "nuFast_interface.jl"))
-    import .nuFastOsc: osc_prob_both_fast, init_engines
-    nuFastOsc.init_engines(E_calc, cosz_calc)
-else
-  import .Osc: osc_prob_both_fast
-  if fast
-    import .Osc.NumOsc.Fast: osc_prob_earth
-  else
-    import .Osc.NumOsc.Slow: osc_prob_earth
-  end
-end
+# Settings read on the likelihood path, frozen as constants after the config is loaded so
+# that the likelihood is type-stable (required by Enzyme, and faster under ForwardDiff).
+const CC_XSEC_NORM_TRUE  = Float64(cc_xsec_norm_true)
+
+# Which day and night calculations run (see osc_setup.jl).
+const OSC = build_osc_setup(
+    night_osc         = nightOsc,
+    fast              = fast,
+    earth_uncertainty = earthUncertainty,
+    earth_model_file  = earthModelFile,
+    depth_km          = depth,
+    cosz_edges        = COARSE_COSZ_EDGES,
+    energy_edges      = calculate_bins(Etrue_bins)[1],
+    exposure          = exposure_intp,
+    exposure_weights  = exposure_weights,
+    n_E_calc          = length(E_calc),
+    n_earth_norms     = isnothing(earth_normalisation_true) ? nothing : length(earth_normalisation_true),
+    legacy_paths      = earth_paths,
+    legacy_lookup     = earth_lookup,
+    legacy_path       = cz -> make_potential_for_integrand(cz, earth),
+)
 
 
 """
@@ -38,39 +49,26 @@ end
 """
     setup_earth_propagation(E_calc, mixingPars, params)
 
-Compute Earth propagation lookup and (optionally) `oscProbs_1e` depending on
-`earthUncertainty` and `nuFast`.
-
-Uses globals:
-- `earthUncertainty`, `earth_lookup`, `earth_paths`, `nuFast`
-
-Returns
-- oscProbs_1e
-- earth_norm_vector
-- lookup
+Night-time P₁ₑ for the configured backend. Returns (oscProbs_1e, earth_norm_vector, lookup).
 """
-function setup_earth_propagation(E_calc, mixingPars, params)
-    oscProbs_1e = nothing
-    earth_norm_vector = Vector{Float64}()
-    lookup = earth_lookup   # safe default
+setup_earth_propagation(E_calc, mixingPars, params) = _earth_crossing(OSC.night, E_calc, mixingPars, params)
 
-    if earthUncertainty
-        earth_norms = _params_by_prefix(params, Val(:earth_norm_))
-        earth_norm_vector = collect(earth_norms)
-        lookup = earth_norm_vector .* earth_lookup
+function _earth_crossing(night::NightOscNight, E_calc, mixingPars, params)
+    earth_norms = earth_uncertainty(OSC) ? _params_by_prefix(params, Val(:earth_norm_)) : nothing
+    p1e = NightOsc.binned_p1e(night.engine, mixingPars.Δm²₂₁, mixingPars.θ₁₂, mixingPars.θ₁₃, earth_norms)
+    return p1e, earth_norms, nothing
+end
 
-        if !nuFast
-            oscProbs_1e = osc_prob_earth(E_calc, mixingPars, lookup, earth_paths)
-        end
-    else
-        earth_norm_vector = Float64[]
-        lookup = earth_lookup
-        if !nuFast
-            oscProbs_1e = osc_prob_earth(E_calc, mixingPars, earth_lookup, earth_paths)
-        end
-    end
+function _legacy_lookup(night, params)
+    earth_uncertainty(OSC) || return Float64[], night.lookup
+    earth_norm_vector = collect(_params_by_prefix(params, Val(:earth_norm_)))
+    return earth_norm_vector, earth_norm_vector .* night.lookup
+end
 
-    return oscProbs_1e, earth_norm_vector, lookup
+function _earth_crossing(night::NumOscNight{Fast}, E_calc, mixingPars, params) where {Fast}
+    earth_norm_vector, lookup = _legacy_lookup(night, params)
+    osc_prob_earth = Fast ? Osc.NumOsc.Fast.osc_prob_earth : Osc.NumOsc.Slow.osc_prob_earth
+    return osc_prob_earth(E_calc, mixingPars, lookup, night.paths), earth_norm_vector, lookup
 end
 
 
@@ -78,86 +76,82 @@ end
     compute_oscillation_probabilities(E_calc, mixingPars, solarModel, params,
                                       oscProbs_1e, earth_norm_vector, lookup)
 
-Compute day/night oscillation probabilities for 8B and hep, and their
-ν_e and ν_other components, binned to the analysis resolution.
-
-Uses globals:
-- `nuFast`, `fast`, `earth_paths`
-- `block_average`
-
-Returns a NamedTuple with:
-- nue_8B_day, nue_8B_night
-- nue_hep_day, nue_hep_night
-- nuother_8B_day, nuother_8B_night
-- nuother_hep_day, nuother_hep_night
+Day and night νₑ and ν_other probabilities for 8B and hep at the analysis resolution.
 """
-function compute_oscillation_probabilities(
-    E_calc,
-    mixingPars,
-    solarModel,
-    params,
-    oscProbs_1e,
-    earth_norm_vector,
-    lookup,
-)
+compute_oscillation_probabilities(E_calc, mixingPars, solarModel, params, oscProbs_1e, earth_norm_vector, lookup) =
+    _day_night(OSC.night, E_calc, mixingPars, solarModel, oscProbs_1e, earth_norm_vector, lookup)
 
-    # fine-resolution probabilities
-    if nuFast
-        oscProbs_nue_8B_day_large, oscProbs_nue_8B_night_large =
-            osc_prob_both_fast(E_calc, mixingPars, lookup, earth_paths;
-                               n_vec = earth_norm_vector)
+_day_night(::NightOscNight, E_calc, mixingPars, solarModel, p1e_binned, earth_norm_vector, lookup) =
+    binned_oscillation_probabilities(E_calc, mixingPars, solarModel, p1e_binned)
 
-        # NOTE: still using same function for hep. To fix (?)
-        oscProbs_nue_hep_day_large, oscProbs_nue_hep_night_large =
-            osc_prob_both_fast(E_calc, mixingPars, lookup, earth_paths;
-                               n_vec = earth_norm_vector)
-    elseif fast
-        oscProbs_nue_8B_day_large, oscProbs_nue_8B_night_large =
-            osc_prob_both_fast(E_calc, oscProbs_1e, mixingPars, solarModel;
-                               process = "8B")
+function _day_night(::NumOscNight{Fast}, E_calc, mixingPars, solarModel, oscProbs_1e, earth_norm_vector, lookup) where {Fast}
+    both = Fast ? Osc.osc_prob_both_fast : Osc.osc_prob_both_slow
+    day_8B,  night_8B  = both(E_calc, oscProbs_1e, mixingPars, solarModel; process = "8B")
+    day_hep, night_hep = both(E_calc, oscProbs_1e, mixingPars, solarModel; process = "hep")
+    return _legacy_binned(day_8B, night_8B, day_hep, night_hep)
+end
 
-        oscProbs_nue_hep_day_large, oscProbs_nue_hep_night_large =
-            osc_prob_both_fast(E_calc, oscProbs_1e, mixingPars, solarModel;
-                               process = "hep")
-    else
-        oscProbs_nue_8B_day_large, oscProbs_nue_8B_night_large =
-            osc_prob_both_slow(E_calc, oscProbs_1e, mixingPars, solarModel;
-                               process = "8B")
-
-        oscProbs_nue_hep_day_large, oscProbs_nue_hep_night_large =
-            osc_prob_both_slow(E_calc, oscProbs_1e, mixingPars, solarModel;
-                               process = "hep")
-    end
-
-    # average over fine resolution to desired binning
-    oscProbs_nue_8B_day   = block_average(oscProbs_nue_8B_day_large, 2)
-    oscProbs_nue_hep_day  = block_average(oscProbs_nue_hep_day_large, 2)
-
-    oscProbs_nue_8B_night  = block_average(oscProbs_nue_8B_night_large,  (N_COSZ_SUB, 2))
-    oscProbs_nue_hep_night = block_average(oscProbs_nue_hep_night_large, (N_COSZ_SUB, 2))
+# Average the per-path legacy probabilities to the analysis bins
+function _legacy_binned(day_8B_large, night_8B_large, day_hep_large, night_hep_large)
+    nue_8B_day    = block_average(day_8B_large, 2)
+    nue_hep_day   = block_average(day_hep_large, 2)
+    nue_8B_night  = block_average(night_8B_large,  (N_COSZ_SUB, 2))
+    nue_hep_night = block_average(night_hep_large, (N_COSZ_SUB, 2))
 
     # ν_other from unitarity
-    oscProbs_nuother_8B_day   = 1 .- oscProbs_nue_8B_day
-    oscProbs_nuother_hep_day  = 1 .- oscProbs_nue_hep_day
-
-    oscProbs_nuother_8B_night = 1 .- oscProbs_nue_8B_night
-    oscProbs_nuother_hep_night = 1 .- oscProbs_nue_hep_night
-
     return (
-        nue_8B_day          = oscProbs_nue_8B_day,
-        nue_8B_night        = oscProbs_nue_8B_night,
-        nue_hep_day         = oscProbs_nue_hep_day,
-        nue_hep_night       = oscProbs_nue_hep_night,
-        nuother_8B_day      = oscProbs_nuother_8B_day,
-        nuother_8B_night    = oscProbs_nuother_8B_night,
-        nuother_hep_day     = oscProbs_nuother_hep_day,
-        nuother_hep_night   = oscProbs_nuother_hep_night,
+        nue_8B_day          = nue_8B_day,
+        nue_8B_night        = nue_8B_night,
+        nue_hep_day         = nue_hep_day,
+        nue_hep_night       = nue_hep_night,
+        nuother_8B_day      = 1 .- nue_8B_day,
+        nuother_8B_night    = 1 .- nue_8B_night,
+        nuother_hep_day     = 1 .- nue_hep_day,
+        nuother_hep_night   = 1 .- nue_hep_night,
     )
 end
 
 
-function compute_oscillated_samples(unoscillatedSample, params, oscProbs;
-                                    es_mode::Bool=true, cc_mode::Bool=true)
+"""
+    binned_oscillation_probabilities(E_calc, mixingPars, solarModel, p1e_binned)
+
+Day and night probabilities when `p1e_binned` holds bin-averaged P₁ₑ on the analysis
+(cos z, E_true) grid. The day probability and ⟨cos2θ₁₂ᵐ⟩ vary slowly and are averaged
+over the two `E_calc` points of each bin; the night probability in each bin is
+P_day + c₁₃² ⟨cos2θ₁₂ᵐ⟩ (P̄₁ₑ − c₁₂²c₁₃²).
+"""
+function binned_oscillation_probabilities(E_calc, mixingPars, solarModel, p1e_binned)
+    c13sq = cos(mixingPars.θ₁₃)^2
+    P_0 = cos(mixingPars.θ₁₂)^2 * c13sq
+    nue_8B_day,  nue_8B_night  = _binned_day_night(E_calc, mixingPars, solarModel, p1e_binned, c13sq, P_0, "8B")
+    nue_hep_day, nue_hep_night = _binned_day_night(E_calc, mixingPars, solarModel, p1e_binned, c13sq, P_0, "hep")
+    return (
+        nue_8B_day          = nue_8B_day,
+        nue_8B_night        = nue_8B_night,
+        nue_hep_day         = nue_hep_day,
+        nue_hep_night       = nue_hep_night,
+        nuother_8B_day      = 1 .- nue_8B_day,
+        nuother_8B_night    = 1 .- nue_8B_night,
+        nuother_hep_day     = 1 .- nue_hep_day,
+        nuother_hep_night   = 1 .- nue_hep_night,
+    )
+end
+
+
+function _binned_day_night(E_calc, mixingPars, solarModel, p1e_binned, c13sq, P_0, process)
+    day_large, c2m_large = osc_prob_day_c2m(E_calc, mixingPars, solarModel; process=process, fast=fast_solar(OSC))
+    day = block_average(day_large, 2)
+    c2m = block_average(c2m_large, 2)
+    night = permutedims(day) .+ c13sq .* permutedims(c2m) .* (p1e_binned .- P_0)
+    return day, night
+end
+
+
+compute_oscillated_samples(unoscillatedSample, params, oscProbs; es_mode::Bool=true, cc_mode::Bool=true) =
+    compute_oscillated_samples(unoscillatedSample, params, oscProbs, Val(es_mode), Val(cc_mode))
+
+# Channel switches as type parameters: ES/CC are `nothing` or NamedTuples decided at compile time.
+function compute_oscillated_samples(unoscillatedSample, params, oscProbs, ::Val{es_mode}, ::Val{cc_mode}) where {es_mode,cc_mode}
     ES = nothing
     CC = nothing
 
@@ -182,7 +176,7 @@ function compute_oscillated_samples(unoscillatedSample, params, oscProbs;
     end
 
     if cc_mode
-        _xsec_norm = hasproperty(params, :cc_xsec_norm) ? params.cc_xsec_norm : cc_xsec_norm_true
+        _xsec_norm = hasproperty(params, :cc_xsec_norm) ? params.cc_xsec_norm : CC_XSEC_NORM_TRUE
         _xsec_tilt = hasproperty(params, :cc_xsec_tilt) ? params.cc_xsec_tilt : 0.0
         _xsec_curv = hasproperty(params, :cc_xsec_curv) ? params.cc_xsec_curv : 0.0
         xsec_shape = exp.(_xsec_tilt .* unoscillatedSample.log_E_norm .+

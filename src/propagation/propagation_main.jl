@@ -44,6 +44,31 @@ Returns 7 values:
   BG_ES, BG_CC, CC_incl_spectrum
 where `CC_incl_spectrum` is `nothing` when `inclusive_analysis` is false.
 """
+@noinline function _log_unoscillated_rates(unoscillatedSample, params, det_flags)
+    println()
+    @logmsg Setup "── [$(det_flags.det_name)] Unoscillated event rates (true-E, pre-efficiency) ──"
+    if det_flags.ES_mode
+        es_nue_8B   = sum(unoscillatedSample.ES_nue_8B)      * params.integrated_8B_flux
+        es_nue_hep  = sum(unoscillatedSample.ES_nue_hep)     * params.integrated_HEP_flux
+        es_numu_8B  = sum(unoscillatedSample.ES_nuother_8B)  * params.integrated_8B_flux
+        es_numu_hep = sum(unoscillatedSample.ES_nuother_hep) * params.integrated_HEP_flux
+        @logmsg Setup "  ES  νe   8B : $(sci_notation(es_nue_8B))"
+        @logmsg Setup "  ES  νe   hep: $(sci_notation(es_nue_hep))"
+        @logmsg Setup "  ES  νμτ  8B : $(sci_notation(es_numu_8B))"
+        @logmsg Setup "  ES  νμτ  hep: $(sci_notation(es_numu_hep))"
+        @logmsg Setup "  ES  total   : $(sci_notation(es_nue_8B + es_nue_hep + es_numu_8B + es_numu_hep))"
+    end
+    if det_flags.CC_mode
+        cc_8B  = sum(unoscillatedSample.CC_8B)  * params.integrated_8B_flux
+        cc_hep = sum(unoscillatedSample.CC_hep) * params.integrated_HEP_flux
+        @logmsg Setup "  CC  νe   8B : $(sci_notation(cc_8B))"
+        @logmsg Setup "  CC  νe   hep: $(sci_notation(cc_hep))"
+        @logmsg Setup "  CC  total   : $(sci_notation(cc_8B + cc_hep))"
+    end
+    println()
+    return nothing
+end
+
 function compute_shared_osc_probs(params, solarModel)
     mixingPars = get_mixing_parameters(params)
     oscProbs_1e, earth_norm_vector, lookup =
@@ -65,35 +90,14 @@ function propagateSamples(unoscillatedSample, responseMatrices, params, solarMod
     end
 
     # 3) Backgrounds (detector-specific)
-    BG_ES, BG_CC = normalize_backgrounds(raw_backgrounds, params, det_flags.det_name)
+    BG_ES, BG_CC = normalize_backgrounds(raw_backgrounds, params, det_flags)
 
-    # 5) Verbose unoscillated rate logging
-    if verbose
-        println()
-        @logmsg Setup "── [$(det_flags.det_name)] Unoscillated event rates (true-E, pre-efficiency) ──"
-        if det_flags.ES_mode
-            es_nue_8B   = sum(unoscillatedSample.ES_nue_8B)      * params.integrated_8B_flux
-            es_nue_hep  = sum(unoscillatedSample.ES_nue_hep)     * params.integrated_HEP_flux
-            es_numu_8B  = sum(unoscillatedSample.ES_nuother_8B)  * params.integrated_8B_flux
-            es_numu_hep = sum(unoscillatedSample.ES_nuother_hep) * params.integrated_HEP_flux
-            @logmsg Setup "  ES  νe   8B : $(sci_notation(es_nue_8B))"
-            @logmsg Setup "  ES  νe   hep: $(sci_notation(es_nue_hep))"
-            @logmsg Setup "  ES  νμτ  8B : $(sci_notation(es_numu_8B))"
-            @logmsg Setup "  ES  νμτ  hep: $(sci_notation(es_numu_hep))"
-            @logmsg Setup "  ES  total   : $(sci_notation(es_nue_8B + es_nue_hep + es_numu_8B + es_numu_hep))"
-        end
-        if det_flags.CC_mode
-            cc_8B  = sum(unoscillatedSample.CC_8B)  * params.integrated_8B_flux
-            cc_hep = sum(unoscillatedSample.CC_hep) * params.integrated_HEP_flux
-            @logmsg Setup "  CC  νe   8B : $(sci_notation(cc_8B))"
-            @logmsg Setup "  CC  νe   hep: $(sci_notation(cc_hep))"
-            @logmsg Setup "  CC  total   : $(sci_notation(cc_8B + cc_hep))"
-        end
-        println()
-    end
+    # 5) Verbose unoscillated rate logging (separate function: logging macros contain
+    #    try/catch, which would force this function's variables into boxes Enzyme rejects)
+    verbose && _log_unoscillated_rates(unoscillatedSample, params, det_flags)
 
-    oscillatedSample = compute_oscillated_samples(unoscillatedSample, params, oscProbs;
-                                                   es_mode=det_flags.ES_mode, cc_mode=det_flags.CC_mode)
+    oscillatedSample = compute_oscillated_samples(unoscillatedSample, params, oscProbs,
+                                                   Val(det_flags.ES_mode), Val(det_flags.CC_mode))
 
     # 6) ES reco event rates
     if det_flags.angular_reco
@@ -146,7 +150,7 @@ function propagateSamples(unoscillatedSample, responseMatrices, params, solarMod
         eventRate_ES_night .+= cc_incl_night
         Ereco_bins_CC = responseMatrices.bins.CC
         eventRate_CC_day   = fill(eltype(cc_incl_day)(0),   Ereco_bins_CC.bin_number)
-        eventRate_CC_night = fill(eltype(cc_incl_night)(0), (cosz_bins.bin_number, Ereco_bins_CC.bin_number))
+        eventRate_CC_night = fill(eltype(cc_incl_night)(0), (N_COSZ_BINS, Ereco_bins_CC.bin_number))
     else
         eventRate_CC_day, eventRate_CC_night =
             compute_CC_event_rates(oscillatedSample.CC, responseMatrices, BG_CC, det_flags)

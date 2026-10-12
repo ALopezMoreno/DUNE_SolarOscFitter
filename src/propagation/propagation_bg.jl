@@ -17,6 +17,15 @@ function ES_conversions(side, norm_value)
     return area * norm_value
 end
 
+# out .+= x .* factor as a plain loop: a fused broadcast would hold the constant template
+# `x` and the differentiable `factor` in one object, which Enzyme's activity analysis rejects.
+function _add_scaled!(out::AbstractVector, x::AbstractVector, factor)
+    @inbounds for k in eachindex(out, x)
+        out[k] += x[k] * factor
+    end
+    return out
+end
+
 """
     normalize_backgrounds(raw_backgrounds, params, det_name::String)
 
@@ -33,9 +42,15 @@ Returns:
 - BG_ES :: Vector{Float64}
 - BG_CC :: Vector{Float64}
 """
-function normalize_backgrounds(raw_backgrounds, params, det_name::String)
-    es_prefix = Val(Symbol(det_name, "_ES_bg_norm_"))
-    cc_prefix = Val(Symbol(det_name, "_CC_bg_norm_"))
+normalize_backgrounds(raw_backgrounds, params, det_name::String) =
+    normalize_backgrounds(raw_backgrounds, params, Val(Symbol(det_name, "_ES_bg_norm_")),
+                          Val(Symbol(det_name, "_CC_bg_norm_")))
+
+# Type-stable form: the prefixes are known at compile time (see bg_norm_prefixes).
+normalize_backgrounds(raw_backgrounds, params, det_flags::DetFlags) =
+    normalize_backgrounds(raw_backgrounds, params, bg_norm_prefixes(det_flags)...)
+
+function normalize_backgrounds(raw_backgrounds, params, es_prefix::Val, cc_prefix::Val)
     es_norms = _params_by_prefix(params, es_prefix)
     cc_norms = _params_by_prefix(params, cc_prefix)
 
@@ -46,13 +61,13 @@ function normalize_backgrounds(raw_backgrounds, params, det_name::String)
     if isempty(raw_backgrounds.ES)
         BG_ES = Float64[]
     else
-        T_es = isempty(es_norms) ? Float64 : typeof(first(es_norms) * one(Float64))
+        T_es = promote_type(Float64, map(typeof, es_norms)...)   # inferable, also for ()
         BG_ES = zeros(T_es, length(raw_backgrounds.ES[1]))
         norm_index = 1
         for (i, behaviour) in enumerate(ES_bg_par_counts)
             if behaviour != 0
                 factor = ES_conversions(raw_backgrounds.sides[i], es_norms[norm_index])
-                @. BG_ES += raw_backgrounds.ES[i] * factor
+                _add_scaled!(BG_ES, raw_backgrounds.ES[i], factor)
                 # TEMP: norm_index not incremented — all ES backgrounds use norm_1 (matches reference run bug)
                 # norm_index += 1
             else
@@ -65,13 +80,13 @@ function normalize_backgrounds(raw_backgrounds, params, det_name::String)
     if isempty(raw_backgrounds.CC)
         BG_CC = Float64[]
     else
-        T_cc = isempty(cc_norms) ? Float64 : typeof(first(cc_norms) * one(Float64))
+        T_cc = promote_type(Float64, map(typeof, cc_norms)...)   # inferable, also for ()
         BG_CC = zeros(T_cc, length(raw_backgrounds.CC[1]))
         norm_index = 1
         for (i, behaviour) in enumerate(CC_bg_par_counts)
             if behaviour != 0
                 factor = CC_conversions(cc_norms[norm_index])
-                @. BG_CC += raw_backgrounds.CC[i] * factor
+                _add_scaled!(BG_CC, raw_backgrounds.CC[i], factor)
                 norm_index += 1
             else
                 BG_CC .+= raw_backgrounds.CC[i]

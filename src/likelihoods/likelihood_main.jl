@@ -27,10 +27,17 @@ _det_llh_tuple    = Tuple(values(detector_llh_fns))
 _det_perbin_tuple = Tuple(values(detector_perbin_fns))
 _shared_ssm       = solarModel
 
+# Sum over the detector likelihoods by tuple recursion rather than a generator: a generator
+# stores the (constant) closures next to the (differentiable) oscillation probabilities,
+# which Enzyme's activity analysis rejects.
+_sum_det_llh(::Tuple{}, parameters, osc) = false
+@inline _sum_det_llh(fns::Tuple, parameters, osc) =
+    first(fns)(parameters; precomputed_osc=osc) + _sum_det_llh(Base.tail(fns), parameters, osc)
+
 total_llh = let fns = _det_llh_tuple, ssm = _shared_ssm
     parameters -> begin
         shared_osc = compute_shared_osc_probs(parameters, ssm)
-        sum(f(parameters; precomputed_osc=shared_osc) for f in fns)
+        _sum_det_llh(fns, parameters, shared_osc)
     end
 end
 

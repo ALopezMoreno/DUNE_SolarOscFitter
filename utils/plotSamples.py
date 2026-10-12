@@ -11,8 +11,8 @@ import plotting  # applies shared CMS/LaTeX style on import
 import os
 
 
-# Fermi coupling constant G_F (GeV^-2), used for the MSW matter-potential overlay.
-G_f = 5.4489e-5
+# Fermi constant in units of Ne/Na, used for the MSW matter-potential overlay.
+G_f = 1.5264932436e-4 / (2 * np.sqrt(2))
 
 
 def plot_95_percent_contour(ax, x_data, y_data, color, alpha=1, linestyles=['-'], fill=True):

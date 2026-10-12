@@ -67,7 +67,7 @@ profile_target(
 )
 
 profile_target(
-    () -> osc_prob_earth(E_calc, mixingPars_prof, earth_lookup, earth_paths),
+    () -> Osc.NumOsc.Fast.osc_prob_earth(E_calc, mixingPars_prof, earth_lookup, earth_paths),
     "profile_osc_earth";
     n_profile = 1000,
 )

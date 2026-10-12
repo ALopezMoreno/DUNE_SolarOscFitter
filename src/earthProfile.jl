@@ -26,8 +26,7 @@ function load_earth_model(file_path::String)
     e_fraction = data[:, 3]     # Electron fraction
     
     # Compute neutrino matter potential
-    # Factor 1.52588e-4 converts density×electron_fraction to neutrino potential
-    potential = density .* e_fraction .* 1.52588e-4
+    potential = density .* e_fraction .* MATTER_POTENTIAL_CONST
     
     return Dict(:radius => radius, :potential => potential)
 end
@@ -160,6 +159,9 @@ end
 # The coarse grid must have exactly nBins_cosz+1 edges, else cosz, cosz_calc and
 # exposure_weights desync (silent mis-binning / shape errors downstream).
 @assert length(COARSE_COSZ_EDGES) == cosz_bins.bin_number + 1 "COARSE_COSZ_EDGES has $(length(COARSE_COSZ_EDGES)) edges, expected $(cosz_bins.bin_number + 1)"
+
+# Number of analysis cos(z) bins, frozen for type-stable (Enzyme-differentiable) code.
+const N_COSZ_BINS = cosz_bins.bin_number
 
 # N_COSZ_SUB=2 only when the coarse grid is too sparse to meet Nyquist alone.
 const N_COSZ_SUB = cosz_bins.bin_number < 40 ? 2 : 1

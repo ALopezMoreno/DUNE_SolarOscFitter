@@ -1,3 +1,8 @@
+# Out of line: logging macros contain try/catch, which inside the likelihood loop forces
+# variables into boxes that Enzyme's activity analysis rejects.
+@noinline _warn_negative_bin(i, e) =
+    (@warn "poissonLogLikelihood: bin $i negative within numerical noise (e=$e)"; nothing)
+
 function poissonLogLikelihood(nExpected::AbstractVector{<:Real}, nMeasured::AbstractVector{<:Real})
     if length(nExpected) != length(nMeasured)
         throw(ArgumentError("Inputs must have the same length"))
@@ -8,7 +13,7 @@ function poissonLogLikelihood(nExpected::AbstractVector{<:Real}, nMeasured::Abst
         raw_e = nExpected[i]
         if raw_e < 0
             if raw_e > -1e-3
-                @warn "poissonLogLikelihood: bin $i negative within numerical noise (e=$raw_e)"
+                _warn_negative_bin(i, raw_e)
             else
                 throw(ArgumentError("poissonLogLikelihood: bin $i significantly negative (e=$raw_e)"))
             end

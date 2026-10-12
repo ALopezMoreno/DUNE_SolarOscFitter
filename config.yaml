@@ -2,7 +2,7 @@
 #               Solar Oscillation Fitter — Configuration File                  #
 ################################################################################
 #
-#  RunMode: MCMC | LLH | derived | PROFILE
+#  RunMode: MCMC | LLH | derived | PROFILE | SETUP
 #  Asimov:  true  → generate fake data from true_* values below
 #           false → read real data from data_file
 #
@@ -14,11 +14,14 @@
 outFile:  "outputs/NEWCHAIN"   # output file prefix. Not used in derived mode
 # prevFile: "outputs/OLDCHAIN"  # resume from saved chain state OR load for derived mode
 
-RunMode:  "MCMC"   # MCMC | LLH | derived | PROFILE
+RunMode:  "MCMC"   # MCMC | LLH | derived | PROFILE | SETUP (build the likelihood only)
 Asimov:   true
 
-fastFit:  true    # fast Earth model (recommended; set false for higher accuracy)
-nuFast:   false   # C++ nuFast oscillation library (incompatible with multithreading)
+fastFit:  true    # solar production average at the mean density (true) or integrated (false)
+nightOsc: true    # NightOsc: exact (cos z, E_true) bin-averaged night Earth crossing; false = legacy 3-flavour per-path calc
+ad_backend: "ForwardDiff"  # HMC gradients: "ForwardDiff" or "Enzyme" (reverse mode: cost independent
+                           # of the number of parameters; requires nightOsc: true)
+# mcmc_seed: 1234          # fix the MCMC RNG for reproducible chains (default: random)
 
 
 # ── 2. ASIMOV TRUTH ─────────────────────────────────────────────────────────

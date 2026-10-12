@@ -51,14 +51,6 @@ cd utils && python plotOutput.py ...
 PYTHONPATH=/path/to/SolarOscFitter/utils python utils/plotOutput.py ...
 ```
 
-### C++ Dependencies
-
-Install **nuFast-Earth**:  
-<https://github.com/PeterDenton/NuFast-Earth>
-
-Edit the following line in the Makefile to point at your nuFast-Earth directory:
-`NUFAST_DIR ?= ../NuFast-Earth`
-
 ## Quick Start
 
 ### 1. Basic Usage
@@ -260,7 +252,7 @@ Benchmarks and profiling runs are opt-in via `JULIA_LIKELIHOOD_BENCH=1` and `JUL
 
 ## Performance Tips
 
-- Use multiple threads: `julia -t auto` or `julia -t N` . **NOT COMPATIBLE WITH NUFAST**
+- Use multiple threads: `julia -t auto` or `julia -t N`
 - Enable fast mode: `fastFit: true` in config
 - Adjust MCMC parameters based on available compute time
 - Use proposal matrices from previous runs for faster convergence

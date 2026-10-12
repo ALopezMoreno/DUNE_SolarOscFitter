@@ -100,7 +100,17 @@ convergence = AssumeConvergence()
 @logmsg MCMC "running $mcmcChains chains with $mcmcSteps steps each (HMC)."
 
 proposal_algorithm = HamiltonianMC(termination=GeneralisedNoUTurn(max_depth=4))
-hmc_context        = BATContext(ad = ADSelector(:ForwardDiff))
+if ad_backend == "Enzyme" && !uses_night_osc(OSC)
+  error("ad_backend: Enzyme requires nightOsc: true " *
+        "(the legacy NumOsc night calculation is not Enzyme-differentiable)")
+end
+hmc_context = if mcmc_seed === nothing
+  BATContext(ad = ADSelector(Symbol(ad_backend)))
+else
+  BATContext(ad = ADSelector(Symbol(ad_backend)),
+             rng = BAT.Random123.Philox4x((UInt64(mcmc_seed), UInt64(0))))
+end
+@logmsg MCMC "HMC gradients: $ad_backend" * (mcmc_seed === nothing ? "" : ", RNG seed $mcmc_seed")
 
 batchSteps = 200   # checkpoint/output cadence only — tuning persists across batches
 nBatches   = ceil(Int, mcmcSteps / batchSteps)
