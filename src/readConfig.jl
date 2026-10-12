@@ -177,7 +177,9 @@ function save_settings_to_file(filename::String)
         # General settings
         write(file, "----- General -----\n")
         write(file, "Fast mode: $fast\n")
-        write(file, "Use nuFast (overrides Fast mode to *true*): $nuFast\n")
+        write(file, "Night Earth crossing (NightOsc): $nightOsc\n")
+        write(file, "AD backend: $ad_backend\n")
+        write(file, "MCMC seed: $(something(mcmc_seed, "random"))\n")
         write(file, "Earth uncertainty enabled: $earthUncertainty\n")
         write(file, "CC xsec scale: $CC_xsec_scale\n\n")
 
@@ -345,8 +347,23 @@ function main()
 
     # Fast mode?
     global fast = config["fastFit"]
-    # use NuFast?
-    global nuFast = config["nuFast"]
+    # The nuFast C++ backend was removed (Oct 2026); old configs may still carry the key.
+    get(config, "nuFast", false) && error("nuFast: true is no longer supported (the nuFast backend was removed); " *
+                                          "remove the key or set it to false")
+    # Night-time Earth crossing: NightOsc (exact cos z / E_true bin averages, own-segment
+    # potentials). false restores the legacy 3-flavour per-path calculation (Osc.NumOsc).
+    if haskey(config, "binnedNight")
+        haskey(config, "nightOsc") && error("config sets both nightOsc and its old name binnedNight; keep nightOsc")
+        @warn "config key binnedNight is now nightOsc; please rename it"
+    end
+    global nightOsc = Bool(get(config, "nightOsc", get(config, "binnedNight", true)))
+    # Automatic differentiation for HMC: "ForwardDiff" (cost grows with the number of
+    # parameters) or "Enzyme" (reverse mode: cost independent of it; needs nightOsc).
+    global ad_backend = String(get(config, "ad_backend", "ForwardDiff"))
+    ad_backend in ("ForwardDiff", "Enzyme") ||
+        error("ad_backend must be \"ForwardDiff\" or \"Enzyme\", got \"$ad_backend\"")
+    # Optional MCMC RNG seed (integer) for reproducible chains; unset = random.
+    global mcmc_seed = get(config, "mcmc_seed", nothing)
 
     # Uncertainties?
     global earthUncertainty = config["earth_potential_uncertainties"]
@@ -357,7 +374,7 @@ function main()
     # CC cross-section scale factor (1.0 = standard MARLEY prediction)
     global CC_xsec_scale = Float64(get(config, "CC_xsec_scale", 1.0))
 
-    allowed_modes = ["LLH", "MCMC", "derived", "PROFILE"]
+    allowed_modes = ["LLH", "MCMC", "derived", "PROFILE", "SETUP"]
     global run_mode = config["RunMode"]
 
     if run_mode ∉ allowed_modes
@@ -369,7 +386,8 @@ function main()
         "LLH" => "llhScan.jl",
         "MCMC" => "mcmc.jl",
         "derived" => "derive_variables_from_chain.jl",
-        "PROFILE" => "profiling.jl"
+        "PROFILE" => "profiling.jl",
+        "SETUP" => "setupOnly.jl"
     )[run_mode]
 
     script_path = joinpath(@__DIR__, script_to_run)  # Reference script in the same directory

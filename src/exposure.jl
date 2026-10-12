@@ -37,7 +37,7 @@ compute_integral(lower, upper) = quadgk(exposure_intp, lower, upper)[1]
 
 # Calculate normalized exposure weights for each bin
 # These weights represent the fraction of total exposure in each zenith bin
-global exposure_weights = reshape(
+const exposure_weights = reshape(
     compute_integral.(bin_edges[1:end-1], bin_edges[2:end]) ./ exposure_intp_int,
     :, 1
 )

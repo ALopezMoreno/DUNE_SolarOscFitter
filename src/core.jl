@@ -18,8 +18,8 @@ end
 #### PHYSICS CONSTANTS FOR OSCILLATION CALCULATIONS ################
 #####################################################################
                                                                     #
-# Fermi constant in natural units (GeV^-2)                         #
-const G_f = 5.4489e-5                                               #
+# A/E (eV^2/GeV) per (mol/cm^3) of electron density                #
+const MATTER_POTENTIAL_CONST = 1.5264932436e-4                      #
 # Atmospheric mass-squared difference (eV^2) - Normal Ordering     #
 const m32 = 2.43e-3                                                 #
 # Electron mass in GeV/c^2                                          #

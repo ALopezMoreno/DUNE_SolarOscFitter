@@ -34,21 +34,8 @@ include(joinpath(@__DIR__, "unoscillatedSample.jl"))
 include(joinpath(@__DIR__, "response.jl"))
 include(joinpath(@__DIR__, "backgrounds.jl"))
 
-# Compute shared Etrue bin edges needed by propagation_osc.jl
-# (E_calc is set as a global inside propagation_osc.jl when propagation_main.jl is included)
-global bin_edges_calc, energies_calc = calculate_bins(
-    (max=Etrue_bins.max, min=Etrue_bins.min, bin_number=Etrue_bins.bin_number * 2)
-)
-
-include(joinpath(@__DIR__, "propagation", "propagation_main.jl"))
-
-# Likelihood struct and function definitions — must precede the detector loop
-include(joinpath(@__DIR__, "likelihoods", "likelihood_core.jl"))
-include(joinpath(@__DIR__, "likelihoods", "likelihood_debug.jl"))
-include(joinpath(@__DIR__, "likelihoods", "likelihood_statistical.jl"))
-include(joinpath(@__DIR__, "likelihoods", "likelihood_builder.jl"))
-
-# Build Earth propagation paths (shared)
+# Build Earth propagation paths (shared; the legacy NumOsc night calculation uses
+# them, and osc_setup.jl checks NightOsc's Earth layers against them)
 global earth_paths  = [make_potential_for_integrand(z, earth) for z in cosz_calc]
 global earth_lookup = let
     base    = get_avg_densities(earth_paths)
@@ -64,6 +51,20 @@ global earth_lookup = let
         base
     end
 end
+
+# Compute shared Etrue bin edges needed by propagation_osc.jl
+# (E_calc is set as a global inside propagation_osc.jl when propagation_main.jl is included)
+global bin_edges_calc, energies_calc = calculate_bins(
+    (max=Etrue_bins.max, min=Etrue_bins.min, bin_number=Etrue_bins.bin_number * 2)
+)
+
+include(joinpath(@__DIR__, "propagation", "propagation_main.jl"))
+
+# Likelihood struct and function definitions — must precede the detector loop
+include(joinpath(@__DIR__, "likelihoods", "likelihood_core.jl"))
+include(joinpath(@__DIR__, "likelihoods", "likelihood_debug.jl"))
+include(joinpath(@__DIR__, "likelihoods", "likelihood_statistical.jl"))
+include(joinpath(@__DIR__, "likelihoods", "likelihood_builder.jl"))
 
 #############################################
 ######## PER-DETECTOR LOOP ########
@@ -138,7 +139,7 @@ for (det_name, det) in detector_configs
     true_params_det = (; true_parameters_det...)
 
     # ── det_flags: per-detector mode flags for propagateSamples ───────────
-    det_flags = (
+    det_flags = DetFlags(
         ES_mode                 = det.ES_mode,
         CC_mode                 = det.CC_mode,
         angular_reco            = det.angular_reco,

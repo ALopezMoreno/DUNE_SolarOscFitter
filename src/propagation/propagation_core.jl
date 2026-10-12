@@ -1,6 +1,43 @@
 
 using LinearAlgebra
 
+"""
+    DetFlags(; ES_mode, CC_mode, angular_reco, inclusive_analysis, semi_inclusive_analysis,
+               angular_cos_cut, det_name)
+
+Per-detector mode flags. The five Bool modes are type parameters and `getproperty` returns
+them as compile-time constants, so `if det_flags.ES_mode … end` is resolved at compile time.
+That keeps propagateSamples type-stable (a runtime Bool there makes ES rates `nothing` or
+arrays depending on a value), which Enzyme requires. Field access is unchanged for callers.
+"""
+struct DetFlags{ES,CC,ANG,INCL,SEMI,NAME}
+    angular_cos_cut::Float64
+    det_name::String
+end
+
+DetFlags(; ES_mode::Bool, CC_mode::Bool, angular_reco::Bool, inclusive_analysis::Bool,
+         semi_inclusive_analysis::Bool, angular_cos_cut::Real, det_name::AbstractString) =
+    DetFlags{ES_mode,CC_mode,angular_reco,inclusive_analysis,semi_inclusive_analysis,Symbol(det_name)}(
+        Float64(angular_cos_cut), String(det_name))
+
+# Parameter-name prefixes of this detector's background norms, as compile-time Val types.
+@generated function bg_norm_prefixes(::DetFlags{ES,CC,ANG,INCL,SEMI,NAME}) where {ES,CC,ANG,INCL,SEMI,NAME}
+    es, cc = QuoteNode(Symbol(NAME, "_ES_bg_norm_")), QuoteNode(Symbol(NAME, "_CC_bg_norm_"))
+    return :((Val($es), Val($cc)))
+end
+
+@inline function Base.getproperty(f::DetFlags{ES,CC,ANG,INCL,SEMI,NAME}, s::Symbol) where {ES,CC,ANG,INCL,SEMI,NAME}
+    s === :ES_mode                 && return ES
+    s === :CC_mode                 && return CC
+    s === :angular_reco            && return ANG
+    s === :inclusive_analysis      && return INCL
+    s === :semi_inclusive_analysis && return SEMI
+    return getfield(f, s)
+end
+
+Base.propertynames(::DetFlags) = (:ES_mode, :CC_mode, :angular_reco, :inclusive_analysis,
+                                  :semi_inclusive_analysis, :angular_cos_cut, :det_name)
+
 # Block averaging utilities for energy binning
 # These functions reduce high-resolution calculations to analysis binning
 
@@ -71,10 +108,37 @@ end
 # - Day:   scale * ((R' * osc_vec) .* eff)
 # - Night: stack over cosZ rows: scale * ((row' * R) .* eff')
 function apply_day_response(osc::AbstractVector, response::AbstractMatrix, eff::AbstractVector; scale::Real=0.5)
-    return scale .* ((response' * osc) .* eff)
+    # scale .* ((response' * osc) .* eff), written as loops: the Adjoint wrapper of the
+    # constant response next to the differentiable `osc` is rejected by Enzyme.
+    n_true, n_reco = size(response)
+    length(osc) == n_true || throw(DimensionMismatch("osc has $(length(osc)) true bins, response has $n_true"))
+    T = promote_type(eltype(osc), eltype(response), eltype(eff), typeof(scale))
+    out = Vector{T}(undef, n_reco)
+    @inbounds for j in 1:n_reco
+        acc = zero(T)
+        for i in 1:n_true
+            acc += response[i, j] * osc[i]
+        end
+        out[j] = scale * (acc * eff[j])
+    end
+    return out
 end
 
 function apply_night_response(osc_rows::AbstractMatrix, response::AbstractMatrix, eff::AbstractVector; scale::Real=0.5)
-    return vcat([scale .* ((row' * response) .* eff') for row in eachrow(osc_rows)]...)
+    # Row k: scale * ((osc_rows[k, :]' * response) .* eff'), written as loops. The previous
+    # vcat([...]...) splat was a dynamic call that Enzyme cannot differentiate.
+    n_rows, n_true = size(osc_rows)
+    n_reco = size(response, 2)
+    size(response, 1) == n_true || throw(DimensionMismatch("osc rows have $n_true true bins, response has $(size(response, 1))"))
+    T = promote_type(eltype(osc_rows), eltype(response), eltype(eff), typeof(scale))
+    out = Matrix{T}(undef, n_rows, n_reco)
+    @inbounds for j in 1:n_reco, k in 1:n_rows
+        acc = zero(T)
+        for i in 1:n_true
+            acc += osc_rows[k, i] * response[i, j]
+        end
+        out[k, j] = scale * (acc * eff[j])
+    end
+    return out
 end
 

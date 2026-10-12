@@ -7,7 +7,6 @@ outFile: "outputs/hmc_test_2"
 RunMode: "MCMC"
 Asimov: true
 fastFit: true
-nuFast: false
 
 # Detection channel selection:
 # false - Fit both ES (Elastic Scattering) and CC (Charged Current) channels

@@ -2,6 +2,28 @@
 # --- ES sample contributions --- #
 ###################################
 
+# Sum of the Poisson log-likelihoods of the night rows (cos z bins) from energy bin `idx` on.
+# Explicit loops, summed left to right like the previous generator: zipping the
+# differentiable rates with the constant data in one iterator is rejected by Enzyme.
+function _night_poisson_sum(rates_night::AbstractMatrix, obs_night::AbstractMatrix, idx::Int)
+    n_E = size(rates_night, 2)
+    acc = poissonLogLikelihood(view(rates_night, 1, idx:n_E), view(obs_night, 1, idx:n_E))
+    for k in 2:size(rates_night, 1)
+        acc += poissonLogLikelihood(view(rates_night, k, idx:n_E), view(obs_night, k, idx:n_E))
+    end
+    return acc
+end
+
+# Angular form: rates (n_cos, n_E, n_cosz); one Poisson term per cos z slice.
+function _night_angular_poisson_sum(rates_night::AbstractArray{<:Any,3}, obs_night::AbstractArray{<:Any,3}, idx::Int)
+    n_E = size(rates_night, 2)
+    acc = poissonLogLikelihood(vec(rates_night[:, idx:n_E, 1]), vec(obs_night[:, idx:n_E, 1]))
+    for k in 2:size(rates_night, 3)
+        acc += poissonLogLikelihood(vec(rates_night[:, idx:n_E, k]), vec(obs_night[:, idx:n_E, k]))
+    end
+    return acc
+end
+
 function llh_ES_poisson(d::LikelihoodInputs, parameters, rates)
     idx  = d.index_ES
     nObs = d.nObserved
@@ -11,10 +33,7 @@ function llh_ES_poisson(d::LikelihoodInputs, parameters, rates)
         nObs.ES_day[idx:end],
     )
 
-    loglh_ES_night = sum(
-        poissonLogLikelihood(row[idx:end], obs_row[idx:end])
-        for (row, obs_row) in zip(eachrow(rates.ES_night), eachrow(nObs.ES_night))
-    )
+    loglh_ES_night = _night_poisson_sum(rates.ES_night, nObs.ES_night, idx)
 
     return loglh_ES_day + loglh_ES_night
 end
@@ -63,16 +82,7 @@ function llh_ES_angle(d::LikelihoodInputs, parameters, rates)
 
     # NIGHT: rates.ES_night and nObs.ES_night are (Ncos, NE, Nnight)
     # → loop over the night bins (dim=3), restrict in energy, and sum log-likelihoods
-    loglh_ES_night = sum(
-        poissonLogLikelihood(
-            vec(rate_slice[:, idx:end]),
-            vec(obs_slice[:, idx:end]),
-        )
-        for (rate_slice, obs_slice) in zip(
-            eachslice(rates.ES_night, dims = 3),
-            eachslice(nObs.ES_night,  dims = 3),
-        )
-    )
+    loglh_ES_night = _night_angular_poisson_sum(rates.ES_night, nObs.ES_night, idx)
 
     return loglh_ES_day + loglh_ES_night
 end
@@ -135,10 +145,7 @@ function llh_CC_poisson(d::LikelihoodInputs, parameters, rates)
         nObs.CC_day[idx:end],
     )
 
-    loglh_CC_night = sum(
-        poissonLogLikelihood(row[idx:end], obs_row[idx:end])
-        for (row, obs_row) in zip(eachrow(rates.CC_night), eachrow(nObs.CC_night))
-    )
+    loglh_CC_night = _night_poisson_sum(rates.CC_night, nObs.CC_night, idx)
 
     return loglh_CC_day + loglh_CC_night
 end
@@ -213,6 +220,11 @@ end
 ###################################
 # --- Put everything together --- #
 ###################################
+
+# -Inf as the common number type of the parameter values (Float64 or a ForwardDiff dual), so the
+# likelihood's return type does not become Union{Float64, Dual}, which BAT cannot handle.
+_neg_inf(parameters::NamedTuple) = convert(promote_type(Float64, map(typeof, values(parameters))...), -Inf)
+_neg_inf(parameters) = -Inf
 function make_likelihood(
     d::LikelihoodInputs;
     use_ES::Bool = true,
@@ -223,8 +235,8 @@ function make_likelihood(
     debug::Bool = false
 )
     return function (parameters; precomputed_osc=nothing)
-        # bounds
-        check_earth_norm_bounds(parameters) || return -Inf
+        # bounds (-Inf in the parameters' number type keeps the return type concrete)
+        check_earth_norm_bounds(parameters) || return _neg_inf(parameters)
 
         # propagate MC once
         rates = expected_rates(d, parameters; precomputed_osc=precomputed_osc)
@@ -235,7 +247,7 @@ function make_likelihood(
             print_negatives_2d(rates.CC_night, parameters)
         end
 
-        loglh = 0.0
+        loglh = zero(_neg_inf(parameters))   # parameters' number type, so the result type is concrete
 
         # === ES contribution ==========================================
         if use_ES

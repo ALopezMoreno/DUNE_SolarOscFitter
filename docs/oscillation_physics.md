@@ -67,7 +67,7 @@ The MSW matter potential for νₑ forward scattering:
 A_cc = 2√2 · G_F · N_e · E · cos²θ₁₃
 ```
 
-where `G_F = 5.4489e-5` (Fermi constant in units of N_e/N_A, so that `G_F · N_e` gives a potential in eV²/GeV when energy is in GeV).
+where `G_F = 5.396969e-5` (Fermi constant in units of N_e/N_A, so that `G_F · N_e` gives a potential in eV²/GeV when energy is in GeV).
 
 The ratio of matter to vacuum potential:
 
@@ -109,18 +109,16 @@ P(νₑ→νₑ) = ½ · (1 − sin²θ₁₃)² · (1 + cos(2θ₁₂) · cos(2
 
 ---
 
-## 4. LMA matter angle
+## 4. Matter angle at production
 
-**Function:** `LMA_angle(energy, mixingPars, N_e)` (`osc.jl:96–101`)
-
-Computes the effective 1-2 mixing angle in matter at a single production density:
+`mswProb` returns, besides P(νₑ→νₑ), the cosine of twice the 1-2 mixing angle in matter at the production density:
 
 ```
 β = 2√2 · G_F · cos²θ₁₃ · N_e · E / Δm²₂₁
-θ₁₂ᵐ = ½ · arccos[(cos(2θ₁₂) − β) / √[(cos(2θ₁₂) − β)² + sin²(2θ₁₂)]]
+cos 2θ₁₂ᵐ = (cos 2θ₁₂ − β) / √[(cos 2θ₁₂ − β)² + sin² 2θ₁₂]
 ```
 
-The `arccos` argument is clamped to [−1, 1] to handle floating-point rounding at extremes. Used in the night-time correction formula (Section 6) when computing the solar mixing angle at a specific production radius.
+This is the factor that multiplies the night-time regeneration term (Section 6).
 
 ---
 
@@ -128,25 +126,12 @@ The `arccos` argument is clamped to [−1, 1] to handle floating-point rounding 
 
 Solar neutrinos are not produced at a single point. They are created across a range of solar radii with a production PDF (`solarModel.prodFractionBoron` or `prodFractionHep`).
 
-### Slow integration: `osc_prob_day` (`osc.jl:104–120`)
+**Function:** `osc_prob_day_c2m(E, mixingPars, solarModel; process, fast)` returns P_day(E) and the production-averaged ⟨cos 2θ₁₂ᵐ⟩(E).
 
-Evaluates `mswProb` at every density point in `solarModel.n_e` (a grid over solar radii), then averages weighted by the production fraction:
+- `fast=false` evaluates `mswProb` on the full density grid `solarModel.n_e` and averages with the production fraction: P_day(E) = Σᵢ prodFraction[i] · P(E, n_e[i]) / Σᵢ prodFraction[i]. The same weights are used for ⟨cos 2θ₁₂ᵐ⟩. This is exact for the night term, which is linear in cos 2θ₁₂ᵐ.
+- `fast=true` evaluates both at the production-weighted mean density (`solarModel.avgNeBoron`, `avgNeHep`): one call instead of n_radii.
 
-```
-P_day(E) = Σᵢ prodFraction[i] · P(E, n_e[i]) / Σᵢ prodFraction[i]
-```
-
-The broadcasting `mswProb.(E, Ref(mixingPars), solarModel.n_e')` evaluates at all (energy × density) pairs simultaneously.
-
-### Fast average: `osc_prob_day_fast` (`osc.jl:123–132`)
-
-Uses pre-computed production-weighted average electron densities:
-- `solarModel.avgNeBoron` for 8B
-- `solarModel.avgNeHep` for HEP
-
-Single call to `mswProb(energy, params, n_e)` with the scalar average density. O(1) vs. O(n_radii). Selected when `fastFit: true` in config.
-
-**Active path:** `fast=true` → `osc_prob_day_fast`; `fast=false` → `osc_prob_day`
+`fastFit` selects between them.
 
 ---
 
@@ -162,7 +147,7 @@ P_night(path, E) = P_day(E) + ΔP(path, E)
 ΔP = cos²θ₁₃ · cos(2θ₁₂_sol) · (P₁ₑ(path, E) − P₀)
 
 where:
-  θ₁₂_sol = effective mixing angle at neutrino production point (from LMA_angle)
+  θ₁₂_sol = effective mixing angle at neutrino production point (cos 2θ₁₂ᵐ from mswProb)
   P₁ₑ     = P(νₑ→ν₁) accumulated through Earth paths (computed separately)
   P₀      = cos²θ₁₂ · cos²θ₁₃  (baseline with no Earth effect)
 ```
@@ -173,7 +158,9 @@ where:
 
 The **slow** version (`osc_prob_both_slow`) integrates ΔP over the production region, applying a different `θ₁₂_sol` for each solar radius. More accurate for large MSW effects.
 
-The **fast** version (`osc_prob_both_fast`) uses a single average density, consistent with `osc_prob_day_fast`.
+The **fast** version (`osc_prob_both_fast`) uses a single average density, consistent with `osc_prob_day_c2m(...; fast=true)`.
+
+These two functions serve the legacy per-path night calculation (`nightOsc: false`). With NightOsc, `binned_oscillation_probabilities` applies the same formula to the bin-averaged P̄₁ₑ (Section 7d).
 
 ### Validity
 
@@ -183,82 +170,114 @@ The IYSW formula is accurate to ≲1% for solar oscillation parameters. It break
 
 ## 7. Earth propagation
 
-`P₁ₑ(path, E)` — the probability that a νₑ arriving at Earth is in mass eigenstate ν₁ — is the key input to the IYSW formula. It is computed by `setup_earth_propagation` (`propagation_osc.jl:52–74`) and cached before the inner MCMC loop.
+`P₁ₑ(path, E)` — the probability that a ν₁ arriving at Earth is detected as νₑ — is the key input to the IYSW formula. It is computed by `setup_earth_propagation` (`propagation_osc.jl`) at every likelihood evaluation.
 
-Three backends exist, selected by config flags:
+By default (`nightOsc: true`) it is computed by NightOsc (7d), which returns P₁ₑ already averaged over each analysis (cos z, E_true) bin. The per-path 3-flavour NumOsc calculation (7b) is the legacy alternative (`nightOsc: false`).
 
-### 7a. BargerOsc (analytical eigenvalues)
+The choice is made once, in `build_osc_setup` (`src/propagation/osc_setup.jl`), and stored in the type of the constant `OSC::OscSetup{Night, EarthUnc, FastSolar}`. `setup_earth_propagation` and `compute_oscillation_probabilities` dispatch on `OSC.night` (`NightOscNight` or `NumOscNight{Fast}`), so the likelihood stays type-stable. The builder also checks the configuration against the rest of the analysis, and fails at setup if any check fails:
+- the engine grid matches the analysis cos z and E_true bins, with two `E_calc` points per bin;
+- the engine's per-bin exposure matches `exposure_weights` up to one common factor;
+- the number of Earth layers matches the Earth-uncertainty prior;
+- makePaths and NightOsc cross the same layers in the same order (`check_layer_agreement`), so `earth_norm_i` scales the same layer in both calculations.
 
-**Modules:** `BargerOsc.Slow` and `BargerOsc.Fast` (`osc.jl:223–350`)
+### 7d. NightOsc (default): bin-averaged P₁ₑ
 
-Computes eigenvalues of the matter Hamiltonian analytically using the cubic formula, then builds Lagrange projection matrices.
+**Files:** module `NightOsc` in `src/oscillations/osc_night.jl`, which holds the accuracy settings and series switches, plus `src/oscillations/night/`:
+- `earth_model.jl`: Earth model and chords;
+- `kernels.jl`: step propagator, `p1e_paths`, Filon quadrature and its adjoint;
+- `binning.jl`: `BinnedP1e` setup and evaluation;
+- `ad.jl`: ForwardDiff and Enzyme rules.
 
-**Matter Hamiltonian:**
-```
-H_matter = H_vac + V,   V[1,1] = ±√2 · G_F · N_e · E · cos²θ₁₃
-```
-(+ for neutrinos, − for antineutrinos; all diagonal elements shifted to preserve tracelessness)
+It is a port of SnuPpy's `core/osc/binned_night.py` and its kernels. The engine (`OSC.night.engine`) is built once at setup from `COARSE_COSZ_EDGES`, the E_true bin edges, `exposure_intp` and the Earth model file.
 
-**Eigenvalue computation** (`get_eigen`, `osc.jl:232–277`):
+**Why.** The legacy calculation samples one path per cos z bin (or two) and two energies per E_true bin. On long paths the regeneration oscillates many times within one bin, so two samples alias it. Against a dense reference on the HD CC grid (20 cos z × 30 E_true bins, 1–21 MeV), the legacy P₁ₑ is off by up to 0.04–0.06 in single bins (median 2×10⁻³), which is comparable to the regeneration amplitude itself. NightOsc is within 1.5×10⁻⁴ at nominal density and 6×10⁻⁴ with scaled layers (median ~10⁻⁵).
 
-The Barger–Liu–Marfatia cubic formula gives three eigenvalues λ₁, λ₂, λ₃ via a trigonometric substitution:
+**Earth model.** Any radial table (r/R⊕, density, Y_e). Layer boundaries are the density jumps larger than `LAYER_JUMP_FACTOR` (5) × the median step, as in `makePaths.jl`, so layer indices (1 = outermost) match `earth_norm_i`. This is checked at setup against makePaths. On `EARTH_MODEL_PREM_DENSE.dat` the two agree on every layer sequence, with crossing lengths within 1.2 km. On the sparse `EARTH_MODEL_PREM.dat`, makePaths fails to assign layers and NightOsc finds an extra boundary at the surface. Chords are split at exact line–sphere intersections and into steps of at most 300 km. Each step carries its own Gauss–Legendre average potential and linear slope; there is no shared per-layer potential.
 
-```
-a = α/3,   brac = √(α² − 3β)/3
-θ⁰ = arccos[(2α³ − 9αβ + 27γ) / (2·brac³)]
+**Propagation.** Two-flavour reduction: P₁ₑ = c₁₃²·P₂ν with the potential scaled by c₁₃². Earth effects on ν₃ are suppressed by 2EV/Δm²₃₁ ~ 10⁻³, and θ₂₃, δCP and Δm²₃₁ drop out. Each step is propagated exactly at its average potential. Its linear slope is added to first order in the interaction picture and exponentiated, so each step stays unitary.
 
-λ₁ = −2·brac·cos(θ⁰/3)      + (m²₁ − α/3)
-λ₂ = −2·brac·cos((θ⁰+2π)/3) + (m²₁ − α/3)
-λ₃ = −2·brac·cos((θ⁰+4π)/3) + (m²₁ − α/3)
-```
+**Bin averages.**
+- cos z is split at the layer tangencies. Within each interval, ξ = √((r_top² − r_min²)/(r_top² − r_bot²)) removes the √ cusp at the tangency. Paths sit at 8 + 3k Gauss–Legendre nodes in ξ, where k is the number of boundaries crossed.
+- Energy nodes are uniform: 2 per MeV for k ≤ 1, 3 per MeV for k = 2–4.
+- P₁ₑ is split into a smooth part plus one term per step boundary, C_b e^{−iψ_b}: the first-order adiabatic amplitude created at that boundary, times its matter phase to the detector. Only the slowly varying C_b, ψ_b and the smooth part are interpolated. Each term is integrated over the energy bin and the cos z bin in closed form (Filon quadrature), weighted by the exposure per unit cos z.
 
-where α, β, γ are functions of vacuum mass splittings and the matter potential. The arccos argument is clamped to [−1+ε, 1−ε] (`osc.jl:251`).
-
-**Projection matrices** (Lagrange formula):
-
-```
-Pᵢ = ∏_{j≠i} (H − λⱼ·I) / ∏_{j≠i} (λᵢ − λⱼ)
-```
-
-**Oscillation along a segment of length l:**
+The result is the exposure-weighted cos z average of the flat E_true average in each bin, shape `(n_cosz, n_Etrue)`, at analysis resolution. `binned_oscillation_probabilities` then forms
 
 ```
-U_segment = Σᵢ Pᵢ · exp(i · 2.534 · (l/E) · λᵢ)
+P_night[k, j] = P̄_day[j] + c₁₃² · ⟨cos2θ₁₂ᵐ⟩[j] · (P̄₁ₑ[k, j] − c₁₂²c₁₃²)
 ```
 
-where the constant 2.534 converts units (km, GeV, eV²) to a dimensionless phase.
+where P̄_day and ⟨cos2θ₁₂ᵐ⟩ are averaged over the two `E_calc` points of each bin (they vary slowly).
 
-**Fast variant** pre-computes `get_H()` for every unique density in the lookup table once per energy, then indexes into the pre-computed matrices per path segment rather than re-diagonalising.
+**Factorisation error.** The exact bin average of P_night is P̄_day + c₁₃²·⟨cos2θ₁₂ᵐ·(P₁ₑ − c₁₂²c₁₃²)⟩. The formula above replaces ⟨cos2θ₁₂ᵐ·P₁ₑ⟩ by ⟨cos2θ₁₂ᵐ⟩·P̄₁ₑ, dropping the within-bin covariance of the two. It also takes P̄_day and ⟨cos2θ₁₂ᵐ⟩ from two points rather than the full bin. Measured on the HD grid (0.5 MeV bins, 1–21 MeV):
+- Δm²₂₁ = 6×10⁻⁵: worst bin 9×10⁻⁵, against a day-night difference up to 6×10⁻²;
+- Δm²₂₁ = 2×10⁻⁵ (prior edge): 2.7×10⁻⁴;
+- Δm²₂₁ = 1.5×10⁻⁴: 2.6×10⁻⁵.
 
-### 7b. NumOsc (numerical diagonalisation)
+The largest errors are at low energy, where cos2θ₁₂ᵐ changes fastest. All are below NightOsc's own bin-averaging accuracy. `tests/test_osc_night.jl` bounds the error at 5×10⁻⁴. `fastFit` now only selects the solar production average (mean density or full integration, `osc_prob_day_c2m`). The Earth part is the same in both modes.
 
-**Modules:** `NumOsc.Slow` and `NumOsc.Fast` (`osc.jl:357–480`)
+**Earth-density uncertainty.** `earth_norm_i` multiplies the potential and slope of every step in layer i. This is exact, with no expansion, so the 12% prior is fine.
+
+**Accuracy.** Validated on the fitter grids against dense sampling (64–128 cos z midpoints per bin, energies resolving 0.3 rad), for Δm²₂₁ in [2×10⁻⁵, 3×10⁻⁴], sin²θ₁₂ in [0.25, 0.45], and layer densities scaled by up to ±24%:
+- worst bin ≤ 9×10⁻⁴ over 0.1–25 MeV;
+- ≤ 4.4×10⁻⁴ above 3 MeV.
+
+SnuPpy's zenith rule (6 + 2k) reaches 3×10⁻³ in mantle bins once layer densities are scaled, hence 8 + 3k here.
+
+**Propagator against 3 flavours.** `p1e_paths` at 300 km linear-slope steps agrees with the full 3-flavour `Osc.NumOsc.Slow` solver at 10 km constant steps to ≤ 5×10⁻⁴, for 3–15 MeV, Δm²₂₁ in [2×10⁻⁵, 1.5×10⁻⁴] and cos z down to −0.99. At equal 10 km steps the difference, which is the two-flavour reduction alone, is ≤ 2×10⁻⁴. δCP does not change it.
+
+**Tests.** `tests/test_osc_night.jl` checks:
+- bin averages against dense sampling;
+- `p1e_paths` against NumOsc;
+- layer agreement with makePaths, and the exposure check;
+- the factorisation error;
+- the gradient against finite differences;
+- the cached Jacobian rule against plain duals;
+- the Enzyme rule against ForwardDiff;
+- the unsafe Float64-word fast paths against the generic loops;
+- that per-task stores are released with their engine.
+
+`tests/regression_likelihood.jl` (run with `JULIA_REGRESSION=1`) compares the full likelihood, for NightOsc and the legacy 3-flavour path, with stored reference values. With `--grad`, it also compares the Enzyme gradient with ForwardDiff.
+
+**Cost and gradients.** Setup ~3 s. Per call, on the HD CC grid, single thread:
+- value ~14 ms;
+- value + Jacobian ~150 ms with Earth uncertainty (Δm²₂₁, θ₁₂, θ₁₃ and the 5 layers the grid crosses);
+- value + Jacobian ~70 ms without Earth uncertainty.
+
+`NightOsc.binned_p1e` evaluates this Jacobian once per parameter point. It caches the result per task, because BAT runs each chain in its own task, and applies the chain rule to the incoming duals. The cost therefore does not grow with the number of sampled parameters or ForwardDiff chunk passes. A full 16-parameter likelihood gradient costs ~165–180 ms, against ~31 ms for the legacy calculation. Working arrays are preallocated per task, so a call allocates < 0.2 MB. Workspaces and the Jacobian cache live in a per-task `WeakKeyDict` keyed by the engine, so an engine that is no longer used is freed together with its arrays.
+
+### 7b. NumOsc (legacy 3-flavour per-path calculation)
+
+(Section 7a, an analytical-eigenvalue Barger backend, was removed in October 2026. It no longer ran, and nothing called it. The nuFast C++ backend, formerly 7c, was removed at the same time.)
+
+**Modules:** `Osc.NumOsc.Slow` and `Osc.NumOsc.Fast` (`osc.jl`)
 
 Builds the full 3×3 matter Hamiltonian and diagonalises it numerically via Julia's `eigen()`.
 
-**Oscillation kernel** (`osc_kernel`, `osc.jl:360–364`):
+**Oscillation kernel** (`osc_kernel`):
 
 ```
 P(l) = U · diag(exp(i · const · (l/E) · λᵢ)) · U†
 ```
 
-Products along the path are accumulated segment by segment. The final amplitude matrix is squared element-wise to get oscillation probabilities.
+Products along the path are accumulated segment by segment, one constant potential per layer crossing. The final amplitude matrix is squared element-wise to get oscillation probabilities.
 
-**NumOsc.Fast** pre-allocates a reusable lookup buffer indexed by density layer index, and only extracts the [1,1] amplitude (νₑ→ν₁) rather than building the full 3×3 output. This is the hot path when `fastFit: true`.
+**NumOsc.Fast** pre-allocates a reusable lookup buffer indexed by density layer index, and only extracts the [1,1] amplitude (νₑ→ν₁) rather than building the full 3×3 output. It is selected with `nightOsc: false, fastFit: true`. `NumOsc.Slow` uses each segment's own average density and ignores `earth_norm_i`.
 
-**Selecting between BargerOsc and NumOsc:** Currently the code dispatches based on which `osc_prob_earth` is in scope at include time (determined by which submodule is loaded). In practice, `NumOsc.Fast` is the default for `fast=true`.
+NumOsc is also the independent reference for NightOsc's propagator in `tests/test_osc_night.jl`.
 
-### 7c. nuFast (external C++ library)
+### 4-state propagation (not wired into the fit)
 
-A compiled C++ library (`src/oscillations/libnufast_earth.so`) from the NuFast-Earth project. Provides the same `osc_prob_both_fast` interface. Selected when `nuFast: true` in config. Incompatible with Julia multithreading.
+`Osc.nu4NumOsc` propagates four states: the three active flavours plus one sterile. It has its own `oscPars`, with Δm²₄₁ and θ₁₄, θ₂₄, θ₃₄. Neutral-current potentials are included, with n_n = 0.7 n_e. Day-time propagation uses a decoherent (averaged) kernel. It is kept as the starting point for light-sterile or heavy-neutral-lepton studies. Large Δm²₄₁ gives the averaged, non-unitary limit. HNL production thresholds and decays are not modelled.
 
 ### Config flags summary
 
-| `nuFast` | `fastFit` | Active path |
-|----------|-----------|-------------|
-| `false` | `false` | NumOsc.Slow — integrate over production region, full Earth diagonalisation |
-| `false` | `true` | NumOsc.Fast — average solar density, pre-allocated Earth lookup |
-| `true` | (ignored) | External nuFast C++ library |
+| `nightOsc` | `fastFit` | Active path |
+|------------|-----------|-------------|
+| `true` (default) | `false` | NightOsc Earth crossing; solar production region integrated |
+| `true` (default) | `true` | NightOsc Earth crossing; solar mean production density |
+| `false` | `false` | Legacy: NumOsc.Slow — integrate over production region, full Earth diagonalisation (ignores `earth_norm_i`) |
+| `false` | `true` | Legacy: NumOsc.Fast — average solar density, pre-allocated Earth lookup |
 
 ---
 
@@ -271,18 +290,33 @@ HMC requires the gradient of the log-likelihood with respect to all sampled para
 - All fields of `oscPars{T}` when constructed from sampled Dual parameters
 - `get_PMNS` → `SMatrix{3,3,Complex{T}}` entries carry Dual parts
 - `mswProb` → `probs::T`, `c2th12m::T`
-- `osc_prob_day_fast` / `osc_prob_both_fast` → arrays of `T`
+- `osc_prob_day_c2m` / `osc_prob_both_fast` → arrays of `T`
 - The full event rate pipeline (`compute_oscillated_samples`, `apply_*_response`) — all multiplications preserve `T`
 - The likelihood formulas (`poissonLogLikelihood`, etc.) — scalar `T` accumulation
 
 **What does NOT differentiate:**
 
 - `earth_lookup` — pre-tabulated density values, treated as constants
+- NightOsc's chords, nodes and interpolation weights — built once in Float64. Only Δm²₂₁, θ₁₂, θ₁₃ and `earth_norm_i` enter its per-call kernel, which is generic in the number type
 - `solarModel` — solar structure model, fixed
 - Response matrices — built once from MC, fixed
 - Bin edges, exposure weights — detector geometry constants
 
-ForwardDiff operates in forward mode over all N sampled parameters simultaneously (N ≈ 5–30 depending on config), computing the full gradient in a single likelihood evaluation pass.
+ForwardDiff operates in forward mode over all N sampled parameters simultaneously (N ≈ 5–30 depending on config), so its cost grows with N.
+
+**Reverse mode (`ad_backend: "Enzyme"`).** With `nightOsc: true`, the whole likelihood is differentiable by Enzyme in reverse mode, whose cost does not depend on N. This is the backend to use with many Earth-density parameters. On the HD CC config (17 parameters, through BAT's gradient path), Enzyme agrees with ForwardDiff to ~1e-13. Timings were measured with other jobs running: Enzyme ~115 ms and ForwardDiff ~245 ms per gradient. The first gradient call compiles for 2–3 minutes per process.
+
+What makes it work (keep these properties when editing the likelihood path):
+- Settings read by the likelihood are `const` (`E_calc`, `exposure_weights`, `N_COSZ_BINS`, `CC_XSEC_NORM_TRUE`, and `OSC`, whose type carries the night backend, the Earth-uncertainty switch and `fastFit`), and `LikelihoodInputs` has concrete field types.
+- Detector modes are type parameters (`DetFlags`), so `det_flags.ES_mode` etc. are compile-time constants and the unused channel branches disappear.
+- No logging macros (they contain `try`/`catch`), dynamic splats (`vcat(x...)`), `Adjoint` wrappers of constant matrices, or generators/zips mixing constant data with differentiable values inside the likelihood: those are written as loops or moved into `@noinline` helpers.
+- NightOsc has a custom Enzyme rule (`_p1e_vec`). The forward pass uses its cached workspaces. The reverse pass, `_p1e_vjp_manual`, computes wᵀ∂P/∂x:
+  - it reruns the forward pass once, keeping each path's stage-1 output;
+  - it applies hand-written adjoints of stages 3 (zenith integrals) and 2 (energy integrals); the Filon integral is linear in its amplitudes, so its adjoint is the phase-dependent weights plus three phase derivatives, `_filon_adj`;
+  - it runs one small Enzyme reverse pass per (path, energy node) for stage 1 (`_node!`).
+
+  Measured on the HD CC grid: ~80 ms, about 4–5× one evaluation, allocating 0.1 MB. The earlier whole-kernel nested Enzyme pass took ~190 ms and 50 MB. The cost does not grow with the number of Earth-density parameters. The nested Enzyme calls go through `invokelatest`, which avoids an Enzyme 0.13 nested-compilation bug. `tests/test_osc_night.jl` checks the rule against ForwardDiff.
+- Do not use Enzyme's runtime-activity mode: on this code it wrote derivative values into the observed (Asimov) data.
 
 ---
 
@@ -294,13 +328,17 @@ likelihood(params)                         [likelihood_main.jl]
   ├─ get_mixing_parameters(params)          sin²θ → θ; constructs oscPars{T}
   │
   ├─ setup_earth_propagation(E_calc, ...)   [propagation_osc.jl]
-  │    └─ osc_prob_earth(E_calc, ...)       P₁ₑ matrix  (n_paths × n_E_fine)
+  │    ├─ [nightOsc] binned_p1e(OSC.night.engine, Δm², θ₁₂, θ₁₃, earth_norms)
+  │    │                                    P̄₁ₑ matrix (n_cosz × n_Etrue), bin-averaged
+  │    └─ [legacy] osc_prob_earth(E_calc, ...)  P₁ₑ matrix  (n_paths × n_E_fine)
   │         └─ matter_osc_per_e(...)        per-energy kernel products
   │
   ├─ normalize_backgrounds(raw_bgs, params) apply nuisance scale factors
   │
   ├─ compute_oscillation_probabilities(...)  [propagation_osc.jl]
-  │    ├─ [nuFast path]  osc_prob_both_fast(E_calc, mixingPars, lookup, ...)
+  │    ├─ [nightOsc]     binned_oscillation_probabilities(E_calc, mixingPars, solarModel, P̄₁ₑ)
+  │    │    ├─ osc_prob_day_c2m(E_calc, ...)  P_day, ⟨cos2θ₁₂ᵐ⟩, block-averaged to E_true bins
+  │    │    └─ IYSW correction               P_night (n_cosz × n_Etrue)
   │    ├─ [fast path]    osc_prob_both_fast(E_calc, P₁ₑ, mixingPars, solarModel)
   │    │    ├─ mswProb(E, params, avgNe)     P_day scalar
   │    │    └─ IYSW correction               P_night matrix
@@ -344,8 +382,11 @@ likelihood(params)                         [likelihood_main.jl]
 |--------------|-------|---------|
 | Adiabatic MSW (no level jumps) | `mswProb` | Valid in Sun; breaks at sharp density discontinuities |
 | IYSW connection formula | `osc_prob_both_*` | ≲1% error; breaks for core-crossing paths |
-| Constant density per Earth segment | Earth propagation | ~1–2% per segment; PREM profile used |
+| Constant density per Earth segment | Legacy Earth propagation | ~1–2% per segment; PREM profile used |
+| Two-flavour Earth crossing, linear potential per ≤300 km step | NightOsc | ≤ 5×10⁻⁴ vs 3-flavour NumOsc at 10 km steps (two-flavour reduction alone ≤ 2×10⁻⁴) |
+| Interpolated bin averages | NightOsc | ≤ 9×10⁻⁴ per bin (≤ 4.4×10⁻⁴ above 3 MeV) vs dense sampling |
+| ⟨cos2θ₁₂ᵐ⟩ and P_day averaged separately from P̄₁ₑ within an E_true bin | `binned_oscillation_probabilities` | ≤ 9×10⁻⁵ per bin at Δm²₂₁ = 6×10⁻⁵, ≤ 2.7×10⁻⁴ at 2×10⁻⁵ (§7d) |
 | θ₁₃ perturbative in matter | `mswProb` | Good for solar νₑ: sin²θ₁₃ ≈ 0.022 |
-| Production-weighted average density (fast) | `osc_prob_day_fast` | Introduces ~1% error vs. full integration |
+| Production-weighted average density (fast) | `osc_prob_day_c2m(...; fast=true)` | Introduces ~1% error vs. full integration |
 | Unitarity: P(ν_other) = 1 − P(νₑ) | `propagation_osc.jl:140–144` | Exact in 3-flavor; breaks for sterile mixing |
 | 3-flavor only (main code) | All of osc.jl | 4-flavor extension exists in `nu4NumOsc` module |

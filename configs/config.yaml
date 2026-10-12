@@ -11,7 +11,6 @@ RunMode: "MCMC"
 
 Asimov: true    # Data fit or Asimov fit?
 fastFit: true   # Accelerate calculations by simplifying the earth model and averaging the solar density over the production region (recommended)
-nuFast: false 
 
 singleChannel: CC  # Choose to run a single channel in the fit: false (both), CC, ES. False unless otherwise specified
 
