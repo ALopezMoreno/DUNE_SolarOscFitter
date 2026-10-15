@@ -127,7 +127,7 @@ Strings are evaluated as Julia `Distributions.jl` expressions.
 | `nBins_Ereco_CC` | Int | Reconstructed energy bins for CC channel. |
 | `range_Ereco_ES` | [Float, Float] | ES reco energy range [MeV]. |
 | `range_Ereco_CC` | [Float, Float] | CC reco energy range [MeV]. |
-| `Ereco_min_ES` | Float | ES energy threshold [MeV]. Events below this bin are excluded from the likelihood. Must be above the first Ereco bin, which also collects everything reconstructed below `range_Ereco_ES` (the last bin likewise collects everything above it). |
+| `Ereco_min_ES` | Float | ES energy threshold [MeV]. Events below this bin are excluded from the likelihood. The first Ereco bin also collects everything reconstructed below `range_Ereco_ES` and is never fitted; the last bin collects everything above it and is always fitted. The bin containing the threshold is excluded. |
 | `Ereco_min_CC` | Float | CC energy threshold [MeV]. |
 | `TPC_threshold` | Float | (default `0.2`) True electron-recoil detection threshold [MeV]; lower integration limit of the ES cross-section. Must match the MC generation threshold. Distinct from the `Ereco_min_ES` analysis cut. |
 | `nBins_cosz` | Int | Number of cos(zenith) bins for day/night split (range −1 to 0). |

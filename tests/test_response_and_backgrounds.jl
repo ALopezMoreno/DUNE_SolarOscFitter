@@ -80,14 +80,18 @@ end
         end
 
         @testset "fixed (sys = 0) and free (sys > 0) backgrounds agree at the nominal norm" begin
-            free, _  = build_backgrounds(det(), bins, bins)
-            fixed, _ = build_backgrounds(det(ES_sys=[0.0, 0.0], CC_sys=[0.0]), bins, bins)
-            p = (D_ES_bg_norm_1 = 2.0, D_ES_bg_norm_2 = 3.0, D_CC_bg_norm_1 = 2.2e-6)
+            # CC norm ≠ the reference flux, so the CC conversion factor is not 1.
+            free, _  = build_backgrounds(det(CC_norms=[1.3e-6]), bins, bins)
+            fixed, _ = build_backgrounds(det(ES_sys=[0.0, 0.0], CC_sys=[0.0], CC_norms=[1.3e-6]), bins, bins)
+            p = (D_ES_bg_norm_1 = 2.0, D_ES_bg_norm_2 = 3.0, D_CC_bg_norm_1 = 1.3e-6)
             ES_free,  CC_free  = normalize_backgrounds(free,  p, "D")
             ES_fixed, CC_fixed = normalize_backgrounds(fixed, NamedTuple(), "D")
             @test ES_fixed ≈ ES_free
             @test CC_fixed ≈ CC_free
             @test all(>(0), ES_free)
+            # And the CC scale is norm / reference flux.
+            ref, _ = build_backgrounds(det(CC_sys=[0.0], CC_norms=[2.2e-6]), bins, bins)
+            @test CC_fixed ≈ ref.CC[1] .* (1.3e-6 / 2.2e-6)
         end
 
         @testset "weighted samples: efficiency ≤ 1, uniform weight c scales the rate by c" begin
@@ -140,4 +144,11 @@ end
         # chain is the backward fraction (1/2 per bin) on the diagonal.
         @test R.CC_misID_nue ≈ 0.5 .* Matrix(1.0I, 4, 4)
     end
+end
+
+@testset "target counts per kt of liquid argon" begin
+    # 1 kt LAr: 1e9 g / 39.948 g/mol × N_A atoms; Z = 18; ⁴⁰Ar is 99.604 % (atomic abundance).
+    @test isapprox(N_ELECTRONS_PER_KT, 2.7135e32; rtol=1e-4)
+    @test isapprox(N_AR40_PER_KT, 1.5015e31; rtol=1e-4)
+    @test N_ELECTRONS_PER_KT / N_AR40_PER_KT ≈ 18 / 0.99604
 end

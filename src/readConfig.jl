@@ -92,10 +92,16 @@ end
 
 # Function to load priors for earth potential uncertainty nuisance parameters
 function load_earth_normalisation_prior(jld2_file::String; required::Bool=true)
-    if !required && !isfile(jld2_file)
-        global earth_normalisation_prior = nothing
-        global earth_normalisation_true = nothing
-        return nothing
+    if !required
+        # Not used by the fit; load it if possible, but never stop the run over it.
+        try
+            return load_earth_normalisation_prior(jld2_file; required=true)
+        catch e
+            isfile(jld2_file) && @warn "Could not read $jld2_file (unused: earth_potential_uncertainties is off): $e"
+            global earth_normalisation_prior = nothing
+            global earth_normalisation_true = nothing
+            return nothing
+        end
     end
     # Errors propagate: with earth_potential_uncertainties on, a missing or malformed prior
     # file must stop the run, not leave `nothing` to fail somewhere later.
@@ -124,6 +130,11 @@ function parse_detector_block(block::Dict, name::String)
     end
     if semi_inclusive_analysis && (!cc_mode || !es_mode)
         error("semiInclusiveMode requires singleChannel: false for detector $name")
+    end
+    # The forward/backward split needs the scattering angle: without it every ES event stays in
+    # the ES channel while the backward ones are also added to CC as mis-ID (counted twice).
+    if semi_inclusive_analysis && !Bool(block["use_scattering_info"])
+        error("semiInclusiveMode requires use_scattering_info: true for detector $name")
     end
     # The forward/backward split needs the scattering angle: without it every ES event stays in
     # the ES channel while the backward ones are also added to CC as mis-ID (counted twice).

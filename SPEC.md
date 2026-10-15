@@ -52,7 +52,8 @@ Status tags:
 2.6 Earth-norm priors use the full covariance of `earth_normalisation_prior_file`.
     **[tested]** independent normals plus `earth_prior_correlation` (added in `mcmc.jl` when the
     covariance is not diagonal) equal the MvNormal up to a constant (`test_likelihood_correctness.jl`).
-    The current covariance file is diagonal.
+    The current covariance file is diagonal, so the term has never run inside BAT or under Enzyme:
+    run `regression_likelihood.jl night --grad` with a correlated file before using one. **[untested]**
 
 2.7 Parameter names sort numerically (`earth_norm_2` before `earth_norm_10`). **[tested]**
     `test_response_and_backgrounds.jl`.
@@ -76,7 +77,8 @@ Status tags:
 4.1 Each response-matrix row (fixed E_true) sums to 1 over all E_reco, with events reconstructed
     outside the window in the first/last (±∞) bins; they are not redistributed into the window.
     Selection efficiency is applied per E_reco bin. **[tested]** `test_response_and_backgrounds.jl`.
-    The first E_reco bin must lie below the analysis threshold (warned at config parse).
+    The underflow bin is never fitted (the bin containing the threshold is excluded); the overflow
+    bin always is.
 
 4.2 Each ES background has its own normalisation parameter `ES_bg_norm_i`. **[tested]**
 
@@ -92,6 +94,9 @@ Status tags:
 4.3c Semi-inclusive mode: each ES event is in exactly one channel (forward → ES, backward → CC as
     mis-ID). Requires `use_scattering_info` (enforced at config parse). The mis-ID chain maps
     every ES reco bin through its finite centre. **[tested]** (centres)
+
+4.3e Target counts per kt from the LAr molar mass (39.948 g/mol), Z = 18 and the ⁴⁰Ar abundance
+    (99.604 %): 2.7135e32 electrons, 1.5015e31 ⁴⁰Ar. **[tested]**
 
 4.3d Signal-sample weights: meaning not yet defined (TODO.md); non-unit weights are ignored with a
     warning. **[inferred]**
@@ -110,7 +115,9 @@ Status tags:
 5.2 Barlow–Beeston reduces to Poisson when the MC uncertainty → 0. **[tested]**
 
 5.3 Total log L = ES + CC when both channels are on. **[tested]** "make_likelihood – ES/CC composition".
-    `llhScan.jl` now evaluates `total_llh` once per grid point (conditional scan, 2·log L).
+    `llhScan.jl` evaluates `total_llh` once per grid point: a conditional scan (other parameters at
+    the Asimov truth) storing 2·log L and its conditioning point, which `plotLLH.py` marks.
+    **[untested]** beyond a smoke run.
 
 5.4 Asimov: at the true parameters the log L is at its maximum and the expected counts equal the data.
     **[untested]**
@@ -137,8 +144,9 @@ Status tags:
 
 ## 7. Sampling and I/O ([mcmc_and_priors.md](docs/mcmc_and_priors.md))
 
-7.1 Resuming a run into the same output file never loses or overwrites existing batches; a
-    failed write stops the run. **[tested]** (`next_batch_name`)
+7.1 Resuming a run into the same output file never loses or overwrites existing batches.
+    **[tested]** (`next_batch_name`; end-to-end resume smoke run 2026-10-15). A failed write stops
+    the run (`saveBatch` rethrows). **[untested]**
 
 7.2 Seeds fix the chains: two runs with the same config and seed give identical samples. **[untested]**
 

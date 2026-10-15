@@ -24,6 +24,16 @@ flagged the HD CC inputs of May/June 2026.
 - [ ] Ask the sample producer: was the selection applied to the HD radiological sample (all
       360k events have mask = true)? Why is `smeared_2.5_radiological.csv` identical to the
       unsmeared file? The smeared neutron/gamma files are pre-binned (0.2 MeV grid).
+- [ ] ES background face convention: `side` = 0 gets both long faces (2·12·64 m²), 1 both end caps.
+      `data_file_Nbkg_..._Bottom.csv` has side = 0. Is the bottom face meant to count as two long
+      faces? (Ask the sample producer.)
+- [ ] HD in config.yaml lists 3 ES background files but 2 norms/systematics (the third is dropped
+      with a warning; HD runs CC-only, so no effect today).
+
+## Before using a correlated Earth prior
+
+- [ ] Run `julia --project tests/regression_likelihood.jl night --grad` with a correlated
+      covariance file (the correlation term in mcmc.jl has only been tested in isolation).
 
 ## Statistics (on hold, ask before starting)
 
