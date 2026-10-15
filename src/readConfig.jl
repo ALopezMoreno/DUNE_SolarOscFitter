@@ -4,6 +4,7 @@ using JLD2          # For data file I/O
 using PDMats        # For positive definite matrices
 using Plots         # For memory usage plotting
 using Distributions # For prior distributions
+using DataStructures: OrderedDict   # detector order = active_detectors order
 
 # Memory monitoring utilities
 
@@ -56,18 +57,11 @@ end
 
 # Functiont to extract proposal covariance matrix
 function load_proposal_matrix(config)
-    global propMatrix
+    # Nothing reads a proposal matrix: the HMC sampler tunes its own metric. Say so instead of
+    # loading (and, on failure, silently dropping) a file that has no effect.
+    global propMatrix = nothing
     if haskey(config, "proposal_matrix")
-        jld2_file_path = config["proposal_matrix"]
-        try
-            # Matrix must be positive-definite
-            propMatrix = PDMat(JLD2.load(jld2_file_path, "posterior_cov"))
-        catch e
-            println("An error occurred while loading the JLD2 file: ", e)
-            propMatrix = nothing
-        end
-    else
-        propMatrix = nothing
+        @warn "proposal_matrix ($(config["proposal_matrix"])) is set but not used by the HMC sampler; ignoring it."
     end
 end
 
@@ -97,25 +91,20 @@ function construct_arguments(params::Dict)
 end
 
 # Function to load priors for earth potential uncertainty nuisance parameters
-function load_earth_normalisation_prior(jld2_file::String)
-    try
-        # Load data from the JLD2 file
-        data = JLD2.load(jld2_file)
-        # Extract covariance matrix and central value array (using designated keys)
-        covariance = data["covariance"]
-        central = data["true"]
-        
-        # Create a multivariate normal distribution as the prior distribution
-        global earth_normalisation_prior = MvNormal(central, covariance) 
-        # Set the global variable for central values
-        global earth_normalisation_true = central
-        return earth_normalisation_prior
-    catch e
-        println("Error loading earth normalisation prior from file ", jld2_file, ": ", e)
+function load_earth_normalisation_prior(jld2_file::String; required::Bool=true)
+    if !required && !isfile(jld2_file)
         global earth_normalisation_prior = nothing
         global earth_normalisation_true = nothing
         return nothing
     end
+    # Errors propagate: with earth_potential_uncertainties on, a missing or malformed prior
+    # file must stop the run, not leave `nothing` to fail somewhere later.
+    data = JLD2.load(jld2_file)
+    covariance = data["covariance"]
+    central = data["true"]
+    global earth_normalisation_prior = MvNormal(central, covariance)
+    global earth_normalisation_true = central
+    return earth_normalisation_prior
 end
 
 """
@@ -135,6 +124,11 @@ function parse_detector_block(block::Dict, name::String)
     end
     if semi_inclusive_analysis && (!cc_mode || !es_mode)
         error("semiInclusiveMode requires singleChannel: false for detector $name")
+    end
+    # The forward/backward split needs the scattering angle: without it every ES event stays in
+    # the ES channel while the backward ones are also added to CC as mis-ID (counted twice).
+    if semi_inclusive_analysis && !Bool(block["use_scattering_info"])
+        error("semiInclusiveMode requires use_scattering_info: true for detector $name")
     end
     # The first Ereco bin extends to -Inf (it collects everything reconstructed below the
     # range), so it must sit below the analysis threshold.
@@ -311,14 +305,14 @@ function main()
 
     # Per-detector configuration blocks
     if haskey(config, "detectors")
-        active = get(config, "active_detectors", collect(keys(config["detectors"])))
-        global detector_configs = Dict{String,Any}(
+        active = get(config, "active_detectors", sort(collect(keys(config["detectors"]))))
+        global detector_configs = OrderedDict{String,Any}(
             name => parse_detector_block(config["detectors"][name], name)
             for name in active
         )
     else
         # Backward-compatible fallback: read flat keys as a single "default" detector
-        global detector_configs = Dict{String,Any}(
+        global detector_configs = OrderedDict{String,Any}(
             "default" => parse_detector_block(config, "default")
         )
     end
@@ -346,7 +340,8 @@ function main()
     global prior_cc_xsec_curv = string_to_distribution(
         get(config, "prior_cc_xsec_curv", "Normal(0.0, 0.05)")
     )
-    load_earth_normalisation_prior(config["earth_normalisation_prior_file"])
+    load_earth_normalisation_prior(config["earth_normalisation_prior_file"];
+                                   required = Bool(config["earth_potential_uncertainties"]))
 
     # LLH parameters
     global llhBins = config["llh_bins"]

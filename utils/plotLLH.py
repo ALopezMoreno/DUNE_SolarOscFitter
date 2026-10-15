@@ -58,7 +58,7 @@ PANELS = [
 
 
 def plot_llh_panel(ax, fig, path, xkey, ykey, linewidth):
-    """Render one 2D -logL scan panel onto ``ax``."""
+    """Render one 2D 2·logL scan panel onto ``ax``."""
     lim_x, lim_y, matrix = read_llh(path)
 
     # The dm2_21 axis is plotted in (x10^-4 eV^2) units.
@@ -72,8 +72,10 @@ def plot_llh_panel(ax, fig, path, xkey, ykey, linewidth):
     X = np.linspace(lim_x[0], lim_x[1], matrix.shape[1])
     Y = np.linspace(lim_y[0], lim_y[1], matrix.shape[0])
     XX, YY = np.meshgrid(X, Y)
+    # The scan stores 2·log L (src/llhScan.jl); 2·ΔlogL = −Δχ². Contours at the 2-parameter
+    # 3/2/1σ levels (Δχ² = 11.83, 6.18, 2.30).
     ax.contour(XX, YY, matrix.T - np.max(matrix),
-               levels=[-9, -4, -1], colors='white',
+               levels=[-11.83, -6.18, -2.30], colors='white',
                linewidths=linewidth, linestyles='-')
 
     truth_x, truth_y = TRUTH[xkey], TRUTH[ykey]

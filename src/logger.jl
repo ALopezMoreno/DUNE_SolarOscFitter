@@ -18,23 +18,16 @@ function sci_notation(x; digits=4)
     end
 end  
 
-# Define string representations for both custom and built-in logging levels
-function Base.show(io::IO, level::LogLevel)
-    if level == Setup
-        print(io, "Setup")
-    elseif level == MCMC
-        print(io, "MCMC")
-    elseif level == Output
-        print(io, "Output")
-    elseif level == Logging.Info
-        print(io, "MCMC")  # Map Info to MCMC for consistency
-    elseif level == Logging.Warn
-        print(io, "Warn")
-    elseif level == Logging.Error
-        print(io, "Error")
-    else
-        print(io, Int32(level.level))
-    end
+# Names of the custom and built-in levels, for ColoredLogger only. (This used to be a
+# Base.show method for LogLevel, which changed how every package's log levels print.)
+function level_name(level::LogLevel)
+    level == Setup         && return "Setup"
+    level == MCMC          && return "MCMC"
+    level == Output        && return "Output"
+    level == Logging.Info  && return "MCMC"   # Info is shown as MCMC for consistency
+    level == Logging.Warn  && return "Warn"
+    level == Logging.Error && return "Error"
+    return string(Int32(level.level))
 end
 
 struct ColoredLogger <: AbstractLogger
@@ -57,32 +50,32 @@ function Logging.handle_message(logger::ColoredLogger, level, message, _module, 
     # Direct printing with printstyled
     if use_level == Setup
         printstyled("=> ", color=light_blue, bold=true)
-        printstyled(level, ": ", color=light_blue, bold=true)
+        printstyled(level_name(level), ": ", color=light_blue, bold=true)
         printstyled(message, color=:default, bold=false)
         println()  # Newline
     elseif use_level == MCMC
         printstyled("=> ", color=:yellow, bold=true)
-        printstyled(level, ": ", color=:yellow, bold=true)
+        printstyled(level_name(level), ": ", color=:yellow, bold=true)
         printstyled(message, color=:default, bold=false)
         println()  # Newline
     elseif use_level == Output
         printstyled("=> ", color=bright_green, bold=true)
-        printstyled(level, ": ", color=bright_green, bold=true)
+        printstyled(level_name(level), ": ", color=bright_green, bold=true)
         printstyled(message, color=bright_green, bold=false)
         println()  # Newline
     elseif use_level == Logging.Warn
         printstyled("=> ", color=orange, bold=true)
-        printstyled(level, ": ", color=orange, bold=true)
+        printstyled(level_name(level), ": ", color=orange, bold=true)
         printstyled(message, color=orange, bold=true)
         println()  # Newline
     elseif use_level == Logging.Error
         printstyled("=> ", color=red, bold=true)
-        printstyled(level, ": ", color=red, bold=true)
+        printstyled(level_name(level), ": ", color=red, bold=true)
         printstyled(message, color=red, bold=true)
         println()  # Newline
     else
         printstyled("=> ", color=:default)
-        printstyled(level, ": ", color=:default)
+        printstyled(level_name(level), ": ", color=:default)
         printstyled(message, color=:default)
         println()  # Newline
     end

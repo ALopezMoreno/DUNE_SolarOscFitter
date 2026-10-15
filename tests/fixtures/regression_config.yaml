@@ -1,0 +1,114 @@
+# Frozen configuration for tests/regression_likelihood.jl. Detector samples come from
+# tests/fixtures (synthetic, see make_fixtures.jl); the solar model, fluxes, Earth model,
+# exposure and cross sections from the git-tracked files in inputs/. Do not point this at
+# the changing detector inputs: the regression must only move when the fitter changes.
+#
+# Two detectors, to cover the multi-detector path:
+#   FXA: ES + CC, plain ES; ES backgrounds on both sides with distinct norms, one fixed (sys 0).
+#   FXB: semi-inclusive with the scattering angle; one free background per channel.
+
+outFile:  "outputs/regression"   # overridden by the regression script
+RunMode:  "SETUP"
+Asimov:   true
+fastFit:  true
+nightOsc: true
+ad_backend: "ForwardDiff"
+
+true_sin2_th12:           0.307
+true_sin2_th13:           0.022
+true_dm2_21:              6e-5
+true_integrated_HEP_flux: 8250.0
+true_cc_xsec_norm:        1.0
+true_8B_flux:             5.53e6
+
+prior_sin2_th12: Uniform(0.15, 0.5)
+prior_sin2_th13: truncated(Normal(0.022, 0.0007), 0.005, 0.035)
+prior_dm2_21:    Uniform(2e-5, 3e-4)
+prior_8B_flux:   truncated(Normal(5.25e6, 0.28e6), 1.5e6, 1e7)
+prior_HEP_flux:  Uniform(0, 2e4)
+fix_cc_xsec: false
+prior_cc_xsec_norm: truncated(Normal(1.0, 0.1), 0.1, 2.0)
+prior_cc_xsec_tilt: Normal(0.0, 0.1)
+prior_cc_xsec_curv: Normal(0.0, 0.05)
+
+nChains:           2
+nSteps:            10
+nTuning:           5
+maxTuningAttempts: 1
+earth_potential_uncertainties: true
+llh_bins: 5
+thinning: 1
+
+TPC_threshold: 0.2
+nBins_Etrue:  20
+range_Etrue:  [1, 21]
+nBins_cosz:   24
+nBins_cosz_fine: 8
+cosz_fine_edge:  -0.12
+
+solar_model_file:               "inputs/AGSS09_high_z.jld2"
+flux_model_file:                "inputs/fluxes.jld2"
+earth_model_file:               "inputs/EARTH_MODEL_PREM_DENSE.dat"
+earth_uncertainty_file:         "inputs/earth_uncertainty_cov.jld2"
+earth_normalisation_prior_file: "inputs/earth_uncertainty_cov.jld2"
+solar_exposure_file:            "inputs/solarExposure.csv"
+data_file: "data.txt"
+
+active_detectors: [FXA, FXB]
+detectors:
+  FXA:
+    CC_exposure: 10
+    ES_exposure: 10
+    singleChannel:      false
+    inclusiveMode:      false
+    semiInclusiveMode:  false
+    use_scattering_info: false
+    ES_cos_cut: 0.5
+    nBins_Ereco_ES:   15
+    nBins_Ereco_CC:   15
+    range_Ereco_ES:   [2, 20]
+    range_Ereco_CC:   [2, 20]
+    Ereco_min_ES:     4
+    Ereco_min_CC:     4
+    nBins_cos_scatter: 10
+    reconstruction_sample_CC:         "tests/fixtures/cc_signal.csv"
+    reconstruction_sample_ES_nue:     "tests/fixtures/es_nue.csv"
+    reconstruction_sample_ES_nuother: "tests/fixtures/es_nuother.csv"
+    reconstruction_sample_ES_angle:   "tests/fixtures/es_angular.csv"
+    ES_background_files:
+      - "tests/fixtures/es_bg_long.csv"
+      - "tests/fixtures/es_bg_end.csv"
+    CC_background_files:
+      - "tests/fixtures/cc_bg_a.csv"
+      - "tests/fixtures/cc_bg_b.csv"
+    ES_background_normalisations: [2.2e-6, 3.0e-6]
+    CC_background_normalisations: [2.2e-6, 1.1e-6]
+    ES_background_systematics:    [0.02, 0.0]
+    CC_background_systematics:    [0.02, 0.0]
+  FXB:
+    CC_exposure: 5
+    ES_exposure: 5
+    singleChannel:      false
+    inclusiveMode:      false
+    semiInclusiveMode:  true
+    use_scattering_info: true
+    ES_cos_cut: 0.5
+    nBins_Ereco_ES:   12
+    nBins_Ereco_CC:   12
+    range_Ereco_ES:   [2, 20]
+    range_Ereco_CC:   [2, 20]
+    Ereco_min_ES:     4
+    Ereco_min_CC:     4
+    nBins_cos_scatter: 10
+    reconstruction_sample_CC:         "tests/fixtures/cc_signal.csv"
+    reconstruction_sample_ES_nue:     "tests/fixtures/es_nue.csv"
+    reconstruction_sample_ES_nuother: "tests/fixtures/es_nuother.csv"
+    reconstruction_sample_ES_angle:   "tests/fixtures/es_angular.csv"
+    ES_background_files:
+      - "tests/fixtures/es_bg_long.csv"
+    CC_background_files:
+      - "tests/fixtures/cc_bg_b.csv"
+    ES_background_normalisations: [2.2e-6]
+    CC_background_normalisations: [2.2e-6]
+    ES_background_systematics:    [0.05]
+    CC_background_systematics:    [0.05]

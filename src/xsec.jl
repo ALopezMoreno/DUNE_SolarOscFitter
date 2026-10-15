@@ -11,7 +11,7 @@ include(joinpath(@__DIR__, "core.jl"))
 # df = CSV.File("inputs/CC_nue_40Ar_total_Gardiner2020.csv") |> DataFrame
 
 # Load CC cross-section from MARLEY Monte Carlo calculations
-df = CSV.File("inputs/CC_nue_40Ar_total_marley.csv") |> DataFrame
+df = CSV.File(joinpath(@__DIR__, "..", "inputs", "CC_nue_40Ar_total_marley.csv")) |> DataFrame   # repo-relative, not cwd-relative
 
 # Extract energy and cross-section data with unit conversions
 CC_xsec_energy_raw = vcat(0.0, df[:, 1] * 1e-3)  # Convert MeV to GeV, add zero point

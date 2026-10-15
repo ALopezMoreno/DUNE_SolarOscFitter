@@ -75,7 +75,7 @@ global sin2_th12_true, sin2_th13_true, dm2_21_true
 global integrated_8B_flux_true, integrated_HEP_flux_true
 
 # Collect outputs for every detector
-global detector_outputs = Dict{String, NamedTuple}()
+global detector_outputs = OrderedDict{String, NamedTuple}()   # same order as detector_configs
 
 @logmsg Setup "Running fit with detector(s): $(join(keys(detector_configs), ", "))"
 
@@ -318,9 +318,13 @@ let _det  = first(values(detector_configs)),
     global Ereco_bins_ES      = _det.Ereco_bins_ES
     global Ereco_bins_CC      = _det.Ereco_bins_CC
     global cos_scatter_bins   = _det.cos_scatter_bins
-    # For llhScan.jl: true parameter values and background prior distributions
-    global true_params        = _out.true_params
-    global true_parameters    = Dict{Symbol,Any}(pairs(_out.true_params)...)
+    # True (Asimov) values of ALL fit parameters: shared ones plus every detector's background
+    # norms. (Taking only the first detector's left the others' norms out, so total_llh at
+    # true_params failed for more than one detector.) Per-detector diagnostics such as
+    # :ES_asymmetry are kept from the first detector.
+    global true_params        = foldl((a, o) -> merge(o.true_params, a), values(detector_outputs);
+                                      init = NamedTuple())
+    global true_parameters    = Dict{Symbol,Any}(pairs(true_params)...)
     global ES_bg_norms_pars   = _out.ES_bg_norms_pars
     global CC_bg_norms_pars   = _out.CC_bg_norms_pars
 end

@@ -255,7 +255,7 @@ Benchmarks and profiling runs are opt-in via `JULIA_LIKELIHOOD_BENCH=1` and `JUL
 - Use multiple threads: `julia -t auto` or `julia -t N`
 - Enable fast mode: `fastFit: true` in config
 - Adjust MCMC parameters based on available compute time
-- Use proposal matrices from previous runs for faster convergence
+- Resume from a previous run (`prevFile`) instead of re-tuning
 
 
 ## Acknowledgments

@@ -1,7 +1,7 @@
 # Build one likelihood closure per detector, then sum them.
 # Oscillation parameters are shared; background nuisance params are namespaced by detector.
-detector_llh_fns    = Dict{String, Function}()
-detector_perbin_fns = Dict{String, Function}()
+detector_llh_fns    = OrderedDict{String, Function}()   # same order as detector_configs
+detector_perbin_fns = OrderedDict{String, Function}()
 
 for (dname, out) in detector_outputs
     det = detector_configs[dname]
@@ -41,6 +41,7 @@ total_llh = let fns = _det_llh_tuple, ssm = _shared_ssm
     end
 end
 
-per_bin_llh = parameters -> sum(f(parameters) for f in _det_perbin_tuple)
+# Per-bin log L, one entry per detector: the detectors' bin grids differ, so they cannot be summed.
+per_bin_llh = parameters -> OrderedDict(dname => f(parameters) for (dname, f) in detector_perbin_fns)
 
 global likelihood_all_samples = logfuncdensity(total_llh)

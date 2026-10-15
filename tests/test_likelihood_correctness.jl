@@ -1,4 +1,5 @@
 using Test
+using Distributions, LinearAlgebra
 
 @testset "poissonLogLikelihood – correctness & edge cases" begin
     # simple case with all-positive entries where the formula is easy
@@ -184,4 +185,17 @@ end
     @test total_llh(params_ok)   > -Inf
     @test total_llh(params_bad1) == -Inf
     @test total_llh(params_bad2) == -Inf
+end
+
+@testset "earth_prior_correlation – completes independent normals to the MvNormal" begin
+    C = [0.0144 0.006 0.0; 0.006 0.0144 -0.004; 0.0 -0.004 0.01]
+    μ = [1.0, 0.95, 1.05]
+    M = inv(C) - Diagonal(1 ./ diag(C))
+    full(x)  = logpdf(MvNormal(μ, C), x)
+    indep(x) = sum(logpdf(Normal(μ[i], sqrt(C[i, i])), x[i]) for i in 1:3)
+    pars(x)  = (earth_norm_1 = x[1], earth_norm_2 = x[2], earth_norm_3 = x[3], dm2_21 = 6e-5)
+    # indep + correction − full must be the same constant everywhere.
+    offsets = [indep(x) + earth_prior_correlation(pars(x), M, μ) - full(x)
+               for x in ([1.0, 1.0, 1.0], [0.8, 1.1, 1.2], [1.3, 0.7, 0.9])]
+    @test maximum(offsets) - minimum(offsets) < 1e-12
 end
