@@ -123,12 +123,12 @@ Strings are evaluated as Julia `Distributions.jl` expressions.
 |-----|------|-------------|
 | `nBins_Etrue` | Int | Number of true-energy bins for oscillation calculation. |
 | `range_Etrue` | [Float, Float] | True energy range [MeV]. Converted to GeV internally. |
-| `nBins_Ereco_ES` | Int | Reconstructed energy bins for ES channel. |
-| `nBins_Ereco_CC` | Int | Reconstructed energy bins for CC channel. |
-| `range_Ereco_ES` | [Float, Float] | ES reco energy range [MeV]. |
-| `range_Ereco_CC` | [Float, Float] | CC reco energy range [MeV]. |
-| `Ereco_min_ES` | Float | ES energy threshold [MeV]. Events below this bin are excluded from the likelihood. The first Ereco bin also collects everything reconstructed below `range_Ereco_ES` and is never fitted; the last bin collects everything above it and is always fitted. The bin containing the threshold is excluded. |
-| `Ereco_min_CC` | Float | CC energy threshold [MeV]. |
+| `nBins_Ereco_ES` | Int | Number of fitted ES reco-energy bins, uniform over [`Ereco_min_ES`, `range_Ereco_ES[2]`]. One extra bin below the threshold collects everything reconstructed below it (never fitted); the last bin also collects everything above the range. |
+| `nBins_Ereco_CC` | Int | Number of fitted CC reco-energy bins (as for ES). |
+| `range_Ereco_ES` | [Float, Float] | ES reco energy range [MeV]. Only the upper end is used: the binning starts at `Ereco_min_ES`. |
+| `range_Ereco_CC` | [Float, Float] | CC reco energy range [MeV]. Only the upper end is used. |
+| `Ereco_min_ES` | Float | ES analysis threshold [MeV]. The fitted bins start exactly here (see `nBins_Ereco_ES`). |
+| `Ereco_min_CC` | Float | CC analysis threshold [MeV]; the fitted CC bins start exactly here. |
 | `TPC_threshold` | Float | (default `0.2`) True electron-recoil detection threshold [MeV]; lower integration limit of the ES cross-section. Must match the MC generation threshold. Distinct from the `Ereco_min_ES` analysis cut. |
 | `nBins_cosz` | Int | Number of cos(zenith) bins for day/night split (range −1 to 0). |
 | `nBins_cosz_fine` | Int | (default `0`) Horizon-refined cos(z) binning: number of graded bins in `[cosz_fine_edge, 0]`, concentrated where the day-night regeneration first peak lives; the rest of the grid is PREM-aligned. `0` = legacy uniform-piecewise grid. |

@@ -171,3 +171,15 @@ end
         end
     end
 end
+
+@testset "threshold_binning – fit starts exactly at Ereco_min" begin
+    for (thr, hi, n) in ((5, 25, 30), (3, 15, 30), (4, 20, 15), (0.1, 25, 50))
+        b = threshold_binning(Dict("Ereco_min_ES" => thr, "range_Ereco_ES" => [1, hi], "nBins_Ereco_ES" => n), "ES", "T")
+        edges = collect(range(b.min, b.max, length = b.bin_number + 1))
+        @test b.bin_number == n + 1                          # n fitted bins + 1 underflow
+        @test edges[2] ≈ thr * 1e-3                          # threshold is the lower edge of bin 2
+        @test edges[end] ≈ hi * 1e-3
+        @test all(diff(edges) .≈ (hi - thr) * 1e-3 / n)      # uniform width above (and for) the underflow
+    end
+    @test_throws ErrorException threshold_binning(Dict("Ereco_min_CC" => 30, "range_Ereco_CC" => [1, 25], "nBins_Ereco_CC" => 10), "CC", "T")
+end

@@ -114,6 +114,25 @@ function load_earth_normalisation_prior(jld2_file::String; required::Bool=true)
 end
 
 """
+    threshold_binning(block, channel, name) -> (bin_number, min, max)   [GeV]
+
+Reco-energy binning built from the analysis threshold: `nBins_Ereco_<ch>` uniform bins of width
+w = (range_max − Ereco_min)/nBins span [Ereco_min, range_max], plus one bin below them. The
+response and background code stretch the outer bins to ±∞, so the lowest bin is the underflow
+(−∞, Ereco_min), never fitted, and the highest also collects the overflow. The threshold is
+always a bin edge, and the fit starts exactly at it. `range_Ereco_<ch>[1]` is not used.
+"""
+function threshold_binning(block, ch, name)
+    thr = Float64(block["Ereco_min_$ch"])
+    hi  = Float64(block["range_Ereco_$ch"][2])
+    n   = Int(block["nBins_Ereco_$ch"])
+    thr < hi || error("Detector $name: Ereco_min_$ch = $thr MeV must be below range_Ereco_$ch[2] = $hi MeV")
+    n >= 1   || error("Detector $name: nBins_Ereco_$ch must be ≥ 1")
+    w = (hi - thr) / n
+    return (bin_number = n + 1, min = (thr - w) * 1e-3, max = hi * 1e-3)
+end
+
+"""
     parse_detector_block(block, name) -> NamedTuple
 
 Parse one entry from the `detectors:` YAML section (or the flat top-level config
@@ -166,12 +185,8 @@ function parse_detector_block(block::Dict, name::String)
         CC_bg_norms             = Float64.(block["CC_background_normalisations"]),
         ES_bg_sys               = Float64.(block["ES_background_systematics"]),
         CC_bg_sys               = Float64.(block["CC_background_systematics"]),
-        Ereco_bins_ES           = (bin_number=Int(block["nBins_Ereco_ES"]),
-                                   min=block["range_Ereco_ES"][1]*1e-3,
-                                   max=block["range_Ereco_ES"][2]*1e-3),
-        Ereco_bins_CC           = (bin_number=Int(block["nBins_Ereco_CC"]),
-                                   min=block["range_Ereco_CC"][1]*1e-3,
-                                   max=block["range_Ereco_CC"][2]*1e-3),
+        Ereco_bins_ES           = threshold_binning(block, "ES", name),
+        Ereco_bins_CC           = threshold_binning(block, "CC", name),
         E_threshold             = (ES=block["Ereco_min_ES"]*1e-3, CC=block["Ereco_min_CC"]*1e-3),
         cos_scatter_bins        = (bin_number=Int(block["nBins_cos_scatter"]), min=0.0, max=1.0),
         CC_mode                 = cc_mode,
