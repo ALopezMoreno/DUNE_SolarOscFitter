@@ -127,15 +127,24 @@ Status tags:
     on frozen synthetic samples (`tests/fixtures/`): ES and CC, two detectors, fixed and free
     backgrounds, semi-inclusive angular ES. It does not depend on the real (changing) inputs.
 
-5.6 Per-bin log L summed over bins equals total log L. `per_bin_llh` returns one result per
+5.6 Per-bin log L (`make_perbin_likelihood`, a diagnostic) summed over bins equals the total log L
+    minus the overflow (last, +∞) energy bin, which the diagnostic leaves out by design (it holds
+    little signal and dominated the bin-importance scores). `per_bin_llh` returns one result per
     detector. **[untested]**
 
 5.7 Derived mode processes every active detector; each detector's quantities equal what the
     single-detector version computed for it (all 88 keys of the first detector identical to the
-    previous code, 2026-10-15). **[tested]** `tests/derived_mode.jl`: on a synthetic weighted chain,
-    per-step asymmetries, weighted posterior-predictive means/variances, per-bin log-L means and the
-    best-fit oscillation map equal values computed directly, for both detectors; the Python loaders
-    read each detector back.
+    previous code, 2026-10-15). **[tested]** `tests/derived_mode.jl`, on a synthetic weighted chain
+    with three detectors (ES+CC, semi-inclusive angular, pure inclusive), against values computed
+    directly: per-step asymmetries; posterior-predictive means, variances and 1/3σ bands;
+    background and signal-only arrays; per-bin log-L means, variances and correlations; CC
+    background components summing to the total; best-fit oscillation map; no CC keys without a
+    CC channel.
+
+5.8 The Python loaders (`utils/posteriorHelpers.py`) return the requested detector's derived values
+    and fail, rather than fall back, when a file cannot provide that detector, when chains resolve
+    to different detectors, or when a per-step derived array does not match the chain length
+    (chain resumed after deriving). **[tested]** (values and unknown detector, in `derived_mode.jl`)
 
 ## 6. Gradients
 
