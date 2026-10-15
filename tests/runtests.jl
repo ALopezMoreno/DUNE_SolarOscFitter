@@ -13,6 +13,7 @@ include(joinpath(@__DIR__, "test_config_and_backgrounds.jl"))
 include(joinpath(@__DIR__, "test_es_xsec.jl"))
 include(joinpath(@__DIR__, "test_osc_night.jl"))
 include(joinpath(@__DIR__, "test_response_and_backgrounds.jl"))
+include(joinpath(@__DIR__, "test_input_checks.jl"))
 
 # End-to-end test of derived mode on the two-detector fixtures (own process: it runs the full
 # setup; ~1 min). On by default; JULIA_SKIP_DERIVED=1 skips it.
