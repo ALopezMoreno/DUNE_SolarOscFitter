@@ -182,4 +182,17 @@ end
         @test all(diff(edges) .≈ (hi - thr) * 1e-3 / n)      # uniform width above (and for) the underflow
     end
     @test_throws ErrorException threshold_binning(Dict("Ereco_min_CC" => 30, "range_Ereco_CC" => [1, 25], "nBins_Ereco_CC" => 10), "CC", "T")
+
+    # The threshold is exactly the second edge (no rounding), so the first fitted bin is bin 2
+    # and an event at the threshold is in it. Includes Ereco_min = 0, where a relative tolerance
+    # would vanish, and grids where range() lands one ulp off.
+    for thr in (0, 0.1, 3, 5), (hi, n) in ((20, 29), (25, 3), (25, 7), (25, 40), (15, 30))
+        b = threshold_binning(Dict("Ereco_min_ES" => thr, "range_Ereco_ES" => [1, hi], "nBins_Ereco_ES" => n), "ES", "T")
+        e = ereco_edges(b)
+        @test e[2] == thr * 1e-3
+        e[1] = -Inf; e[end] = Inf
+        @test findfirst(x -> x >= thr * 1e-3, e) == 2
+        h, _ = create_histogram([thr * 1e-3, thr * 1e-3 - 1e-9], (bin_number = b.bin_number, min = b.min, max = b.max, bins = e), normalise = false)
+        @test h[1] == 1 && h[2] == 1                    # just below → underflow, at threshold → first fitted bin
+    end
 end

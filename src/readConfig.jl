@@ -129,7 +129,7 @@ function threshold_binning(block, ch, name)
     thr < hi || error("Detector $name: Ereco_min_$ch = $thr MeV must be below range_Ereco_$ch[2] = $hi MeV")
     n >= 1   || error("Detector $name: nBins_Ereco_$ch must be ≥ 1")
     w = (hi - thr) / n
-    return (bin_number = n + 1, min = (thr - w) * 1e-3, max = hi * 1e-3)
+    return (bin_number = n + 1, min = (thr - w) * 1e-3, max = hi * 1e-3, threshold = thr * 1e-3)
 end
 
 """
@@ -154,22 +154,6 @@ function parse_detector_block(block::Dict, name::String)
     # the ES channel while the backward ones are also added to CC as mis-ID (counted twice).
     if semi_inclusive_analysis && !Bool(block["use_scattering_info"])
         error("semiInclusiveMode requires use_scattering_info: true for detector $name")
-    end
-    # The forward/backward split needs the scattering angle: without it every ES event stays in
-    # the ES channel while the backward ones are also added to CC as mis-ID (counted twice).
-    if semi_inclusive_analysis && !Bool(block["use_scattering_info"])
-        error("semiInclusiveMode requires use_scattering_info: true for detector $name")
-    end
-    # The first Ereco bin extends to -Inf (it collects everything reconstructed below the
-    # range), so it must sit below the analysis threshold.
-    for ch in ("ES", "CC")
-        lo, hi = block["range_Ereco_$ch"]
-        width  = (hi - lo) / block["nBins_Ereco_$ch"]
-        if block["Ereco_min_$ch"] < lo + width
-            @warn "Detector $name: Ereco_min_$ch = $(block["Ereco_min_$ch"]) MeV leaves the first $ch Ereco bin " *
-                  "in the fit, but that bin also holds all events reconstructed below $lo MeV. " *
-                  "Set Ereco_min_$ch ≥ $(lo + width) MeV or lower range_Ereco_$ch."
-        end
     end
     return (
         name                    = name,

@@ -172,6 +172,12 @@ saved = jldopen(f -> Dict(k => f[k] for k in keys(f) if startswith(k, "derived_"
                 @test bd.in_fit == ((1:nrow(bd)) .>= getfield(li, Symbol("index_", ch)))
             end
 
+            # the fit starts at bin 2, whose lower edge is the threshold (Ereco_min_*)
+            @test li.index_ES == 2 && li.index_CC == 2
+            @test saved[key("Ereco_edges_ES")][2] ≈ cfg["detectors"][dname]["Ereco_min_ES"]
+            has_CC && @test saved[key("Ereco_edges_CC")][2] ≈ cfg["detectors"][dname]["Ereco_min_CC"]
+            @test saved[key("Ereco_edges_ES")][1] >= 0                     # underflow drawn from ≥ 0
+
             # layout entries
             @test saved[key("index_ES")] == li.index_ES && saved[key("index_CC")] == li.index_CC
             @test length(saved[key("Ereco_edges_ES")]) == cfgd.Ereco_bins_ES.bin_number + 1

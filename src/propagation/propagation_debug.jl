@@ -236,6 +236,10 @@ function save_debug_data(unoscillatedSample, responseMatrices, params,
         f["BG_angular"] = det_flags.angular_reco ? d.BG_angular : zeros(0, 0)
         f["Ereco_min"]  = Float64(Ereco_bins_ES.min * 1e3)
         f["Ereco_max"]  = Float64(Ereco_bins_ES.max * 1e3)
+        # analysis threshold = lower edge of the first fitted bin (Ereco_min is the underflow bin's
+        # nominal lower edge, threshold − bin width)
+        f["Ereco_threshold"] = Float64(hasproperty(Ereco_bins_ES, :threshold) ? Ereco_bins_ES.threshold * 1e3 :
+                                                                                Ereco_bins_ES.min * 1e3)
         f["cos_min"]    = det_flags.angular_reco ? Float64(cos_scatter_bins.min) : 0.0
         f["cos_max"]    = det_flags.angular_reco ? Float64(cos_scatter_bins.max) : 1.0
 

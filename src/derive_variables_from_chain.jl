@@ -274,7 +274,9 @@ function finalize_detector(dd::DerivedDetector, N, mean_sin2, var_sin2, mean_dm2
         out[Symbol("data_", ch, "day")]   = getfield(li.nObserved, Symbol(ch, "_day"))
         out[Symbol("data_", ch, "night")] = getfield(li.nObserved, Symbol(ch, "_night"))
         bins = ch == "ES" ? cfg.Ereco_bins_ES : cfg.Ereco_bins_CC
-        out[Symbol("Ereco_edges_", ch)] = collect(range(bins.min, bins.max, length=bins.bin_number + 1)) .* 1e3
+        # finite edges in MeV; the underflow bin is drawn from max(threshold − width, 0)
+        edges = ereco_edges(bins); edges[1] = max(edges[1], 0.0)
+        out[Symbol("Ereco_edges_", ch)] = edges .* 1e3
     end
     out[:index_ES] = dd.iES
     out[:index_CC] = dd.iCC

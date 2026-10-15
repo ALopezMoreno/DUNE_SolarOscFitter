@@ -8,6 +8,19 @@ function extract_dataframes(filepaths::Vector{String})::Vector{DataFrame}
 end
 
 
+"""
+    ereco_edges(b) -> Vector{Float64}
+
+Finite reco-energy bin edges of a binning tuple `(bin_number, min, max[, threshold])`: uniform
+from min to max, with the second edge set exactly to the analysis threshold when the tuple
+carries one (see threshold_binning), so an event at the threshold is in the first fitted bin.
+"""
+function ereco_edges(b)
+    e = collect(range(b.min, b.max, length = b.bin_number + 1))
+    hasproperty(b, :threshold) && (e[2] = b.threshold)
+    return e
+end
+
 function create_histogram(dataRaw, bin_info; weights=nothing, normalise=true)
     """
     Create a histogram from data with optional weights and normalization.

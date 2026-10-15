@@ -52,6 +52,8 @@ with h5py.File(args.infile, "r") as f:
     BG_angular = f["BG_angular"][:].T
     Ereco_min  = float(f["Ereco_min"][()])
     Ereco_max  = float(f["Ereco_max"][()])
+    # Analysis threshold (first fitted bin's lower edge); older files: Ereco_min + 1 MeV, as before.
+    Ereco_thr  = float(f["Ereco_threshold"][()]) if "Ereco_threshold" in f else Ereco_min + 1
     cos_min    = float(f["cos_min"][()])
     cos_max    = float(f["cos_max"][()])
 
@@ -150,10 +152,10 @@ else:
     E_centers_reco = 0.5 * (E_edges_reco[:-1] + E_edges_reco[1:])
     cos_edges      = np.linspace(cos_min, cos_max, n_cos + 1)
 
-# Mask for energy bins above the analysis threshold (Ereco_min+1 = 3 MeV for default config).
+# Mask for energy bins at or above the analysis threshold.
 # Bins below this threshold contain huge backgrounds not used in the fit, which swamp
 # the angular plots when summed over energy.
-e_thresh_mask = E_centers_reco >= (Ereco_min + 1)
+e_thresh_mask = E_centers_reco >= Ereco_thr
 e_5mev_mask   = E_centers_reco >= 5.0
 e_10mev_mask  = E_centers_reco >= 10.0
 
@@ -390,7 +392,7 @@ with PdfPages(out_pdf) as pdf:
                 cmap="cividis")
 
         # 1D stacked spectrum (day only, above-threshold energy bins).
-        # Zero out sub-threshold bins to match x-axis clip on PAGE 7 (Ereco_min+1).
+        # Zero out sub-threshold bins to match x-axis clip on PAGE 7 (Ereco_thr).
         # CC_angular and BG_angular are day+night totals; multiply by 0.5 for day-only.
         es_day_1d = (ES_angular_day * e_thresh_mask).sum(axis=0)
         cc_day_1d = (CC_angular * e_thresh_mask).sum(axis=0) * 0.5
@@ -498,7 +500,7 @@ with PdfPages(out_pdf) as pdf:
                 ax.set_xlabel(r"$E_{\rm reco}$ [MeV]")
                 ax.set_ylabel("Events")
                 ax.set_title(r"Stacked Spectrum (linear)")
-                ax.set_xlim(Ereco_min + 1, Ereco_max)
+                ax.set_xlim(Ereco_thr, Ereco_max)
                 ax.set_ylim(bottom=0)
                 ax.legend(fontsize=10, loc="upper right")
 
@@ -511,7 +513,7 @@ with PdfPages(out_pdf) as pdf:
                 ax.set_xlabel(r"$E_{\rm reco}$ [MeV]")
                 ax.set_ylabel("Events")
                 ax.set_title(r"Components (log scale)")
-                ax.set_xlim(Ereco_min + 1, Ereco_max)
+                ax.set_xlim(Ereco_thr, Ereco_max)
                 ax.set_ylim(1e-1, 1e6)
                 ax.legend(fontsize=10, loc="upper right")
 
@@ -589,7 +591,7 @@ with PdfPages(out_pdf) as pdf:
         ax_lin.set_xlabel(r"$E_{\rm reco}\ [\mathrm{MeV}]$")
         ax_lin.set_ylabel(r"Events / bin")
         ax_lin.set_title(r"Stacked spectrum (linear)")
-        ax_lin.set_xlim(Ereco_min + 1, Ereco_max)
+        ax_lin.set_xlim(Ereco_thr, Ereco_max)
         ax_lin.set_ylim(bottom=0)
         ax_lin.legend(loc="upper right")
 
@@ -602,7 +604,7 @@ with PdfPages(out_pdf) as pdf:
         ax_log.set_xlabel(r"$E_{\rm reco}\ [\mathrm{MeV}]$")
         ax_log.set_ylabel(r"Events / bin")
         ax_log.set_title(r"Components (log scale)")
-        ax_log.set_xlim(Ereco_min + 1, Ereco_max)
+        ax_log.set_xlim(Ereco_thr, Ereco_max)
         ax_log.set_ylim(1e-1, 1e6)
         ax_log.legend(loc="upper right")
 
