@@ -2,13 +2,6 @@
 
 Deferred work, agreed with the maintainer. Remove items when done.
 
-## Analysis threshold (decide)
-
-- [ ] The fit starts at the first Ereco bin whose LOWER edge is above `Ereco_min` (setup.jl:
-      `findfirst(edge > threshold)`), so a bin starting exactly at the threshold is excluded. With
-      HD's `Ereco_min_CC: 5` and 0.8 MeV bins from 1 MeV, the fit starts at 5.8 MeV, not 5.0.
-      Changing it to `>=` changes the likelihood (regression reference update).
-
 ## Input format (parked)
 
 - [ ] Define in SPEC.md what `weights` means in signal and background samples (events per

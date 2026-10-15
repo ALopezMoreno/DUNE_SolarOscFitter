@@ -106,14 +106,17 @@ Status tags:
 4.4 `expected_rates` returns arrays with the documented shapes: day `(n_Ereco,)`, night
     `(n_cosz, n_Ereco)`. **[tested]** "expected_rates – wiring & shapes".
 
+4.4a Input samples are checked at setup (`src/inputChecks.jl`): a per-file table is logged, and
+    warnings are raised for pre-binned samples (about one row per distinct value, on a regular grid
+    with step ≥ 10 keV; quantised or Float32 event samples are not flagged), signal and ES background
+    samples with every event selected (efficiency 1), and byte-identical input files. The table's
+    "in window" counts selected events at or above the threshold (what the fit uses). A per-bin CSV of data, signal and
+    each background component at the truth is written per detector and channel; its components add
+    up to the total background at the truth and its data column equals the Asimov data.
+    **[tested]** `test_input_checks.jl`, `derived_mode.jl`.
+
 4.5 Inputs are event-level samples; rates are invariant (within MC statistics) to the input event order
     and to re-binning the analysis grid. **[untested] [inferred]**
-
-4.4a Input samples are checked at setup (`src/inputChecks.jl`): a per-file table is logged, and
-    warnings are raised for pre-binned samples (Ereco on a regular grid), ES background samples
-    with every event selected, and byte-identical input files. A per-bin CSV of data, signal and
-    each background component at the truth is written per detector and channel; its components add
-    up to the total background. **[tested]** `test_input_checks.jl`, `derived_mode.jl`.
 
 ## 5. Likelihood ([likelihood.md](docs/likelihood.md))
 

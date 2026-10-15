@@ -2,11 +2,11 @@
 inputChecks.jl — sanity checks on a detector's input samples, and a per-bin rate breakdown.
 
 check_input_files(det) runs before the samples are used and logs a per-file table (rows,
-selected rows, weight range, selected events in the fit window). It warns about:
+selected rows, weight range, selected events at or above the threshold). It warns about:
   - samples that look pre-binned (Ereco on a regular grid): the fitter needs event-level
     samples and re-bins them, so a pre-binned input aliases;
-  - ES background samples in which every event passes the selection (the efficiency needs the
-    unselected events; CC background files may hold only the selected ones);
+  - signal and ES background samples in which every event passes the selection (their
+    efficiency needs the unselected events; CC background files may hold only selected ones);
   - byte-identical input files (e.g. a "smeared" sample that was never smeared).
 
 save_rate_breakdown writes, per channel, the Asimov data, signal and each background component
@@ -15,19 +15,23 @@ per Ereco bin at the true parameters (CSV next to the other outputs), and logs t
 using CSV, DataFrames, Printf
 
 """
-    looks_prebinned(E) -> Bool
+    looks_prebinned(E; min_step = 1e-5) -> Bool
 
-True when the distinct values of `E` (at least 5) all lie on one regular grid, as for a
-histogram saved as bin centres. Event-level samples have continuous values and never do.
+True when `E` looks like a histogram saved as bin centres: (at least 5) distinct values with
+about one row per value, all on one regular grid whose step is at least `min_step` (GeV;
+10 keV). Event samples stored with limited precision (keV rounding, Float32) also sit on a
+grid, but a much finer one, and repeat values; neither is flagged. The grid tolerance accepts
+bin centres that went through Float32. Log-spaced histograms are not detected.
 """
-function looks_prebinned(E::AbstractVector)
-    u = sort!(unique(collect(skipmissing(E))))
+function looks_prebinned(E::AbstractVector; min_step = 1e-5)
+    v = collect(skipmissing(E))
+    u = sort!(unique(v))
     length(u) >= 5 || return false
+    length(u) >= 0.9 * length(v) || return false       # histograms have one row per bin
     d = diff(u)
     step = minimum(d)
-    step > 0 || return false
-    r = d ./ step
-    return all(x -> abs(x - round(x)) < 1e-6, r)
+    step >= min_step || return false
+    return all(x -> abs(x - round(x)) < 1e-3, d ./ step)
 end
 
 """
@@ -65,8 +69,9 @@ function input_file_summary(path, role, window)
 end
 
 function check_input_files(det)
-    win_ES = (det.E_threshold.ES, det.Ereco_bins_ES.max)
-    win_CC = (det.E_threshold.CC, det.Ereco_bins_CC.max)
+    # the fit uses everything reconstructed at or above the threshold (the last bin holds the overflow)
+    win_ES = (det.E_threshold.ES, Inf)
+    win_CC = (det.E_threshold.CC, Inf)
     n_ES = min(length(det.ES_filepaths_BG), length(det.ES_bg_norms), length(det.ES_bg_sys))
     n_CC = min(length(det.CC_filepaths_BG), length(det.CC_bg_norms), length(det.CC_bg_sys))
     files = Tuple{String,String,Tuple{Float64,Float64}}[]
@@ -79,7 +84,7 @@ function check_input_files(det)
     use_CC_bg && append!(files, [(p, "CC background", win_CC) for p in det.CC_filepaths_BG[1:n_CC]])
 
     rows = [input_file_summary(p, role, win) for (p, role, win) in files]
-    @logmsg Setup "  Input samples (selected events in the fit window are weighted):"
+    @logmsg Setup "  Input samples (\"in window\": selected events, weighted, reconstructed at or above Ereco_min):"
     @logmsg Setup @sprintf("    %-14s %9s %9s  %-21s %12s  %s", "role", "rows", "selected", "weights", "in window", "file")
     for r in rows
         @logmsg Setup @sprintf("    %-14s %9d %9d  [%8.3g, %8.3g] %12.4g  %s",
@@ -89,9 +94,10 @@ function check_input_files(det)
         r.prebinned && @warn "[$(det.name)] $(r.file) ($(r.role)) looks pre-binned: its Ereco values lie " *
                              "on a regular grid. The fitter needs event-level samples; a histogram " *
                              "re-binned into the analysis bins aliases."
-        # ES backgrounds need the unselected events too (efficiency = selected / total). CC
-        # background files may legitimately hold only the selected events, so no check there.
-        if r.role == "ES background" && r.has_mask && r.selected == r.rows && r.rows > 0
+        # Signal samples and ES backgrounds need the unselected events too (efficiency =
+        # selected / total). CC background files may legitimately hold only the selected events.
+        if r.role in ("ES νe signal", "ES νμτ signal", "CC signal", "ES background") &&
+           r.has_mask && r.selected == r.rows && r.rows > 0
             @warn "[$(det.name)] every event of $(r.file) ($(r.role)) passes the selection (mask = true " *
                   "for all $(r.rows) rows), so its selection efficiency is 1. Was the selection applied?"
         end
