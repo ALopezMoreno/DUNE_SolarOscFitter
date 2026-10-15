@@ -167,8 +167,11 @@ for (det_name, det) in detector_configs
     )
 
     # ── Energy threshold indices ───────────────────────────────────────────
-    index_ES_det = findfirst(x -> x > det.E_threshold.ES, Ereco_bins_ES_ext.bins)
-    index_CC_det = findfirst(x -> x > det.E_threshold.CC, Ereco_bins_CC_ext.bins)
+    # First fitted bin: the one whose lower edge is the threshold (bin 2 by construction, see
+    # threshold_binning; the tolerance absorbs the rounding of the edge grid).
+    _at_or_above(thr) = x -> x >= thr - 1e-9 * abs(thr)
+    index_ES_det = findfirst(_at_or_above(det.E_threshold.ES), Ereco_bins_ES_ext.bins)
+    index_CC_det = findfirst(_at_or_above(det.E_threshold.CC), Ereco_bins_CC_ext.bins)
 
     if isnothing(index_ES_det)
         error("[$det_name] E_threshold.ES = $(det.E_threshold.ES) exceeds all ES reco-energy bins.")

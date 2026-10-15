@@ -77,8 +77,10 @@ Status tags:
 4.1 Each response-matrix row (fixed E_true) sums to 1 over all E_reco, with events reconstructed
     outside the window in the first/last (±∞) bins; they are not redistributed into the window.
     Selection efficiency is applied per E_reco bin. **[tested]** `test_response_and_backgrounds.jl`.
-    The underflow bin is never fitted (the bin containing the threshold is excluded); the overflow
-    bin always is.
+    Binning is built from the analysis threshold: `nBins_Ereco` uniform fitted bins span
+    [`Ereco_min`, range max], plus one underflow bin (−∞, `Ereco_min`) that is never fitted; the
+    last fitted bin also holds the overflow. The fit starts exactly at the threshold. **[tested]**
+    (`threshold_binning`, `test_config_and_backgrounds.jl`)
 
 4.2 Each ES background has its own normalisation parameter `ES_bg_norm_i`. **[tested]**
 
