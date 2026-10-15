@@ -11,6 +11,14 @@ include(joinpath(@__DIR__, "..", "src", "inputChecks.jl"))
         @test looks_prebinned([0.0035, 0.0037, 0.0041, 0.0049, 0.0051, 0.0091]) # grid with gaps
         @test !looks_prebinned(1e-3 .* (3 .+ 10 .* rand(500)))                  # event-level sample
         @test !looks_prebinned([0.004, 0.005, 0.006])                           # too few values to tell
+        # bin centres that went through Float32 (ROOT TH1F) are still histograms
+        @test looks_prebinned(Float64.(Float32.(0.0035:0.0002:0.0221)))
+        # event-level samples stored with limited precision are not
+        ev = 1e-3 .* (3 .+ 15 .* rand(100_000))
+        @test !looks_prebinned(round.(ev, digits=6))                            # 1 keV rounding
+        @test !looks_prebinned(round.(ev, digits=8))                            # 10 eV rounding
+        @test !looks_prebinned(Float64.(Float32.(ev)))                          # Float32 upcast
+        @test !looks_prebinned(round.(ev[1:1000], digits=7))                    # few events, 0.1 keV
     end
 
     mktempdir() do dir
@@ -37,7 +45,7 @@ include(joinpath(@__DIR__, "..", "src", "inputChecks.jl"))
             CC_bg_norms = ones(length(CC_bg)), CC_bg_sys = zeros(length(CC_bg)))
 
         @testset "warnings" begin
-            # pre-binned CC background; signal files identical to each other (same path is not "identical files")
+            # pre-binned CC background (the signal files all use the same path: not "identical files")
             @test_logs (:warn, r"looks pre-binned") min_level=Logging.Warn check_input_files(det())
             # ES background with every event selected
             @test_logs (:warn, r"passes the selection") (:warn, r"looks pre-binned") min_level=Logging.Warn check_input_files(det(ES_bg=[all_sel]))
@@ -52,7 +60,7 @@ include(joinpath(@__DIR__, "..", "src", "inputChecks.jl"))
             r = only(filter(r -> r.role == "CC background", rows))
             df = CSV.read(all_sel, DataFrame)
             @test r.rows == 200 && r.selected == 200
-            @test r.in_window ≈ count(4e-3 .<= df.Ereco .<= 20e-3)
+            @test r.in_window ≈ count(df.Ereco .>= 4e-3)                         # threshold to +∞
         end
 
         @testset "save_rate_breakdown" begin

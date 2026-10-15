@@ -163,9 +163,12 @@ saved = jldopen(f -> Dict(k => f[k] for k in keys(f) if startswith(k, "derived_"
                 bd = CSV.read(joinpath(tmp, "derived_$(dname)_$(ch)_breakdown.csv"), DataFrame)
                 bgcols = filter(c -> startswith(c, "bg_"), names(bd))
                 f = ch == "CC" && cfgd.semi_inclusive_analysis ? nf * li.Mreco.CC_split.below : nf
-                @test bd.background ≈ sum(bd[!, c] for c in bgcols)
-                @test bd.background ≈ f .* getfield(r_true, Symbol("BG_", ch, "_tot")) rtol=1e-10
-                @test bd.data ≈ bd.signal .+ bd.background
+                @test sum(bd[!, c] for c in bgcols) ≈ f .* getfield(r_true, Symbol("BG_", ch, "_tot")) rtol=1e-10
+                # data = the Asimov data, summed over day and night (and over cos θ for angular ES)
+                obs_d, obs_n = getfield(li.nObserved, Symbol(ch, "_day")), getfield(li.nObserved, Symbol(ch, "_night"))
+                ang = ch == "ES" && cfgd.angular_reco
+                @test bd.data ≈ (ang ? vec(sum(obs_d, dims=1)) .+ vec(sum(obs_n, dims=(1, 3))) :
+                                       obs_d .+ vec(sum(obs_n, dims=1))) rtol=1e-12
                 @test bd.in_fit == ((1:nrow(bd)) .>= getfield(li, Symbol("index_", ch)))
             end
 
