@@ -109,6 +109,12 @@ Status tags:
 4.5 Inputs are event-level samples; rates are invariant (within MC statistics) to the input event order
     and to re-binning the analysis grid. **[untested] [inferred]**
 
+4.4a Input samples are checked at setup (`src/inputChecks.jl`): a per-file table is logged, and
+    warnings are raised for pre-binned samples (Ereco on a regular grid), ES background samples
+    with every event selected, and byte-identical input files. A per-bin CSV of data, signal and
+    each background component at the truth is written per detector and channel; its components add
+    up to the total background. **[tested]** `test_input_checks.jl`, `derived_mode.jl`.
+
 ## 5. Likelihood ([likelihood.md](docs/likelihood.md))
 
 5.1 Poisson log L matches the reference formula; equals 0 for n_exp = n_obs; is finite for zero counts.

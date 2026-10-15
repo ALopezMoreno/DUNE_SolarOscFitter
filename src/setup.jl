@@ -33,6 +33,7 @@ include(joinpath(@__DIR__, "exposure.jl"))
 include(joinpath(@__DIR__, "unoscillatedSample.jl"))
 include(joinpath(@__DIR__, "response.jl"))
 include(joinpath(@__DIR__, "backgrounds.jl"))
+include(joinpath(@__DIR__, "inputChecks.jl"))
 
 # Build Earth propagation paths (shared; the legacy NumOsc night calculation uses
 # them, and osc_setup.jl checks NightOsc's Earth layers against them)
@@ -95,6 +96,9 @@ for (det_name, det) in detector_configs
     if det.semi_inclusive_analysis
         @logmsg Setup ("  Semi-inclusive mode: forward hemisphere inclusive, backward hemisphere CC + mis-ID ES.")
     end
+
+    # ── Input sample checks (per-file table and warnings) ─────────────────
+    check_input_files(det)
 
     # ── Build unoscillated sample ──────────────────────────────────────────
     unoscillatedSample_det, bin_edges_det, _ = build_unoscillated_sample(det)
@@ -260,6 +264,23 @@ for (det_name, det) in detector_configs
             @logmsg Setup "    of which BG: $(sci_notation(_cc_bg_factored))"
         end
     end
+    # ── Per-bin data / signal / background breakdown at the truth ──────────
+    night_factor = 0.5 * (1.0 + sum(exposure_weights))   # day + night total of a background spectrum
+    if det.ES_mode
+        save_rate_breakdown(outFile, det_name, "ES", Ereco_bins_ES_ext.bins, index_ES_det, ES_combined,
+                            backgrounds_det.ES, backgrounds_det.ES_conv, backgrounds_det.ES_par_counts,
+                            ES_bg_norms_true_det, bg_component_names(det.ES_filepaths_BG, length(backgrounds_det.ES)),
+                            night_factor)
+    end
+    if det.CC_mode && (!det.inclusive_analysis || det.semi_inclusive_analysis)
+        # semi-inclusive: the CC channel holds the backward fraction of CC signal and backgrounds
+        cc_factor = det.semi_inclusive_analysis ? night_factor * responseMatrices_det.CC_split.below : night_factor
+        save_rate_breakdown(outFile, det_name, "CC", Ereco_bins_CC_ext.bins, index_CC_det, CC_combined,
+                            backgrounds_det.CC, backgrounds_det.CC_conv, backgrounds_det.CC_par_counts,
+                            CC_bg_norms_true_det, bg_component_names(det.CC_filepaths_BG, length(backgrounds_det.CC)),
+                            cc_factor)
+    end
+
     @logmsg Setup @sprintf("  D-N asymmetry ES: %.4f%%", eff_asymm_ES * 100)
     @logmsg Setup @sprintf("  D-N asymmetry CC: %.4f%%", eff_asymm_CC * 100)
 

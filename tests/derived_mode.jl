@@ -6,14 +6,15 @@ fixture config (tests/fixtures/regression_config.yaml), runs derived mode on it,
 output against values computed here directly from `expected_rates` and the per-bin likelihood:
 per-step day-night asymmetries, weighted posterior-predictive means, variances and quantile
 bands, background and signal-only arrays, per-bin log-L means, variances and correlations, the
-CC background components, the shared best-fit oscillation map and the file layout. A third,
+CC background components, the shared best-fit oscillation map and the file layout, plus the
+per-bin breakdown CSVs written at setup (src/inputChecks.jl). A third,
 purely inclusive detector (FXC, no CC channel) is added to this test's copy of the config. If python3 with h5py is
 available it also checks that utils/posteriorHelpers.py reads each detector's values back and
 rejects an unknown detector.
 
     julia --project tests/derived_mode.jl        (~1–2 min; run by tests/runtests.jl)
 =#
-using Test, YAML, JLD2
+using Test, YAML, JLD2, CSV, DataFrames
 
 const ROOT = normpath(joinpath(@__DIR__, ".."))
 tmp = mktempdir()
@@ -153,6 +154,19 @@ saved = jldopen(f -> Dict(k => f[k] for k in keys(f) if startswith(k, "derived_"
                 @test vec(sum(comps, dims=2)) ≈ 0.5 .* r_true.BG_CC_tot rtol=1e-10
                 @test length(split(saved[key("CCbg_comp_names")], ",")) == size(comps, 2)
                 @test saved[key("data_CCday")] == li.nObserved.CC_day
+            end
+
+            # setup's per-bin breakdown CSVs (src/inputChecks.jl): components add up to the total
+            # background at the truth (day + all night bins; CC × backward fraction if semi-inclusive)
+            nf = 0.5 * (1 + sum(exposure_weights))
+            for (ch, _) in chans
+                bd = CSV.read(joinpath(tmp, "derived_$(dname)_$(ch)_breakdown.csv"), DataFrame)
+                bgcols = filter(c -> startswith(c, "bg_"), names(bd))
+                f = ch == "CC" && cfgd.semi_inclusive_analysis ? nf * li.Mreco.CC_split.below : nf
+                @test bd.background ≈ sum(bd[!, c] for c in bgcols)
+                @test bd.background ≈ f .* getfield(r_true, Symbol("BG_", ch, "_tot")) rtol=1e-10
+                @test bd.data ≈ bd.signal .+ bd.background
+                @test bd.in_fit == ((1:nrow(bd)) .>= getfield(li, Symbol("index_", ch)))
             end
 
             # layout entries
