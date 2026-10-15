@@ -116,21 +116,6 @@ function llh_ES_angle_perbin(d::LikelihoodInputs, parameters, rates;
     return (ES_day = llh_ES_day_bins, ES_night = llh_ES_night_bins)
 end
 
-function llh_ES_angle_conditional(d::LikelihoodInputs, parameters, angle_rates)
-    idx  = d.index_ES
-    nObs = d.nObserved
-
-    loglh_ES_angle = sum(
-    conditional_poissonLogLikelihood(col, obs_col)
-    for (col, obs_col) in zip(eachcol(angle_rates[:, idx:end]),
-                              eachcol(nObs.ES_angular[:, idx:end]))
-    )
-
-    return loglh_ES_angle
-end
-
-## NOTE: NO PERBIN CONTRIBUTION ON THIS SO FAR
-
 
 ###################################
 # --- CC sample contributions --- #

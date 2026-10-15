@@ -92,16 +92,6 @@ function block_average(vec::AbstractVector, block_size::Int=5)
 end
 
 # Generic wrapper function for block averaging
-function block_average(arr::AbstractArray, block_dims...)
-    """Dispatch to appropriate block averaging function based on array dimension"""
-    if ndims(arr) == 1
-        return block_average(arr, block_dims...)
-    elseif ndims(arr) == 2
-        return block_average(arr, block_dims...)
-    else
-        error("Unsupported array dimension: $(ndims(arr)). Only 1D and 2D arrays are supported.")
-    end
-end
 
 
 # Helper functions to fold oscillated spectra with response matrices and efficiencies

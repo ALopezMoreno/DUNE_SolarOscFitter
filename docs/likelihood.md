@@ -34,7 +34,7 @@ When `inclusiveMode: true`, CC events are folded into the ES likelihood; the sep
 **Likelihood selector:**
 
 - Standard ES: `llh_ES_poisson` (Poisson over energy bins)
-- Angular ES: `llh_ES_angle` (conditional multinomial over scatter-angle bins within each energy bin)
+- Angular ES: `llh_ES_angle` (Poisson over every (cos θ_scatter, E_reco) bin, day and each night zenith bin; see §3)
 - Standard CC: `llh_CC_poisson`
 - CC with MC stats: `llh_CC_barlowBeeston`
 
@@ -74,39 +74,26 @@ When `e → 0` and `m > 0`, `log(ε) ≈ −27.6` produces a large, smooth penal
 
 ---
 
-## 3. Conditional (shape-only) log-likelihood
+## 3. Angular ES log-likelihood
 
-**Function:** `conditional_poissonLogLikelihood(nExpected, nMeasured)` (`likelihood_statistical.jl:72–145`)
+**Function:** `llh_ES_angle` (`likelihood_builder.jl`)
 
-Used for angular reconstruction (`llh_ES_angle`). Compares the *shape* of the scatter-angle distribution within each reconstructed energy bin, marginalising over the total count.
+With `use_scattering_info: true` the ES rates are binned in (cos θ_scatter, E_reco), by day and per
+night zenith bin, and `llh_ES_angle` sums the Poisson log-likelihood (§2) over all of those bins
+above the energy threshold.
 
-**Derivation:** For Poisson counts with expected rates μⱼ in angular bin j within a fixed energy bin:
-
-```
-P(c = j | b) = μⱼ / Σⱼ μⱼ       (conditional probabilities)
-```
-
-The conditional log-likelihood:
+This already contains the angular shape information. For Poisson counts nⱼ with expectations μⱼ in
+the angle bins j of one energy bin, with N = Σⱼ nⱼ and M = Σⱼ μⱼ,
 
 ```
-log L_cond = Σⱼ nⱼ · log(μⱼ / Σⱼ μⱼ)
-           = Σⱼ nⱼ · [log μⱼ − log(Σⱼ μⱼ)]
+∏ⱼ Poisson(nⱼ | μⱼ) = Poisson(N | M) × Multinomial(n₁…n_k | N, μⱼ / M)
 ```
 
-Implemented as a KL-divergence term that cancels the data-only constant:
-
-```julia
-llh -= n * (log(n / Σn) - log(μ / Σμ))     # for n > 0, μ > 0
-llh += -1e9                                  # for n > 0, μ = 0 (observed where forbidden)
-```
-
-**Edge cases:**
-- `Σμ = 0`, `Σn = 0`: returns 0 (no constraint)
-- `Σμ = 0`, `Σn > 0`: returns `−1e9` (large penalty)
-
-This is added to the Poisson log-likelihood for the total-count term to form the full joint likelihood `P(b) · P(c|b)`.
-
-**Known limitation:** When `Σμ = 0` and `Σn = 0`, the function returns 0 rather than a penalty. This is intentional pending the addition of a background floor — once a floor is in place, `Σμ` will never be exactly 0 and this case will not arise.
+so the 2-D Poisson log-likelihood is exactly the energy-spectrum term plus the conditional
+(shape-only) angular term. A separate conditional likelihood would count the angular shape twice
+if added, and would discard the rate and spectrum if used alone. It would only be the right tool
+if the angular normalisation per energy bin were not trusted; the code no longer contains one
+(removed in October 2026, see git history).
 
 ---
 
