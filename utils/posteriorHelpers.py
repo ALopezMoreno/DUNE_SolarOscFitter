@@ -42,6 +42,9 @@ def _is_batched_jld2(h5file):
     return any(k.startswith("batch_") for k in h5file.keys())
 
 
+_UNSET = object()
+
+
 def derived_detectors(h5file):
     """Detectors written by derived mode (src/derive_variables_from_chain.jl), in config
     order; [] for files derived before multi-detector support (unprefixed keys)."""
@@ -56,6 +59,9 @@ def pick_derived_detector(h5file, detector=None, verbose=True):
     """Choose the detector whose derived_* keys to read (default: the first one)."""
     dets = derived_detectors(h5file)
     if not dets:
+        if detector is not None:
+            raise ValueError(f"{h5file.filename} has no per-detector derived quantities (derived before "
+                             f"multi-detector support): cannot select detector '{detector}'. Re-run derived mode.")
         return None
     if detector is None:
         detector = dets[0]
@@ -94,10 +100,16 @@ def _read_jld2_batched(h5file, keys, detector=None):
             if k in g:
                 accum[k].append(np.array(g[k][()]))
     out = {k: np.concatenate(v) if v else np.array([]) for k, v in accum.items()}
+    n_steps = sum(len(h5file[b]["stepno"]) for b in batch_names)
     for k in keys:
         stored = resolve_key(h5file, k, detector)
         if out[k].size == 0 and stored in h5file:
-            out[k] = np.array(h5file[stored][()])
+            arr = np.array(h5file[stored][()])
+            # One entry per chain step; a chain resumed after deriving has more steps than the array.
+            if arr.ndim == 1 and arr.shape[0] != n_steps:
+                raise ValueError(f"{h5file.filename}: '{stored}' has {arr.shape[0]} entries but the chain has "
+                                 f"{n_steps} steps (resumed after deriving?). Re-run derived mode.")
+            out[k] = arr
     return out
 
 
@@ -149,6 +161,7 @@ def load_posterior(mcmc_chains, parameters, burnin=100, test=None, exclude_chain
     results['weights'] = []
     results['stepno'] = []
 
+    chosen_detector = _UNSET          # every chain must resolve to the same derived detector
     for mcmc_chain in valid_chains:
         with h5py.File(mcmc_chain + ".jld2", 'r') as f:
             batched = _is_batched_jld2(f)
@@ -168,6 +181,10 @@ def load_posterior(mcmc_chains, parameters, burnin=100, test=None, exclude_chain
             all_keys  = list(parameters) + meta_keys
 
             det = pick_derived_detector(f, detector, verbose=False)
+            if chosen_detector is not _UNSET and det != chosen_detector:
+                raise ValueError(f"{mcmc_chain}: derived detector '{det}' differs from '{chosen_detector}' "
+                                 "used for the previous chain (mixed old/new derived files or detector lists).")
+            chosen_detector = det
             raw = _read_jld2_batched(f, all_keys, det) if batched else _read_jld2_flat(f, all_keys, det)
 
         stepno  = raw['stepno']
@@ -377,6 +394,8 @@ def load_bin_diagnostics(mcmc_chains, require_all=True, verbose=True, detector=N
 
     for c in chains:
         with h5py.File(c + ".jld2", "r") as f:
+            if pick_derived_detector(f, detector, verbose=False) != detector:
+                raise ValueError(f"{c}: derived detectors differ from the first chain's; load them separately.")
             have = set(f.keys())
             for k in load_keys:
                 stored = resolve_key(f, k, detector)   # per-detector key, or shared/legacy

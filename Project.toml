@@ -33,7 +33,8 @@ YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 
 [compat]
 # Bounds at the versions the results were produced with; Manifest.toml pins the exact ones.
-# Enzyme: the custom NightOsc rule works around a nested-codegen bug of the 0.13.15x series.
+# Enzyme: tested with 0.13.150 (the custom NightOsc rule works around a nested-codegen bug seen
+# there). The bound allows later 0.13.x: after updating, rerun tests/regression_likelihood.jl night --grad.
 julia = "1.12"
 AdvancedHMC = "0.8"
 AutoDiffOperators = "0.3"
