@@ -39,5 +39,6 @@ flagged the HD CC inputs of May/June 2026.
 
 - [ ] Barlow–Beeston for limited MC statistics on the backgrounds (radiological weights 5.3e4
       per event). `barlowBeestonLogLikelihood` exists; check how it is wired in.
-- [ ] Energy-scale and resolution systematics.
+- [ ] Energy-scale and resolution systematics. (An unfinished energy-scale sketch, `src/responseSys.jl`,
+      was removed as dead code on 2026-10-15; see `git log --all -- src/responseSys.jl`.)
 - [ ] R-hat / ESS convergence diagnostics; toy-data coverage tests.

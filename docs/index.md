@@ -40,7 +40,7 @@ propagateSamples()
 |------|---------------|
 | [oscillation_physics.md](oscillation_physics.md) | PMNS matrix, MSW effect, Earth matter propagation (NightOsc default, legacy NumOsc), gradient flow (ForwardDiff, Enzyme) |
 | [event_rate_pipeline.md](event_rate_pipeline.md) | MC inputs → response matrices → oscillated samples → final event counts per bin |
-| [likelihood.md](likelihood.md) | Poisson, conditional (shape-only), and Barlow-Beeston likelihood formulas; assembly |
+| [likelihood.md](likelihood.md) | Poisson (incl. the angular ES likelihood) and Barlow-Beeston likelihood formulas; assembly |
 | [mcmc_and_priors.md](mcmc_and_priors.md) | HMC setup, prior definitions, batch MCMC, Earth systematics approximation |
 | [configuration_reference.md](configuration_reference.md) | Every `config.yaml` key: type, default, effect |
 
