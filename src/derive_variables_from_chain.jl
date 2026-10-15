@@ -113,8 +113,8 @@ else
 end
 
 # Per-component CC background day spectra at Asimov truth, for stacked plots.
-# Each raw component (_li.BG.CC[i]) is already ×10×CC_exposure; apply the truth-norm
-# conversion (CC_conversions = norm/2.2e-6) and the 0.5 day factor, mirroring
+# Each raw component (_li.BG.CC[i]) is already × module mass × CC_exposure; apply the truth-norm
+# conversion (CC_conv × norm = norm / reference flux) and the 0.5 day factor, mirroring
 # normalize_backgrounds. Names come from the detector's CC background file basenames.
 _det_cfg     = first(values(detector_configs))
 _cc_comp_day = Vector{Vector{Float64}}()
@@ -122,7 +122,7 @@ let ni = 1
     for (i, beh) in enumerate(_li.BG.CC_par_counts)
         if beh != 0
             nrm = true_params[Symbol("$(_li.det_name)_CC_bg_norm_$ni")]
-            push!(_cc_comp_day, 0.5 .* _li.BG.CC[i] .* (nrm / 2.2e-6))
+            push!(_cc_comp_day, 0.5 .* _li.BG.CC[i] .* (_li.BG.CC_conv[i] * nrm))
             ni += 1
         else
             push!(_cc_comp_day, 0.5 .* _li.BG.CC[i])

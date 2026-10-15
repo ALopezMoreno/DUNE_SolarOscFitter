@@ -41,10 +41,14 @@ function create_response_matrix(data, bin_info_x, bin_info_y)
     # Initialize the response matrix
     contribution_matrix = zeros(Float64, bin_number_x, bin_number_y)
 
-    # Fill the response matrix by binning MC events
+    # Fill the response matrix by binning MC events. The range check uses the bin edges, not
+    # min/max: with extended (±Inf) edges, out-of-window events belong in the first/last bin.
+    # Checking min/max dropped them and the row normalisation then pushed their probability
+    # into the in-window bins (ES rates 15–50 % too high).
+    lo_x, hi_x = first(bins_x), last(bins_x)
+    lo_y, hi_y = first(bins_y), last(bins_y)
     @inbounds for (x_val, y_val) in zip(x, y)
-        # Check if values are within analysis bounds
-        if min_val_x <= x_val <= max_val_x && min_val_y <= y_val <= max_val_y
+        if lo_x <= x_val <= hi_x && lo_y <= y_val <= hi_y
             # Find appropriate bins (searchsortedlast gives left-inclusive bin index)
             true_bin = min(searchsortedlast(bins_x, x_val), bin_number_x)
             reco_bin = min(searchsortedlast(bins_y, y_val), bin_number_y)
@@ -66,13 +70,17 @@ function create_response_matrix(data, bin_info_x, bin_info_y)
     return contribution_matrix
 end
 
-# Helper function to safely get weights if they exist
-function get_weights(df, mask=nothing)
-    if hasproperty(df, :weights)
-        return mask !== nothing ? df.weights[mask] : df.weights
-    else
-        return nothing
+# Signal response matrices and efficiencies are built from unweighted event counts. What a
+# non-unit `weights` column means in a signal sample (e.g. a cross-section weight, which the
+# fitter applies itself) is not yet fixed, so such weights are ignored, loudly.
+function warn_if_signal_weights_ignored(label, df, path)
+    "weights" in names(df) || return nothing
+    w = skipmissing(df.weights)
+    if !all(==(1), w)
+        @warn "$label signal sample $path has non-unit weights (range $(extrema(w))); " *
+              "they are IGNORED: response matrices and efficiencies use unweighted counts."
     end
+    return nothing
 end
 
 """
@@ -94,6 +102,9 @@ function build_response_matrices(det)
     df_nuother  = CSV.File(det.other_filepath)    |> DataFrame
     df_ES_angular = CSV.File(det.angular_filepath) |> DataFrame
     df_CC       = CSV.File(det.CC_filepath)       |> DataFrame
+    warn_if_signal_weights_ignored("ES nue",     df_nue,     det.nue_filepath)
+    warn_if_signal_weights_ignored("ES nuother", df_nuother, det.other_filepath)
+    warn_if_signal_weights_ignored("CC",         df_CC,      det.CC_filepath)
 
     # Extend ereco bins from -Inf to +Inf
     bins_ES = collect(range(Ereco_bins_ES.min, stop=Ereco_bins_ES.max, length=Ereco_bins_ES.bin_number + 1))
@@ -168,7 +179,10 @@ function build_response_matrices(det)
             #   treating e_reco_ES as pseudo-true energy (the stated approximation).
             # Backward fraction (per Ereco_ES bin) selects only backward-scattered ES events.
             N_ES        = Ereco_bins_ES.bin_number
-            ES_centers  = 0.5 .* (bins_ES[1:end-1] .+ bins_ES[2:end])
+            # Centres of the finite edges: bins_ES has ±Inf outer edges, which gave ±Inf centres
+            # (the lowest bin was dropped, the highest mapped to the top Etrue bin).
+            ES_edges    = range(Ereco_bins_ES.min, Ereco_bins_ES.max, length=N_ES + 1)
+            ES_centers  = 0.5 .* (ES_edges[1:end-1] .+ ES_edges[2:end])
             Etrue_edges = collect(range(Etrue_bins.min, Etrue_bins.max,
                                         length = Etrue_bins.bin_number + 1))
 

@@ -3,11 +3,18 @@ using StaticArrays
 # Type-stable extraction of all NamedTuple fields whose names start with `pfx`.
 # Returns a Tuple, allowing ForwardDiff Dual numbers to flow through without
 # type inference breaking on Symbol("name_", i) runtime construction.
+# Indexed names sort numerically (`_2` before `_10`); non-numeric suffixes sort after, by text.
+function _prefix_sort_key(f::Symbol, prefix::String)
+    suffix = string(f)[ncodeunits(prefix)+1:end]
+    n = tryparse(Int, suffix)
+    return n === nothing ? (typemax(Int), suffix) : (n, suffix)
+end
+
 @generated function _params_by_prefix(params, ::Val{pfx}) where {pfx}
     prefix = string(pfx)
     fnames = sort(
         [f for f in fieldnames(params) if startswith(string(f), prefix)],
-        by = string,
+        by = f -> _prefix_sort_key(f, prefix),
     )
     isempty(fnames) && return :(())
     exprs = [:(getfield(params, $(QuoteNode(f)))) for f in fnames]
@@ -87,4 +94,10 @@ mutable struct NuSpectrum
         new(ETrue8B, events8B_es, events8B_cc, ETrueHep, eventsHep_es, eventsHep_cc, 
             nothing, nothing, nothing, nothing, nothing, nothing, nothing, nothing, nothing, nothing)
     end
+end
+# First unused "batch_N" group name in an output file (anything with `keys`), N ≥ 1: numbers
+# continue after the highest existing one, so a resumed run never reuses a group (saveBatch).
+function next_batch_name(f)
+    nums = [parse(Int, k[7:end]) for k in keys(f) if startswith(k, "batch_") && tryparse(Int, k[7:end]) !== nothing]
+    return "batch_$(isempty(nums) ? 1 : maximum(nums) + 1)"
 end

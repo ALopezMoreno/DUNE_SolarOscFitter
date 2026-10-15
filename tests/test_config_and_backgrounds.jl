@@ -137,9 +137,11 @@ end
             @test length(bg.CC) == length(bg.CC_par_counts) == 1
 
             # ES: normalise=true histogram is 1.0 in the single bin; eff = 2/4;
-            # attenuation = 4/50e6; then rescaled by norm=2.0 (sys==0 branch).
+            # attenuation = 4/50e6; then flux norm 2.0 [cm⁻² s⁻¹] × exposed area (no `side`
+            # column → all faces: 2·12·64 + 2·12·12 m² = 1.824e7 cm²), as in the sys≠0 path.
             # Each background is itself a 1-element histogram (single-bin binning).
-            expected_es = 1.0 * detection_time * 0.5 * det.ES_normalisation * (4 / 50e6) * 2.0
+            area_all    = (2 * 12 * 64 + 2 * 12 * 12) * 1e4
+            expected_es = 1.0 * detection_time * 0.5 * det.ES_normalisation * (4 / 50e6) * 2.0 * area_all
             @test only(bg.ES[1]) ≈ expected_es atol=1e-12
             @test only(bg.ES[2]) ≈ expected_es atol=1e-12
             @test only(bg.ES[3]) ≈ expected_es atol=1e-12
@@ -161,11 +163,11 @@ end
             )
             bg = @test_logs (:warn,) match_mode=:any build_backgrounds(det, bin_info, bin_info)[1]
 
-            # All 3 histograms are still loaded, but only the first 2 are
-            # scaled/counted — this is the exact invariant break any code
-            # consuming ES_par_counts positionally against ES must guard against.
-            @test length(bg.ES) == 3
+            # Only the first 2 files are used, and the data, par_counts and conversion
+            # factors stay aligned (the 3rd file is not loaded at all).
+            @test length(bg.ES) == 2
             @test length(bg.ES_par_counts) == 2
+            @test length(bg.ES_conv) == 2
         end
     end
 end
