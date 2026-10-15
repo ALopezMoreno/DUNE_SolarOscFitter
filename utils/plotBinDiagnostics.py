@@ -19,6 +19,7 @@ parser = argparse.ArgumentParser(description="Process bin-importance diagnostics
 
 parser.add_argument('chains', nargs='+', help="Input MCMC derived chain files.")
 parser.add_argument('-o', '--output', type=str, help="Output file (optional).")
+parser.add_argument('--detector', type=str, default=None, help="Detector whose derived quantities to use, for chains derived with several detectors (default: the first).")
 
 args = parser.parse_args()
 
@@ -33,7 +34,7 @@ else:                                                   #
     out_pdf = "images/per-bin_likelihood_report.pdf"    #
 #########################################################
 
-diagnostics = posteriorHelpers.load_bin_diagnostics(mcmc_chains)
+diagnostics = posteriorHelpers.load_bin_diagnostics(mcmc_chains, detector=args.detector)
 
 # Detect inclusive mode: CC diagnostic keys were not computed for this chain
 inclusive_mode = diagnostics.get("inclusive_mode", False)

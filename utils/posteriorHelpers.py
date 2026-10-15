@@ -42,10 +42,46 @@ def _is_batched_jld2(h5file):
     return any(k.startswith("batch_") for k in h5file.keys())
 
 
-def _read_jld2_batched(h5file, keys):
+def derived_detectors(h5file):
+    """Detectors written by derived mode (src/derive_variables_from_chain.jl), in config
+    order; [] for files derived before multi-detector support (unprefixed keys)."""
+    if "derived_detectors" not in h5file:
+        return []
+    v = h5file["derived_detectors"][()]
+    v = v.decode() if isinstance(v, bytes) else str(v)
+    return [d for d in v.split(",") if d]
+
+
+def pick_derived_detector(h5file, detector=None, verbose=True):
+    """Choose the detector whose derived_* keys to read (default: the first one)."""
+    dets = derived_detectors(h5file)
+    if not dets:
+        return None
+    if detector is None:
+        detector = dets[0]
+        if verbose and len(dets) > 1:
+            print(f"Derived quantities for detectors {dets}; using '{detector}' (choose with --detector).")
+    elif detector not in dets:
+        raise ValueError(f"Detector '{detector}' not in derived detectors {dets}")
+    return detector
+
+
+def resolve_key(h5file, key, detector=None):
+    """Map a 'derived_X' key to the stored key: 'derived_<detector>_X' for per-detector
+    quantities, else 'derived_X' (shared quantities and older files). Other keys unchanged."""
+    if detector is not None and key.startswith("derived_"):
+        per_det = "derived_" + detector + "_" + key[len("derived_"):]
+        if per_det in h5file:
+            return per_det
+    return key
+
+
+def _read_jld2_batched(h5file, keys, detector=None):
     """
     Read a batched JLD2 file (batch_0, batch_1, ...) and return concatenated
     arrays for each key in `keys`.  Batches are processed in numeric order.
+    Keys not stored per batch (the per-step derived_* arrays, written at the top level by
+    derived mode) are read from the top level.
     """
     batch_names = sorted(
         [k for k in h5file.keys() if k.startswith("batch_")],
@@ -57,15 +93,21 @@ def _read_jld2_batched(h5file, keys):
         for k in keys:
             if k in g:
                 accum[k].append(np.array(g[k][()]))
-    return {k: np.concatenate(v) if v else np.array([]) for k, v in accum.items()}
+    out = {k: np.concatenate(v) if v else np.array([]) for k, v in accum.items()}
+    for k in keys:
+        stored = resolve_key(h5file, k, detector)
+        if out[k].size == 0 and stored in h5file:
+            out[k] = np.array(h5file[stored][()])
+    return out
 
 
-def _read_jld2_flat(h5file, keys):
+def _read_jld2_flat(h5file, keys, detector=None):
     """Read a flat (legacy) JLD2 file written by convert_mcmc_to_jld2.jl."""
-    return {k: np.array(h5file[k][()]) if k in h5file else np.array([]) for k in keys}
+    keys_stored = {k: resolve_key(h5file, k, detector) for k in keys}
+    return {k: np.array(h5file[ks][()]) if ks in h5file else np.array([]) for k, ks in keys_stored.items()}
 
 
-def load_posterior(mcmc_chains, parameters, burnin=100, test=None, exclude_chains=None):
+def load_posterior(mcmc_chains, parameters, burnin=100, test=None, exclude_chains=None, detector=None):
     valid_chains = []
     for mcmc_chain in mcmc_chains:
         if not os.path.exists(mcmc_chain + ".jld2"):
@@ -89,14 +131,16 @@ def load_posterior(mcmc_chains, parameters, burnin=100, test=None, exclude_chain
     # Handle test parameters if specified
     if test is not None:
         with h5py.File(valid_chains[0] + ".jld2", 'r') as f:
+            detector = pick_derived_detector(f, detector)
             if _is_batched_jld2(f):
                 first_batch = sorted([k for k in f.keys() if k.startswith("batch_")],
                                      key=lambda x: int(x.split("_")[1]))[0]
-                sample_keys = f[first_batch].keys()
+                sample_keys = set(f[first_batch].keys())
             else:
-                sample_keys = f.keys()
+                sample_keys = set()
+            # per-step derived arrays (e.g. derived_CC_asymmetry) live at the top level
             for v in test:
-                if v[0] in sample_keys and v[0] not in parameters:
+                if (v[0] in sample_keys or resolve_key(f, v[0], detector) in f) and v[0] not in parameters:
                     parameters.append(v[0])
 
     # Initialize dictionary to store concatenated data
@@ -123,7 +167,8 @@ def load_posterior(mcmc_chains, parameters, burnin=100, test=None, exclude_chain
             meta_keys = ['stepno', 'chainid', 'weights']
             all_keys  = list(parameters) + meta_keys
 
-            raw = _read_jld2_batched(f, all_keys) if batched else _read_jld2_flat(f, all_keys)
+            det = pick_derived_detector(f, detector, verbose=False)
+            raw = _read_jld2_batched(f, all_keys, det) if batched else _read_jld2_flat(f, all_keys, det)
 
         stepno  = raw['stepno']
         chains  = raw['chainid']
@@ -168,7 +213,7 @@ def load_posterior(mcmc_chains, parameters, burnin=100, test=None, exclude_chain
 
 
 
-def load_bin_diagnostics(mcmc_chains, require_all=True, verbose=True):
+def load_bin_diagnostics(mcmc_chains, require_all=True, verbose=True, detector=None):
     es_keys = [
         # --- ES night (per-bin) ---
         "derived_ESnight_mean_llh",
@@ -289,9 +334,11 @@ def load_bin_diagnostics(mcmc_chains, require_all=True, verbose=True):
     # Fall back to inferring from key presence for pre-fix JLD2 files.
     inclusive_mode = False
     with h5py.File(chains[0] + ".jld2", "r") as f:
-        if "derived_inclusive_mode" in f:
-            inclusive_mode = bool(f["derived_inclusive_mode"][()])
-        elif "derived_CCnight_mean_llh" not in f:
+        detector = pick_derived_detector(f, detector, verbose)
+        k_incl = resolve_key(f, "derived_inclusive_mode", detector)
+        if k_incl in f:
+            inclusive_mode = bool(f[k_incl][()])
+        elif resolve_key(f, "derived_CCnight_mean_llh", detector) not in f:
             inclusive_mode = True  # backward compat: CC keys absent => inclusive
 
     if verbose and inclusive_mode:
@@ -332,10 +379,11 @@ def load_bin_diagnostics(mcmc_chains, require_all=True, verbose=True):
         with h5py.File(c + ".jld2", "r") as f:
             have = set(f.keys())
             for k in load_keys:
-                if k not in have:
+                stored = resolve_key(f, k, detector)   # per-detector key, or shared/legacy
+                if stored not in have:
                     missing[k].append(c)
                     continue
-                a = np.array(f[k][()])
+                a = np.array(f[stored][()])
                 if a.ndim > 1 and 1 in a.shape:  # squeeze degenerate axes only
                     a = np.squeeze(a)
                 per_chain[k].append(a)
@@ -358,6 +406,7 @@ def load_bin_diagnostics(mcmc_chains, require_all=True, verbose=True):
             print(f"{k}: {'consistent' if same else 'DIFF'} across {len(arrs)} chains")
 
     out["inclusive_mode"] = inclusive_mode  # propagate flag to callers
+    out["detector"] = detector              # None for files derived before multi-detector support
 
     if verbose:
         print("Loaded diagnostics from:", ", ".join(chains))

@@ -384,6 +384,7 @@ def main():
     parser.add_argument('-e', '--expanded', action='store_true', default=False,
                         help="Expanded corner: adds 8B flux, HEP flux, and CC day-night "
                              "asymmetry panels (if available in the chains).")
+    parser.add_argument('--detector', type=str, default=None, help="Detector whose derived quantities to use, for chains derived with several detectors (default: the first).")
     args = parser.parse_args(argv)
     if labels_override is not None:
         args.labels = labels_override
@@ -406,10 +407,10 @@ def main():
 
     data_a = posteriorHelpers.load_posterior(args.chains_a, active_params,
                                              burnin=args.burnin, exclude_chains=exclude,
-                                             test=test_key)
+                                             test=test_key, detector=args.detector)
     data_b = posteriorHelpers.load_posterior(args.chains_b, active_params,
                                              burnin=args.burnin, exclude_chains=exclude,
-                                             test=test_key)
+                                             test=test_key, detector=args.detector)
 
     if args.expanded and _EXP_ASYM_KEY in data_a and data_a[_EXP_ASYM_KEY].size > 0:
         if _EXP_ASYM_KEY in data_b and data_b[_EXP_ASYM_KEY].size > 0:

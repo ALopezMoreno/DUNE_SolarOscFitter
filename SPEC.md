@@ -128,7 +128,12 @@ Status tags:
     backgrounds, semi-inclusive angular ES. It does not depend on the real (changing) inputs.
 
 5.6 Per-bin log L summed over bins equals total log L. `per_bin_llh` returns one result per
-    detector. **[untested]** Derived mode analyses only the first detector (warned).
+    detector. **[untested]**
+
+5.7 Derived mode processes every active detector; each detector's quantities equal what the
+    single-detector version computed for it. **[verified once]** on the two-detector fixture
+    chain (all 88 keys of the first detector identical to the previous code, 2026-10-15); no
+    automated test.
 
 ## 6. Gradients
 
