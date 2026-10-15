@@ -131,9 +131,11 @@ Status tags:
     detector. **[untested]**
 
 5.7 Derived mode processes every active detector; each detector's quantities equal what the
-    single-detector version computed for it. **[verified once]** on the two-detector fixture
-    chain (all 88 keys of the first detector identical to the previous code, 2026-10-15); no
-    automated test.
+    single-detector version computed for it (all 88 keys of the first detector identical to the
+    previous code, 2026-10-15). **[tested]** `tests/derived_mode.jl`: on a synthetic weighted chain,
+    per-step asymmetries, weighted posterior-predictive means/variances, per-bin log-L means and the
+    best-fit oscillation map equal values computed directly, for both detectors; the Python loaders
+    read each detector back.
 
 ## 6. Gradients
 

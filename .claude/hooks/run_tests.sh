@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Stop hook: run the unit suite (tests/runtests.jl, ~85 s) when src/ or tests/ differ from HEAD
+# Stop hook: run tests/runtests.jl (unit tests ~90 s + derived-mode end-to-end ~65 s) when src/,
+# tests/ or utils/posteriorHelpers.py differ from HEAD
 # and from the last state that passed. Runs async; on failure it exits 2, which wakes Claude
 # with the failing output. The regression and benchmark parts stay opt-in (env guards).
 set -u
@@ -10,9 +11,10 @@ active=$(printf '%s' "$input" | python3 -c 'import json,sys
 try: print(str(json.load(sys.stdin).get("stop_hook_active", False)).lower())
 except Exception: print("false")')
 
-# Fingerprint of uncommitted Julia changes (tracked diff + untracked .jl files).
-changes=$( { git diff HEAD -- src tests; \
-             git ls-files --others --exclude-standard -- 'src/*.jl' 'tests/*.jl' | sort | xargs -r -d '\n' cat; } )
+# Fingerprint of uncommitted changes the tests cover: src/, tests/ and the Python loaders that
+# tests/derived_mode.jl exercises (tracked diff + untracked files).
+changes=$( { git diff HEAD -- src tests utils/posteriorHelpers.py; \
+             git ls-files --others --exclude-standard -- 'src/*.jl' 'tests/*.jl' 'tests/fixtures/*' | sort | xargs -r -d '\n' cat; } )
 [ -z "$changes" ] && exit 0
 hash=$(printf '%s' "$changes" | sha1sum | cut -d' ' -f1)
 
