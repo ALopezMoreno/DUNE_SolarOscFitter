@@ -188,7 +188,7 @@ llh_bins: 15
 
 ### Derived Quantities
 
-Post-process existing MCMC chains to append the Day-Night asymmetry at each step, as well as by-bin likelihood contributions (not done by default due to its heavy computational cost):
+Post-process existing MCMC chains to append the Day-Night asymmetry at each step, as well as by-bin likelihood contributions (not done by default due to its heavy computational cost). Every active detector is processed in one pass; results are stored per detector as `derived_<DET>_*` keys (shared ones, such as the best-fit oscillation map, as `derived_*`). The plotting scripts use the first detector unless given `--detector <DET>`:
 
 ```yaml
 RunMode: "derived"

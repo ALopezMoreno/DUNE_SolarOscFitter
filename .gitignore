@@ -361,8 +361,6 @@ utils/testScripts/testOsc.jl
 # Input data (large simulation/physics data)
 inputs/
 
-# Julia lock file (auto-generated, large)
-
 # Binary / compiled artifacts
 *.so
 *.sif
