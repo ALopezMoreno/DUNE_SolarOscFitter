@@ -5,9 +5,11 @@ using QuadGK
 include(joinpath(@__DIR__, "solarFlux.jl"))
 include(joinpath(@__DIR__, "xsec.jl"))
 
-# Detector specifications
-global detector_ne = 10 * 2.7e32      # Number of electrons (10 kT LAr, 2.7e32 e-/kT)
-global detector_nAr40 = 10 * 1.45e31  # Number of Ar40 nuclei (10 kT LAr, 1.45e31 nuclei/kT)
+# Targets per kt of liquid argon (molar mass 39.948 g/mol, Z = 18, ⁴⁰Ar abundance 99.604 %).
+# The module mass (default 10 kt) is the per-detector config key `module_mass_kt`.
+const AR_ATOMS_PER_KT    = 1e9 / 39.948 * 6.02214076e23   # 1.5075e31
+const N_ELECTRONS_PER_KT = 18 * AR_ATOMS_PER_KT            # 2.7135e32 (was 2.7e32)
+const N_AR40_PER_KT      = 0.99604 * AR_ATOMS_PER_KT       # 1.5015e31 (was 1.45e31, 3.5 % low)
 global detection_time = 3600 * 24 * 365  # Detection time in seconds (1 year)
 
 # Unoscillated interaction rate functions
@@ -86,6 +88,8 @@ Uses shared global `Etrue_bins`. Returns:
 function build_unoscillated_sample(det)
     ES_normalisation = det.ES_normalisation
     CC_normalisation = det.CC_normalisation
+    detector_ne      = N_ELECTRONS_PER_KT * det.module_mass_kt
+    detector_nAr40   = N_AR40_PER_KT      * det.module_mass_kt
 
     bin_edges, energies_GeV = calculate_bins(Etrue_bins)
 

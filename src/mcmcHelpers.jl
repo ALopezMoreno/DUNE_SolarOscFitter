@@ -144,11 +144,15 @@ function saveBatch(samples, start_step_number, priors, batchNumber)
 
   println("Number of samples to save: ", length(samples))
 
-  # 4) write as a new group inside the shared JLD2 file.
+  # 4) write as a new group inside the shared JLD2 file, numbered after the groups already
+  #    there: a resumed run writing into its own outFile starts its counter at 1 again, and
+  #    reusing "batch_1" failed (the samples were lost with only a logged error).
   fileName = outFile * ".jld2"
   try
     jldopen(fileName, "a+") do f
-      g = JLD2.Group(f, "batch_$batchNumber")
+      name = next_batch_name(f)
+      name == "batch_$batchNumber" || @logmsg MCMC "Batch $batchNumber written as $name ($fileName already has earlier batches)"
+      g = JLD2.Group(f, name)
       for (k, v) in param_data
           g[string(k)] = v
       end
@@ -157,9 +161,11 @@ function saveBatch(samples, start_step_number, priors, batchNumber)
       g["chainid"] = chainid
     end
   catch err
-    @error "Failed to write MCMC data to $fileName.\nError: $err"
+    @error "Failed to write MCMC data to $fileName; stopping so the samples are not silently lost." exception = (err, catch_backtrace())
+    rethrow()
   end
 end
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────

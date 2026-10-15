@@ -136,6 +136,17 @@ function parse_detector_block(block::Dict, name::String)
     if semi_inclusive_analysis && (!cc_mode || !es_mode)
         error("semiInclusiveMode requires singleChannel: false for detector $name")
     end
+    # The first Ereco bin extends to -Inf (it collects everything reconstructed below the
+    # range), so it must sit below the analysis threshold.
+    for ch in ("ES", "CC")
+        lo, hi = block["range_Ereco_$ch"]
+        width  = (hi - lo) / block["nBins_Ereco_$ch"]
+        if block["Ereco_min_$ch"] < lo + width
+            @warn "Detector $name: Ereco_min_$ch = $(block["Ereco_min_$ch"]) MeV leaves the first $ch Ereco bin " *
+                  "in the fit, but that bin also holds all events reconstructed below $lo MeV. " *
+                  "Set Ereco_min_$ch ≥ $(lo + width) MeV or lower range_Ereco_$ch."
+        end
+    end
     return (
         name                    = name,
         ES_normalisation        = Float64(block["ES_exposure"]),
@@ -165,6 +176,12 @@ function parse_detector_block(block::Dict, name::String)
         angular_cos_cut         = Float64(get(block, "ES_cos_cut", -1.0)),
         inclusive_analysis      = inclusive_analysis,
         semi_inclusive_analysis = semi_inclusive_analysis,
+        # Normalisation conventions of the MC inputs (defaults reproduce the earlier
+        # hard-coded values; see docs/configuration_reference.md).
+        module_mass_kt          = Float64(get(block, "module_mass_kt", 10.0)),
+        ES_bg_generated_events  = Float64(get(block, "ES_bg_generated_events", 50e6)),
+        ES_bg_face_areas_m2     = Float64.(get(block, "ES_bg_face_areas_m2", [2 * 12.0 * 64.0, 2 * 12.0 * 12.0])),
+        CC_bg_reference_flux    = Float64(get(block, "CC_bg_reference_flux", 2.2e-6)),
     )
 end
 

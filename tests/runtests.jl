@@ -12,6 +12,7 @@ include(joinpath(@__DIR__, "test_likelihood_correctness.jl"))
 include(joinpath(@__DIR__, "test_config_and_backgrounds.jl"))
 include(joinpath(@__DIR__, "test_es_xsec.jl"))
 include(joinpath(@__DIR__, "test_osc_night.jl"))
+include(joinpath(@__DIR__, "test_response_and_backgrounds.jl"))
 
 # End-to-end likelihood regression (full setup, one process per variant; a few minutes)
 if get(ENV, "JULIA_REGRESSION", "0") == "1"

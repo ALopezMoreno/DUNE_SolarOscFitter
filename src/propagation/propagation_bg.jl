@@ -1,22 +1,3 @@
-function CC_conversions(norm_value)
-    # The MC is normalised to 2.2 x 10^-6 neutrons / cm2 / s
-    return norm_value / 2.2e-6
-end
-
-function ES_conversions(side, norm_value)
-    # The ES background MC is not flux-normalised; convert by multiplying by the
-    # relevant detector face area (in cm²). Detector cross-section: 12 m × 64 m long
-    # faces (side=0) and 12 m × 12 m end caps (side=1); side=-1 (or other) uses total.
-    if side == 0
-        area = 2 * 12e2*64e2   # two 12 m × 64 m long faces [cm²]
-    elseif side == 1
-        area = 2 * 12e2*12e2   # two 12 m × 12 m end caps [cm²]
-    else
-        area = 2 * 12e2*64e2 + 2 * 12e2*12e2  # total exposed area [cm²]
-    end
-    return area * norm_value
-end
-
 # out .+= x .* factor as a plain loop: a fused broadcast would hold the constant template
 # `x` and the differentiable `factor` in one object, which Enzyme's activity analysis rejects.
 function _add_scaled!(out::AbstractVector, x::AbstractVector, factor)
@@ -35,8 +16,10 @@ scale factors on-the-fly, without copying the raw arrays.
 `det_name` is used to construct the parameter-name prefix, e.g. `"VD"` →
 looks up `:VD_ES_bg_norm_1`, `:VD_ES_bg_norm_2`, … in `params`.
 
-`raw_backgrounds` must carry `ES_par_counts` and `CC_par_counts` fields
-(set by `build_backgrounds`).
+`raw_backgrounds` must carry `ES_par_counts`, `CC_par_counts` and the per-background
+conversion factors `ES_conv` (face area, cm²) and `CC_conv` (1 / reference flux), all set
+by `build_backgrounds`. The i-th background with a free normalisation uses the i-th
+`*_bg_norm_` parameter.
 
 Returns:
 - BG_ES :: Vector{Float64}
@@ -66,10 +49,9 @@ function normalize_backgrounds(raw_backgrounds, params, es_prefix::Val, cc_prefi
         norm_index = 1
         for (i, behaviour) in enumerate(ES_bg_par_counts)
             if behaviour != 0
-                factor = ES_conversions(raw_backgrounds.sides[i], es_norms[norm_index])
+                factor = raw_backgrounds.ES_conv[i] * es_norms[norm_index]   # face area × flux
                 _add_scaled!(BG_ES, raw_backgrounds.ES[i], factor)
-                # TEMP: norm_index not incremented — all ES backgrounds use norm_1 (matches reference run bug)
-                # norm_index += 1
+                norm_index += 1
             else
                 BG_ES .+= raw_backgrounds.ES[i]
             end
@@ -85,7 +67,7 @@ function normalize_backgrounds(raw_backgrounds, params, es_prefix::Val, cc_prefi
         norm_index = 1
         for (i, behaviour) in enumerate(CC_bg_par_counts)
             if behaviour != 0
-                factor = CC_conversions(cc_norms[norm_index])
+                factor = raw_backgrounds.CC_conv[i] * cc_norms[norm_index]   # norm / reference flux
                 _add_scaled!(BG_CC, raw_backgrounds.CC[i], factor)
                 norm_index += 1
             else

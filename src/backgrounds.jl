@@ -62,47 +62,51 @@ function build_backgrounds(det, Ereco_bins_ES_extended, Ereco_bins_CC_extended)
     CC_bg_norms        = det.CC_bg_norms
     ES_bg_sys          = det.ES_bg_sys
     CC_bg_sys          = det.CC_bg_sys
+    conv               = bg_conventions(det)
 
     warn_if_bg_arrays_mismatched("ES", det.ES_filepaths_BG, ES_bg_norms, ES_bg_sys)
     warn_if_bg_arrays_mismatched("CC", det.CC_filepaths_BG, CC_bg_norms, CC_bg_sys)
 
-    df_ES_list = extract_dataframes(det.ES_filepaths_BG)
-    df_CC_list = extract_dataframes(det.CC_filepaths_BG)
+    # Only the first n files are used (see warn_if_bg_arrays_mismatched); truncate here so
+    # `backgrounds.ES`/`.CC` stay aligned with their par_counts and conversion factors.
+    n_ES = min(length(det.ES_filepaths_BG), length(ES_bg_norms), length(ES_bg_sys))
+    n_CC = min(length(det.CC_filepaths_BG), length(CC_bg_norms), length(CC_bg_sys))
+    df_ES_list = extract_dataframes(collect(String, det.ES_filepaths_BG[1:n_ES]))
+    df_CC_list = extract_dataframes(collect(String, det.CC_filepaths_BG[1:n_CC]))
 
     # ── ES backgrounds ──────────────────────────────────────────────────────
-    ES_bg    = []
-    ES_sides = []
+    # The ES background MC is not flux-normalised: each file holds the events that reached
+    # the detector out of `ES_bg_generated_events` generated. Weights (if present) enter the
+    # selected and the total counts alike, so the efficiency stays in [0, 1].
+    ES_bg    = Vector{Vector{Float64}}()
+    ES_sides = Int[]
     for df in df_ES_list
-        if "weights" in names(df)
-            ES_temp, _      = create_histogram(df.Ereco, Ereco_bins_ES_extended, weights=df.weights, normalise=true)
-            ES_temp_selec, _ = create_histogram(df.Ereco[df.mask], Ereco_bins_ES_extended, weights=df.weights[df.mask], normalise=false)
-            ES_temp_total, _ = create_histogram(df.Ereco,           Ereco_bins_ES_extended,                              normalise=false)
-        else
-            ES_temp, _      = create_histogram(df.Ereco,            Ereco_bins_ES_extended, normalise=true)
-            ES_temp_selec, _ = create_histogram(df.Ereco[df.mask],  Ereco_bins_ES_extended, normalise=false)
-            ES_temp_total, _ = create_histogram(df.Ereco,            Ereco_bins_ES_extended, normalise=false)
-        end
+        w    = bg_weights(df)
+        mask = Bool.(df.mask)
+        ES_temp, _       = create_histogram(df.Ereco,       Ereco_bins_ES_extended, weights=w,       normalise=true)
+        ES_temp_selec, _ = create_histogram(df.Ereco[mask], Ereco_bins_ES_extended, weights=w[mask], normalise=false)
+        ES_temp_total, _ = create_histogram(df.Ereco,       Ereco_bins_ES_extended, weights=w,       normalise=false)
         side = "side" in names(df) ? coalesce(first(df.side), -1) : -1
         ES_eff_bg   = @. ifelse(ES_temp_total == 0, 0.0, ES_temp_selec / ES_temp_total)
-        attenuation = sum(ES_temp_total) / 50e6
-        push!(ES_bg,    ES_temp .* detection_time .* ES_eff_bg .* ES_normalisation .* attenuation)
+        attenuation = sum(ES_temp_total) / conv.ES_generated
+        push!(ES_bg,    Float64.(ES_temp .* detection_time .* ES_eff_bg .* ES_normalisation .* attenuation))
         push!(ES_sides, side)
     end
+    ES_conv = Float64[es_face_area_cm2(s, conv.ES_face_areas_m2) for s in ES_sides]
 
     # ── CC backgrounds (disabled in pure inclusive mode; enabled in semi-inclusive) ──────────────────────────
-    CC_bg = []
+    # The CC background MC is normalised per kt-year at the reference flux; scale to the module
+    # mass and exposure here, and by norm / reference flux in normalize_backgrounds.
+    CC_bg = Vector{Vector{Float64}}()
     if !inclusive_analysis || semi_inclusive_analysis
         for df in df_CC_list
-            if "weights" in names(df)
-                CC_temp_selec, _ = create_histogram(df.Ereco[df.mask], Ereco_bins_CC_extended, weights=df.weights[df.mask], normalise=false)
-            else
-                CC_temp_selec, _ = create_histogram(df.Ereco[df.mask], Ereco_bins_CC_extended, normalise=false)
-            end
-            # CC BG MC is normalised to 1 kt-year; signal MC uses detector_nAr40 = 10 kT,
-            # so total signal scaling is 10 kT × CC_normalisation. Match with ×10 here.
-            push!(CC_bg, CC_temp_selec .* 10 .* CC_normalisation)
+            w    = bg_weights(df)
+            mask = Bool.(df.mask)
+            CC_temp_selec, _ = create_histogram(df.Ereco[mask], Ereco_bins_CC_extended, weights=w[mask], normalise=false)
+            push!(CC_bg, Float64.(CC_temp_selec .* conv.module_mass_kt .* CC_normalisation))
         end
     end
+    CC_conv = fill(1.0 / conv.CC_reference_flux, length(CC_bg))
 
     # ── Systematic uncertainties ──────────────────────────────────────────────
     ES_bg_norms_true = Float64[]
@@ -114,37 +118,61 @@ function build_backgrounds(det, Ereco_bins_ES_extended, Ereco_bins_CC_extended)
     CC_bg_par_counts = Int[]
 
     if ES_mode
-        for (bg, norm, sys) in zip(ES_bg, ES_bg_norms, ES_bg_sys)
+        for (i, (norm, sys)) in enumerate(zip(ES_bg_norms, ES_bg_sys))
+            i > length(ES_bg) && break
             if sys == 0
-                bg .*= norm
+                ES_bg[i] .*= ES_conv[i] * norm      # fixed normalisation: apply the conversion now
                 push!(ES_bg_par_counts, 0)
             else
                 push!(ES_bg_norms_true, norm)
-                push!(ES_bg_norms_pars, truncated(Normal(norm, norm * sys), 0.0, norm * 2))
+                push!(ES_bg_norms_pars, bg_norm_prior(norm, sys))
                 push!(ES_bg_par_counts, 1)
             end
         end
     end
 
     if CC_mode && (!inclusive_analysis || semi_inclusive_analysis)
-        for (bg, norm, sys) in zip(CC_bg, CC_bg_norms, CC_bg_sys)
+        for (i, (norm, sys)) in enumerate(zip(CC_bg_norms, CC_bg_sys))
+            i > length(CC_bg) && break
             if sys == 0
-                bg .*= norm / 2.2e-6
+                CC_bg[i] .*= CC_conv[i] * norm
                 push!(CC_bg_par_counts, 0)
             else
                 push!(CC_bg_norms_true, norm)
-                push!(CC_bg_norms_pars, truncated(Normal(norm, norm * sys), 0.0, norm * 2))
+                push!(CC_bg_norms_pars, bg_norm_prior(norm, sys))
                 push!(CC_bg_par_counts, 1)
             end
         end
     end
 
-    # Concrete element types (the push! loops above build Vector{Any}).
-    ES_bg    = Vector{Vector{Float64}}([Float64.(x) for x in ES_bg])
-    CC_bg    = Vector{Vector{Float64}}([Float64.(x) for x in CC_bg])
-    ES_sides = Int[s for s in ES_sides]
-    backgrounds = (ES=ES_bg, CC=CC_bg, sides=ES_sides,
+    backgrounds = (ES=ES_bg, CC=CC_bg, sides=ES_sides, ES_conv=ES_conv, CC_conv=CC_conv,
                    ES_par_counts=ES_bg_par_counts, CC_par_counts=CC_bg_par_counts)
 
     return backgrounds, ES_bg_norms_true, CC_bg_norms_true, ES_bg_norms_pars, CC_bg_norms_pars
+end
+
+# Normalisation conventions of the background MC, from the detector block (defaults in
+# readConfig.jl reproduce the old hard-coded values). `get` keeps hand-built test tuples working.
+bg_conventions(det) = (
+    module_mass_kt    = Float64(get(det, :module_mass_kt, 10.0)),
+    ES_generated      = Float64(get(det, :ES_bg_generated_events, 50e6)),
+    ES_face_areas_m2  = Float64.(get(det, :ES_bg_face_areas_m2, [2 * 12.0 * 64.0, 2 * 12.0 * 12.0])),
+    CC_reference_flux = Float64(get(det, :CC_bg_reference_flux, 2.2e-6)),
+)
+
+# Exposed area [cm²] for an ES background generated on detector side `side`:
+# 0 = long faces, 1 = end caps, anything else = all faces.
+function es_face_area_cm2(side, face_areas_m2)
+    area_m2 = side == 0 ? face_areas_m2[1] :
+              side == 1 ? face_areas_m2[2] : sum(face_areas_m2)
+    return area_m2 * 1e4
+end
+
+bg_weights(df) = "weights" in names(df) ? Float64.(coalesce.(df.weights, 0.0)) : ones(nrow(df))
+
+# Truncated Gaussian prior on a background normalisation. A zero nominal norm with nonzero
+# sys gives a zero-width prior, so it is rejected (use sys = 0 to fix a background to zero).
+function bg_norm_prior(norm, sys)
+    norm > 0 || error("Background normalisation must be > 0 when its systematic is nonzero (got norm=$norm, sys=$sys); set sys = 0 to fix it.")
+    return truncated(Normal(norm, norm * sys), 0.0, norm * 2)
 end
