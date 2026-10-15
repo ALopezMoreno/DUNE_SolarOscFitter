@@ -175,17 +175,15 @@ for (det_name, det) in detector_configs
     # ereco_edges make that edge exactly the threshold, so this is bin 2 (checked below).
     index_ES_det = findfirst(x -> x >= det.E_threshold.ES, Ereco_bins_ES_ext.bins)
     index_CC_det = findfirst(x -> x >= det.E_threshold.CC, Ereco_bins_CC_ext.bins)
-    for (ch, idx) in (("ES", index_ES_det), ("CC", index_CC_det))
-        idx == 2 || error("[$det_name] the first fitted $ch bin is $idx, expected 2 (threshold edge)")
-    end
-
     if isnothing(index_ES_det)
         error("[$det_name] E_threshold.ES = $(det.E_threshold.ES) exceeds all ES reco-energy bins.")
     end
-    if isnothing(index_CC_det) && det.CC_mode && (!det.inclusive_analysis || det.semi_inclusive_analysis)
+    if isnothing(index_CC_det)
         error("[$det_name] E_threshold.CC = $(det.E_threshold.CC) exceeds all CC reco-energy bins.")
     end
-    index_CC_det = isnothing(index_CC_det) ? 1 : index_CC_det
+    for (ch, idx) in (("ES", index_ES_det), ("CC", index_CC_det))
+        idx == 2 || error("[$det_name] the first fitted $ch bin is $idx, expected 2 (threshold edge)")
+    end
 
     # ── Day-night asymmetry logging ────────────────────────────────────────
     CC_bg_aboveThreshold = ((det.inclusive_analysis && !det.semi_inclusive_analysis) || isempty(BG_CC_tot_true)) ?
