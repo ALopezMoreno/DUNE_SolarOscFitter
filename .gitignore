@@ -362,7 +362,6 @@ utils/testScripts/testOsc.jl
 inputs/
 
 # Julia lock file (auto-generated, large)
-Manifest.toml
 
 # Binary / compiled artifacts
 *.so
