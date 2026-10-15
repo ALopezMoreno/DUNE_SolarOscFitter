@@ -47,6 +47,7 @@ function plot_angular_stacks(
     BG_angular::AbstractMatrix;
     Ereco_min::Real  = 2.0,
     Ereco_max::Real  = 20.0,
+    Ereco_threshold::Real = Ereco_min + 1,   # first fitted bin's lower edge (x-axis start)
     cos_min::Real    = -1.0,
     cos_max::Real    = 1.0,
     energy_slices    = nothing,
@@ -74,7 +75,7 @@ function plot_angular_stacks(
     plot!(p_spec_lin, e_axis, bg_1d .+ cc_1d, linetype=:steppre, fillrange=0, fillcolor=CC_COL, label="CC", linecolor=CC_LINE, lw=LINE_W)
     plot!(p_spec_lin, e_axis, bg_1d, linetype=:steppre, fillrange=0, fillcolor=BG_COL, label="BG", linecolor=BG_LINE, lw=LINE_W)
     plot!(p_spec_lin, xlabel="E_reco [MeV]", ylabel="Events", framestyle=:box, legend=:topright, 
-          ylims=(0, 3e5), xlims=(Ereco_min+1, Ereco_max))
+          ylims=(0, 3e5), xlims=(Ereco_threshold, Ereco_max))
     push!(panel_plots, p_spec_lin)
 
     # --- PANEL 2: Integrated Unstacked Log Spectrum ---
@@ -84,7 +85,7 @@ function plot_angular_stacks(
     plot!(p_spec_log, e_axis, clamp_log(cc_1d), linetype=:steppre, color=CC_LINE, label="CC", lw=LINE_W)
     plot!(p_spec_log, e_axis, clamp_log(bg_1d), linetype=:steppre, color=BG_LINE, label="BG", lw=LINE_W)
     plot!(p_spec_log, xlabel="E_reco [MeV]", ylabel="Events", framestyle=:box, legend=:topright,
-          ylims=(1e-1, 1e6), xlims=(Ereco_min+1, Ereco_max))
+          ylims=(1e-1, 1e6), xlims=(Ereco_threshold, Ereco_max))
     push!(panel_plots, p_spec_log)
 
     # --- SUBSEQUENT PANELS: Angular Slices ---
