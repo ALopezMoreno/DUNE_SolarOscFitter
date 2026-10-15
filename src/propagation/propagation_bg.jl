@@ -53,7 +53,7 @@ function normalize_backgrounds(raw_backgrounds, params, es_prefix::Val, cc_prefi
                 _add_scaled!(BG_ES, raw_backgrounds.ES[i], factor)
                 norm_index += 1
             else
-                BG_ES .+= raw_backgrounds.ES[i]
+                _add_scaled!(BG_ES, raw_backgrounds.ES[i], 1.0)   # not .+= (Enzyme, see _add_scaled!)
             end
         end
     end
@@ -71,7 +71,7 @@ function normalize_backgrounds(raw_backgrounds, params, es_prefix::Val, cc_prefi
                 _add_scaled!(BG_CC, raw_backgrounds.CC[i], factor)
                 norm_index += 1
             else
-                BG_CC .+= raw_backgrounds.CC[i]
+                _add_scaled!(BG_CC, raw_backgrounds.CC[i], 1.0)
             end
         end
     end

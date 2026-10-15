@@ -4,6 +4,7 @@ using Enzyme
 using Random
 using DelimitedFiles, Interpolations, Statistics, QuadGK
 
+include(joinpath(@__DIR__, "..", "src", "core.jl"))   # MATTER_POTENTIAL_CONST (lets this file run on its own)
 include(joinpath(@__DIR__, "..", "src", "oscillations", "osc.jl"))
 include(joinpath(@__DIR__, "..", "src", "oscillations", "osc_night.jl"))
 using .NightOsc

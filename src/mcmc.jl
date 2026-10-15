@@ -38,7 +38,7 @@ priors = Dict{Symbol,Any}(
 
 # Conditionally add nuisance parameters
 if earthUncertainty
-  # FOR NOW, SET THE INPUTS AS A SERIRES OF INDEPENDENT VARIABLES: TRANSFORM THE MVNORMAL INTO AN ARRAY OF 1DNORMALS
+  # Independent truncated normals per layer; correlations are added to the log-density below.
   means = mean(earth_normalisation_prior)
   covmat = cov(earth_normalisation_prior)
   n = length(means)
@@ -70,6 +70,17 @@ prior = distprod(; priors...)
 # param_names = collect(keys(prior))
 # Create aligned bounds vector
 # bounds = [haskey(param_bounds, name) ? param_bounds[name] : (-Inf, Inf) for name in param_names]
+
+# The Earth-layer priors above are independent normals. If the covariance is correlated, add
+# the correlation term to the log-density so the product becomes the full MvNormal.
+if earthUncertainty && !isdiag(covmat)
+  @logmsg MCMC "Earth prior covariance is correlated: adding the correlation term to the log-density"
+  global likelihood_all_samples = let f = total_llh,
+                                      M = Matrix(inv(covmat) - Diagonal(1 ./ diag(covmat))),
+                                      μ = Vector{Float64}(means)
+    logfuncdensity(p -> f(p) + earth_prior_correlation(p, M, μ))
+  end
+end
 
 # Define Bayesian model
 posterior = PosteriorMeasure(likelihood_all_samples, prior)

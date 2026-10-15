@@ -50,10 +50,12 @@ Status tags:
 2.5 `earth_norm_i` outside [0, 2] gives log L = −Inf. **[tested]** `test_likelihood_correctness.jl`.
 
 2.6 Earth-norm priors use the full covariance of `earth_normalisation_prior_file`.
-    **[known to fail]** `mcmc.jl` uses independent normals (diagonal only); documented limitation.
+    **[tested]** independent normals plus `earth_prior_correlation` (added in `mcmc.jl` when the
+    covariance is not diagonal) equal the MvNormal up to a constant (`test_likelihood_correctness.jl`).
+    The current covariance file is diagonal.
 
-2.7 Parameter names sort numerically (`earth_norm_2` before `earth_norm_10`). **[known to fail]**
-    `_params_by_prefix` sorts lexicographically; latent while there are fewer than 10 layers.
+2.7 Parameter names sort numerically (`earth_norm_2` before `earth_norm_10`). **[tested]**
+    `test_response_and_backgrounds.jl`.
 
 ## 3. Cross sections ([event_rate_pipeline.md](docs/event_rate_pipeline.md))
 
@@ -62,22 +64,37 @@ Status tags:
 
 3.2 ES cross sections are exactly 0 (never negative) below the TPC threshold. **[tested]**
 
+3.2a The recoil quadrature equals the analytic integral of dσ/dT for constant couplings (1e-12);
+    I(T) matches BKS95 Eq. A5; σ₀ = 2 G_F² m_e² (ħc)²/π. **[tested]** `test_es_xsec.jl`.
+
 3.3 CC shape systematics: at `cc_xsec_tilt = cc_xsec_curv = 0` and `cc_xsec_norm = 1` the CC cross
     section equals the MARLEY nominal; tilt is orthogonal to norm and curvature to both (flux-weighted,
     about E_pivot). **[untested] [inferred]**
 
 ## 4. Detector response and event rates ([event_rate_pipeline.md](docs/event_rate_pipeline.md))
 
-4.1 Each response-matrix row (fixed E_true) sums to the selection efficiency over all E_reco
-    *including* under/overflow; out-of-window events are not redistributed into the window.
-    **[known to fail]** `create_response_matrix` drops out-of-window events and renormalises
-    (ES rates ~10–15% high). The fix requires regenerating the regression reference.
+4.1 Each response-matrix row (fixed E_true) sums to 1 over all E_reco, with events reconstructed
+    outside the window in the first/last (±∞) bins; they are not redistributed into the window.
+    Selection efficiency is applied per E_reco bin. **[tested]** `test_response_and_backgrounds.jl`.
+    The first E_reco bin must lie below the analysis threshold (warned at config parse).
 
-4.2 Each ES background has its own normalisation parameter `ES_bg_norm_i`. **[known to fail]**
-    `norm_index` is never incremented in `propagation_bg.jl`.
+4.2 Each ES background has its own normalisation parameter `ES_bg_norm_i`. **[tested]**
 
-4.3 A background with `systematics: 0` gets the same area/exposure conversion as one with systematics.
-    **[known to fail]** sys=0 skips `ES_conversions` (~1e8 too small); no current config uses it.
+4.3 A background with `systematics: 0` equals the same background with a free norm evaluated at its
+    nominal value. **[tested]**
+
+4.3a Background MC weights enter selected and total counts alike: each bin holds
+    (selected weighted events)/(generated events) × exposure × area × flux. **[tested]**
+
+4.3b Normalisation conventions (module mass, generated events, face areas, CC reference flux) are
+    config keys, not code constants. **[tested]**
+
+4.3c Semi-inclusive mode: each ES event is in exactly one channel (forward → ES, backward → CC as
+    mis-ID). Requires `use_scattering_info` (enforced at config parse). The mis-ID chain maps
+    every ES reco bin through its finite centre. **[tested]** (centres)
+
+4.3d Signal-sample weights: meaning not yet defined (TODO.md); non-unit weights are ignored with a
+    warning. **[inferred]**
 
 4.4 `expected_rates` returns arrays with the documented shapes: day `(n_Ereco,)`, night
     `(n_cosz, n_Ereco)`. **[tested]** "expected_rates – wiring & shapes".
@@ -93,16 +110,18 @@ Status tags:
 5.2 Barlow–Beeston reduces to Poisson when the MC uncertainty → 0. **[tested]**
 
 5.3 Total log L = ES + CC when both channels are on. **[tested]** "make_likelihood – ES/CC composition".
-    **[known to fail]** in `llhScan.jl`, which counts it twice.
+    `llhScan.jl` now evaluates `total_llh` once per grid point (conditional scan, 2·log L).
 
 5.4 Asimov: at the true parameters the log L is at its maximum and the expected counts equal the data.
     **[untested]**
 
 5.5 The full-likelihood value at fixed points matches `tests/regression_reference.toml` (rtol 1e-9)
-    for both night variants. **[tested]** `regression_likelihood.jl` (opt-in, `JULIA_REGRESSION=1`).
+    for both night variants. **[tested]** `regression_likelihood.jl` (opt-in, `JULIA_REGRESSION=1`),
+    on frozen synthetic samples (`tests/fixtures/`): ES and CC, two detectors, fixed and free
+    backgrounds, semi-inclusive angular ES. It does not depend on the real (changing) inputs.
 
-5.6 Per-bin log L summed over bins equals total log L, for one and for several detectors.
-    **[known to fail]** with more than one detector (`per_bin_llh`).
+5.6 Per-bin log L summed over bins equals total log L. `per_bin_llh` returns one result per
+    detector. **[untested]** Derived mode analyses only the first detector (warned).
 
 ## 6. Gradients
 
@@ -114,12 +133,12 @@ Status tags:
 
 6.3 The Enzyme reverse-mode gradient of the full likelihood matches ForwardDiff (~1e-13) and leaves
     the primal value unchanged. **[tested]** unit level in `test_osc_night.jl`; full likelihood via
-    `regression_likelihood.jl night --grad` (manual).
+    `regression_likelihood.jl night --grad` (manual; 5.5e-16 on the fixtures, 2026-10-15).
 
 ## 7. Sampling and I/O ([mcmc_and_priors.md](docs/mcmc_and_priors.md))
 
-7.1 Resuming a run into the same output file never loses or overwrites existing batches.
-    **[known to fail]** the batch counter restarts at 1 and the write error is only logged.
+7.1 Resuming a run into the same output file never loses or overwrites existing batches; a
+    failed write stops the run. **[tested]** (`next_batch_name`)
 
 7.2 Seeds fix the chains: two runs with the same config and seed give identical samples. **[untested]**
 

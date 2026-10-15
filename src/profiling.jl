@@ -5,16 +5,17 @@ using ProfileSVG
 
 using LinearAlgebra, Statistics, Distributions, StatsBase, BAT, DensityInterface, IntervalSets
 
-include(joinpath(@__DIR__, "setup.jl"))
-include(joinpath(@__DIR__, "likelihoods", "likelihood_main.jl"))
+include(joinpath(@__DIR__, "setup.jl"))   # also builds the likelihoods (likelihood_main.jl)
 
 @info "Running likelihood profiling (RunMode = PROFILE)"
 
 params_prof = true_params
 
 # --- Build partial likelihoods for ES-only and CC-only targets ----------------
-es_only_llh = make_likelihood(likelihood_inputs; use_ES = true,  use_CC = false)
-cc_only_llh = make_likelihood(likelihood_inputs; use_ES = false, use_CC = true)
+# (first active detector; total_llh below covers all of them)
+_prof_li    = first(values(detector_outputs)).likelihood_inputs
+es_only_llh = make_likelihood(_prof_li; use_ES = true,  use_CC = false)
+cc_only_llh = make_likelihood(_prof_li; use_ES = false, use_CC = true)
 
 # --- Prepare inputs for osc-only target ---------------------------------------
 mixingPars_prof = get_mixing_parameters(true_params)

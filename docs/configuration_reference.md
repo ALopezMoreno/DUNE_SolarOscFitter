@@ -79,7 +79,7 @@ Strings are evaluated as Julia `Distributions.jl` expressions.
 | `maxTuningAttempts` | Int | Maximum adaptive tuning rounds. `0` = skip tuning. |
 | `nTuning` | Int | Steps per tuning round. |
 | `earth_potential_uncertainties` | Bool | Include Earth density nuisance parameters. Requires `earth_normalisation_prior_file`. |
-| `proposal_matrix` | String | (optional) Path to JLD2 file with `posterior_cov` matrix for mass-matrix warm-start. |
+| `proposal_matrix` | String | (optional, currently unused) Path to a JLD2 file with a `posterior_cov` matrix. The HMC sampler tunes its own metric, so setting it only logs a warning. |
 
 ---
 
@@ -107,8 +107,12 @@ Strings are evaluated as Julia `Distributions.jl` expressions.
 | `ES_exposure` | Float | ES exposure in module-years. Sets `ES_normalisation`. |
 | `ES_background_normalisations` | Float[] | Per-background flux normalisation (cm⁻²s⁻¹). Length must match `ES_background_files`. |
 | `CC_background_normalisations` | Float[] | Per-background flux normalisation (cm⁻²s⁻¹). Length must match `CC_background_files`. |
-| `ES_background_systematics` | Float[] | Fractional uncertainty on each ES background. `0` = fixed (no nuisance parameter). |
+| `ES_background_systematics` | Float[] | Fractional uncertainty on each ES background. `0` = fixed (no nuisance parameter). If the normalisation/systematic arrays are shorter than the file list, only the first N files are used (with a warning). A nonzero systematic needs a normalisation > 0. |
 | `CC_background_systematics` | Float[] | Fractional uncertainty on each CC background. |
+| `module_mass_kt` | Float | (default `10`) Fiducial mass of one module [kt]. Sets the signal target counts (from the LAr molar mass) and scales the CC background MC, which is normalised per kt-year. |
+| `ES_bg_generated_events` | Float | (default `50e6`) Events generated for each ES background MC file; each file's weighted event count over this is the fraction that reaches the detector. |
+| `ES_bg_face_areas_m2` | [Float, Float] | (default `[1536, 288]`, i.e. 2·12·64 and 2·12·12 m²) Exposed area of the long faces (`side` = 0) and the end caps (`side` = 1); files without a `side` use the sum. Multiplies the ES background flux normalisation. |
+| `CC_bg_reference_flux` | Float | (default `2.2e-6` cm⁻²s⁻¹) Flux at which the CC background MC is normalised; each CC background is scaled by its normalisation divided by this. |
 | `CC_xsec_scale` | Float | (default `1.0`) Fixed scale factor on the CC cross section relative to the MARLEY prediction. Applied to both Asimov data and prediction (unlike `cc_xsec_norm`, which is a fitted nuisance). |
 
 ---
@@ -123,14 +127,14 @@ Strings are evaluated as Julia `Distributions.jl` expressions.
 | `nBins_Ereco_CC` | Int | Reconstructed energy bins for CC channel. |
 | `range_Ereco_ES` | [Float, Float] | ES reco energy range [MeV]. |
 | `range_Ereco_CC` | [Float, Float] | CC reco energy range [MeV]. |
-| `Ereco_min_ES` | Float | ES energy threshold [MeV]. Events below this bin are excluded from the likelihood. |
+| `Ereco_min_ES` | Float | ES energy threshold [MeV]. Events below this bin are excluded from the likelihood. Must be above the first Ereco bin, which also collects everything reconstructed below `range_Ereco_ES` (the last bin likewise collects everything above it). |
 | `Ereco_min_CC` | Float | CC energy threshold [MeV]. |
 | `TPC_threshold` | Float | (default `0.2`) True electron-recoil detection threshold [MeV]; lower integration limit of the ES cross-section. Must match the MC generation threshold. Distinct from the `Ereco_min_ES` analysis cut. |
 | `nBins_cosz` | Int | Number of cos(zenith) bins for day/night split (range −1 to 0). |
 | `nBins_cosz_fine` | Int | (default `0`) Horizon-refined cos(z) binning: number of graded bins in `[cosz_fine_edge, 0]`, concentrated where the day-night regeneration first peak lives; the rest of the grid is PREM-aligned. `0` = legacy uniform-piecewise grid. |
 | `cosz_fine_edge` | Float | (default `−0.12`) Lower edge of the fine cos(z) zone. Should sit at ≈ the first-peak cos(z) for the slowest oscillation frequency (lower bound of `prior_dm2_21`). |
 | `nBins_cos_scatter` | Int | Number of cos(scatter angle) bins for ES angular reconstruction. |
-| `use_scattering_info` | Bool | `true` = enable angular reconstruction likelihood. Changes ES rate shapes from 1D/2D to 2D/3D. |
+| `use_scattering_info` | Bool | `true` = enable angular reconstruction likelihood. Changes ES rate shapes from 1D/2D to 2D/3D. Required by `semiInclusiveMode`. |
 | `ES_cos_cut` | Float | Optional (default −1.0). Forward-hemisphere angular cut: events with cos(θ_scatter) < this value are masked. −1.0 = no cut; 0.0 = forward hemisphere only. |
 
 ---

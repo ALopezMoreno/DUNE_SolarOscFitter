@@ -1,9 +1,11 @@
 #=
 regression_likelihood.jl
 
-End-to-end regression of the full likelihood: builds config.yaml (RunMode SETUP, in a
-temporary output directory) and compares total_llh at a few fixed parameter points with
-tests/regression_reference.toml.
+End-to-end regression of the full likelihood: builds tests/fixtures/regression_config.yaml
+(RunMode SETUP, in a temporary output directory) and compares total_llh at a few fixed
+parameter points with tests/regression_reference.toml. The config uses frozen synthetic
+detector samples (tests/fixtures/), so changes to the real inputs do not move it; it covers
+ES and CC, two detectors, fixed and free backgrounds, and semi-inclusive angular ES.
 
     julia --project tests/regression_likelihood.jl [variant] [--update]
 
@@ -32,8 +34,8 @@ update  = "--update" in ARGS
 check_grad = "--grad" in ARGS
 haskey(VARIANTS, variant) || error("unknown variant $variant; use one of $(collect(keys(VARIANTS)))")
 
-# Config: config.yaml with the run control overridden.
-cfg = YAML.load_file(joinpath(ROOT, "config.yaml"))
+# Config: the frozen fixture config with the run control overridden.
+cfg = YAML.load_file(joinpath(ROOT, "tests", "fixtures", "regression_config.yaml"))
 tmp = mktempdir()
 merge!(cfg, Dict{String,Any}("RunMode" => "SETUP", "Asimov" => true, "outFile" => joinpath(tmp, "regression"),
                              "earth_potential_uncertainties" => true,
