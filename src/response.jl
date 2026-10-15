@@ -107,12 +107,12 @@ function build_response_matrices(det)
     warn_if_signal_weights_ignored("CC",         df_CC,      det.CC_filepath)
 
     # Extend ereco bins from -Inf to +Inf
-    bins_ES = collect(range(Ereco_bins_ES.min, stop=Ereco_bins_ES.max, length=Ereco_bins_ES.bin_number + 1))
-    bins_CC = collect(range(Ereco_bins_CC.min, stop=Ereco_bins_CC.max, length=Ereco_bins_CC.bin_number + 1))
+    bins_ES = ereco_edges(Ereco_bins_ES)
+    bins_CC = ereco_edges(Ereco_bins_CC)
     bins_ES[1] = -Inf;  bins_ES[end] = Inf
     bins_CC[1] = -Inf;  bins_CC[end] = Inf
-    Ereco_bins_ES_extended = (bin_number=Ereco_bins_ES.bin_number, min=Ereco_bins_ES.min, max=Ereco_bins_ES.max, bins=bins_ES)
-    Ereco_bins_CC_extended = (bin_number=Ereco_bins_CC.bin_number, min=Ereco_bins_CC.min, max=Ereco_bins_CC.max, bins=bins_CC)
+    Ereco_bins_ES_extended = merge(Ereco_bins_ES, (bins=bins_ES,))
+    Ereco_bins_CC_extended = merge(Ereco_bins_CC, (bins=bins_CC,))
 
     nue_ES_sample    = (x=df_nue.Etrue,        y=df_nue.Ereco)
     other_ES_sample  = (x=df_nuother.Etrue,    y=df_nuother.Ereco)
@@ -181,7 +181,7 @@ function build_response_matrices(det)
             N_ES        = Ereco_bins_ES.bin_number
             # Centres of the finite edges: bins_ES has ±Inf outer edges, which gave ±Inf centres
             # (the lowest bin was dropped, the highest mapped to the top Etrue bin).
-            ES_edges    = range(Ereco_bins_ES.min, Ereco_bins_ES.max, length=N_ES + 1)
+            ES_edges    = ereco_edges(Ereco_bins_ES)
             ES_centers  = 0.5 .* (ES_edges[1:end-1] .+ ES_edges[2:end])
             Etrue_edges = collect(range(Etrue_bins.min, Etrue_bins.max,
                                         length = Etrue_bins.bin_number + 1))

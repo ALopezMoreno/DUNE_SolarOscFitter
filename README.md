@@ -199,7 +199,7 @@ prevFile: "path/to/previous/analysis"
 
 At setup, every detector's input samples are checked: a per-file table (rows, selected rows,
 weight range, events in the fit window) is printed, with warnings for pre-binned samples,
-ES backgrounds with every event selected, and identical files. A per-bin breakdown of data,
+signal and ES background samples with every event selected, and identical files. A per-bin breakdown of data,
 signal and each background component at the true parameters is written to
 `<outFile>_<DET>_<ES|CC>_breakdown.csv`.
 

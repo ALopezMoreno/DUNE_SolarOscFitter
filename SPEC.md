@@ -79,8 +79,9 @@ Status tags:
     Selection efficiency is applied per E_reco bin. **[tested]** `test_response_and_backgrounds.jl`.
     Binning is built from the analysis threshold: `nBins_Ereco` uniform fitted bins span
     [`Ereco_min`, range max], plus one underflow bin (−∞, `Ereco_min`) that is never fitted; the
-    last fitted bin also holds the overflow. The fit starts exactly at the threshold. **[tested]**
-    (`threshold_binning`, `test_config_and_backgrounds.jl`)
+    last fitted bin also holds the overflow. The threshold is exactly the lower edge of bin 2 (no
+    rounding, also for `Ereco_min = 0`), setup's threshold index is 2 (an error otherwise), and an
+    event at the threshold is fitted. **[tested]** (`test_config_and_backgrounds.jl`, `derived_mode.jl`)
 
 4.2 Each ES background has its own normalisation parameter `ES_bg_norm_i`. **[tested]**
 
@@ -109,7 +110,9 @@ Status tags:
 4.4a Input samples are checked at setup (`src/inputChecks.jl`): a per-file table is logged, and
     warnings are raised for pre-binned samples (about one row per distinct value, on a regular grid
     with step ≥ 10 keV; quantised or Float32 event samples are not flagged), signal and ES background
-    samples with every event selected (efficiency 1), and byte-identical input files. The table's
+    samples with every event selected (efficiency 1), and byte-identical input files. Not detected:
+    flattened 2-D histograms (values repeat across the second axis), histograms with bins under
+    10 keV, log-spaced histograms. The table's
     "in window" counts selected events at or above the threshold (what the fit uses). A per-bin CSV of data, signal and
     each background component at the truth is written per detector and channel; its components add
     up to the total background at the truth and its data column equals the Asimov data.
