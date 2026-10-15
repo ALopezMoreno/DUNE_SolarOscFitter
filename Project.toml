@@ -30,3 +30,16 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
+
+[compat]
+# Bounds at the versions the results were produced with; Manifest.toml pins the exact ones.
+# Enzyme: the custom NightOsc rule works around a nested-codegen bug of the 0.13.15x series.
+julia = "1.12"
+AdvancedHMC = "0.8"
+AutoDiffOperators = "0.3"
+BAT = "4.0"
+DensityInterface = "0.4"
+Distributions = "0.25"
+Enzyme = "0.13.150"
+ForwardDiff = "1"
+JLD2 = "0.6"

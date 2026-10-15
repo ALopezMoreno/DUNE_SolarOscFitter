@@ -21,7 +21,7 @@ SolarOscFitter is a comprehensive analysis framework for studying solar neutrino
 
 ### Julia Dependencies
 
-The repo includes a committed `Manifest.toml` with pinned versions. Install Julia and instantiate:
+The repo includes a committed `Manifest.toml` with the exact package versions the results were produced with, and `[compat]` bounds in `Project.toml`. Install Julia and instantiate:
 
 ```bash
 # Recommended: install Julia via juliaup
@@ -32,7 +32,7 @@ juliaup add 1.12.3 && juliaup default 1.12.3
 julia --project=./ -e "using Pkg; Pkg.instantiate()"
 ```
 
-If you're on a different Julia version and hit compatibility errors, run `Pkg.resolve()` before `Pkg.instantiate()` to re-solve the dependency graph.
+If you're on a different Julia version and hit compatibility errors, run `Pkg.resolve()` before `Pkg.instantiate()` to re-solve the dependency graph. Commit `Manifest.toml` whenever you add or update a package, so that runs (local, cluster, git worktrees) use the same versions.
 
 ### Python Dependencies
 
