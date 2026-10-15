@@ -19,23 +19,21 @@ outFile = args.output
 
 
 def read_llh(file_path):
+    """Return (lim_x, lim_y, truth or None, matrix). Rows of the matrix run along x."""
     with open(file_path, 'r') as file:
-        # Read the first two lines for headers
-        header_lines = [next(file).strip() for _ in range(2)]
+        header_lines = [next(file).strip() for _ in range(3)]
 
-    # Extract the limits from the headers
     lim_dim1 = [float(x) for x in header_lines[0].split(': ')[1].split(', ')]
     lim_dim2 = [float(x) for x in header_lines[1].split(': ')[1].split(', ')]
+    # Scans from src/llhScan.jl since Oct 2026 carry a "truth: x, y" line (the conditioning point).
+    has_truth = header_lines[2].startswith('truth:')
+    truth = [float(x) for x in header_lines[2].split(': ')[1].split(', ')] if has_truth else None
 
-    # Read the matrix data using pandas, skipping the first two header lines
-    matrix_data = pd.read_csv(file_path, skiprows=2, header=None)
-
-    # Convert the DataFrame to a NumPy array if needed
-    matrix = matrix_data.to_numpy()
-    return lim_dim1, lim_dim2, matrix
+    matrix = pd.read_csv(file_path, skiprows=3 if has_truth else 2, header=None).to_numpy()
+    return lim_dim1, lim_dim2, truth, matrix
 
 
-# Injected (Asimov true) parameter values, marked with the red cross/lines.
+# Fallback truth for old scan files without a truth line (marked with the red cross/lines).
 # dm2_21 is given in the plotted (x10^-4 eV^2) units.
 DM21_SCALE = 1e4
 TRUTH = {
@@ -59,7 +57,7 @@ PANELS = [
 
 def plot_llh_panel(ax, fig, path, xkey, ykey, linewidth):
     """Render one 2D 2·logL scan panel onto ``ax``."""
-    lim_x, lim_y, matrix = read_llh(path)
+    lim_x, lim_y, truth, matrix = read_llh(path)
 
     # The dm2_21 axis is plotted in (x10^-4 eV^2) units.
     scale_y = ykey == 'dm2_21'
@@ -69,8 +67,8 @@ def plot_llh_panel(ax, fig, path, xkey, ykey, linewidth):
     im = ax.imshow(matrix.T, cmap=plotting.parula_map, aspect='auto', origin='lower',
                    extent=[lim_x[0], lim_x[1], lim_y[0], lim_y[1]])
 
-    X = np.linspace(lim_x[0], lim_x[1], matrix.shape[1])
-    Y = np.linspace(lim_y[0], lim_y[1], matrix.shape[0])
+    X = np.linspace(lim_x[0], lim_x[1], matrix.shape[0])   # rows of the matrix run along x
+    Y = np.linspace(lim_y[0], lim_y[1], matrix.shape[1])
     XX, YY = np.meshgrid(X, Y)
     # The scan stores 2·log L (src/llhScan.jl); 2·ΔlogL = −Δχ². Contours at the 2-parameter
     # 3/2/1σ levels (Δχ² = 11.83, 6.18, 2.30).
@@ -78,7 +76,10 @@ def plot_llh_panel(ax, fig, path, xkey, ykey, linewidth):
                levels=[-11.83, -6.18, -2.30], colors='white',
                linewidths=linewidth, linestyles='-')
 
-    truth_x, truth_y = TRUTH[xkey], TRUTH[ykey]
+    if truth is not None:
+        truth_x, truth_y = truth[0], truth[1] * (DM21_SCALE if scale_y else 1)
+    else:
+        truth_x, truth_y = TRUTH[xkey], TRUTH[ykey]
     ax.plot(truth_x, truth_y, 'r+', markersize=10, markeredgewidth=2)
     ax.axhline(y=truth_y, color='r', linestyle='dashed', linewidth=1)
     ax.axvline(x=truth_x, color='r', linestyle='dashed', linewidth=1)
@@ -92,7 +93,7 @@ def plot_llh_panel(ax, fig, path, xkey, ykey, linewidth):
         ax.ticklabel_format(axis='x', style='plain')
         ax.xaxis.offsetText.set_visible(False)
 
-    fig.colorbar(im, ax=ax, label=r'$-\log\mathcal{L}$', fraction=0.05, pad=0.1)
+    fig.colorbar(im, ax=ax, label=r'$2\log\mathcal{L}$', fraction=0.05, pad=0.1)
     return im
 
 

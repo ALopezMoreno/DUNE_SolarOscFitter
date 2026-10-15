@@ -45,24 +45,25 @@ function scan2d(xkey, xvals, ykey, yvals)
     return out
 end
 
-function write_scan(suffix, xname, xlim, yname, ylim, matrix)
+function write_scan(suffix, xname, xlim, yname, ylim, matrix, xkey, ykey)
     open(outFile * suffix, "w") do file
         println(file, "$xname: $(xlim[1]), $(xlim[2])")
         println(file, "$yname: $(ylim[1]), $(ylim[2])")
+        println(file, "truth: $(true_params[xkey]), $(true_params[ykey])")   # the scan's conditioning point
         writedlm(file, matrix, ',')
     end
 end
 
 @logmsg MCMC ("Scanning sin2th12 vs sin2th13")
 write_scan("_llh_sin2th12_sin2th13.csv", "lim_th12", lim_th12, "lim_th13", lim_th13,
-           scan2d(:sin2_th12, vals_12, :sin2_th13, vals_13))
+           scan2d(:sin2_th12, vals_12, :sin2_th13, vals_13), :sin2_th12, :sin2_th13)
 
 println("")
 @logmsg MCMC ("Scanning sin2th12 vs dm2_21")
 write_scan("_llh_sin2th12_delt2m21.csv", "lim_th12", lim_th12, "lim_dm21", lim_dm21,
-           scan2d(:sin2_th12, vals_12, :dm2_21, vals_dm))
+           scan2d(:sin2_th12, vals_12, :dm2_21, vals_dm), :sin2_th12, :dm2_21)
 
 println("")
 @logmsg MCMC ("Scanning sin2th13 vs dm2_21")
 write_scan("_llh_sin2th13_delt2m21.csv", "lim_th13", lim_th13, "lim_dm21", lim_dm21,
-           scan2d(:sin2_th13, vals_13, :dm2_21, vals_dm))
+           scan2d(:sin2_th13, vals_13, :dm2_21, vals_dm), :sin2_th13, :dm2_21)

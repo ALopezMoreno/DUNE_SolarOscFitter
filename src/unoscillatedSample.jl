@@ -5,11 +5,8 @@ using QuadGK
 include(joinpath(@__DIR__, "solarFlux.jl"))
 include(joinpath(@__DIR__, "xsec.jl"))
 
-# Targets per kt of liquid argon (molar mass 39.948 g/mol, Z = 18, ⁴⁰Ar abundance 99.604 %).
-# The module mass (default 10 kt) is the per-detector config key `module_mass_kt`.
-const AR_ATOMS_PER_KT    = 1e9 / 39.948 * 6.02214076e23   # 1.5075e31
-const N_ELECTRONS_PER_KT = 18 * AR_ATOMS_PER_KT            # 2.7135e32 (was 2.7e32)
-const N_AR40_PER_KT      = 0.99604 * AR_ATOMS_PER_KT       # 1.5015e31 (was 1.45e31, 3.5 % low)
+# Target counts per kt (N_ELECTRONS_PER_KT, N_AR40_PER_KT) are in core.jl; the module mass
+# is the per-detector config key `module_mass_kt`.
 global detection_time = 3600 * 24 * 365  # Detection time in seconds (1 year)
 
 # Unoscillated interaction rate functions
