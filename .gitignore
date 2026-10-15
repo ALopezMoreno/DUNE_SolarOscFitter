@@ -402,3 +402,4 @@ cluster_output/
 
 # Generated osc-grid convergence reference (consumed by plotOscReference.jl / checkOscGridConvergence.jl)
 utils/osc_convergence_reference.jld2
+.claude/hooks/.last_pass

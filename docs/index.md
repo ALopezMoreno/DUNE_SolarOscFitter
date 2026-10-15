@@ -38,7 +38,7 @@ propagateSamples()
 
 | File | What it covers |
 |------|---------------|
-| [oscillation_physics.md](oscillation_physics.md) | PMNS matrix, MSW effect, Earth matter propagation (three backends), ForwardDiff flow |
+| [oscillation_physics.md](oscillation_physics.md) | PMNS matrix, MSW effect, Earth matter propagation (NightOsc default, legacy NumOsc), gradient flow (ForwardDiff, Enzyme) |
 | [event_rate_pipeline.md](event_rate_pipeline.md) | MC inputs → response matrices → oscillated samples → final event counts per bin |
 | [likelihood.md](likelihood.md) | Poisson, conditional (shape-only), and Barlow-Beeston likelihood formulas; assembly |
 | [mcmc_and_priors.md](mcmc_and_priors.md) | HMC setup, prior definitions, batch MCMC, Earth systematics approximation |
