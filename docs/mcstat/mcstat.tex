@@ -167,7 +167,7 @@ and measure the bias and the coverage (pull width) of the fitted yields. Their c
         about 200 bins, and the new one is about 25\,\% faster than Conway's for few bins.
 \end{itemize}
 
-\section{How MaCh3 does it}
+\section{How MaCh3 does it}\label{sec:mach3}
 
 MaCh3 (\href{https://github.com/mach3-software/MaCh3}{github.com/mach3-software/MaCh3}) offers
 the test statistic as a configuration choice (\code{LikelihoodOptions: TestStatistic}):
@@ -190,7 +190,7 @@ day and all night bins, $M_j$, is rebuilt from its components, and its MC varian
 computed (\code{mc\_effective\_counts} in \code{src/likelihoods/mcstat.jl}). The effective count is
 $a_j = M_j^2/V_j$, computed once at the truth and then held fixed. Holding $a_j$ fixed means holding
 the \emph{relative} MC uncertainty $1/\sqrt{a_j}$ fixed as the prediction moves; MaCh3 holds the
-absolute one fixed instead (Sec.~6). The two agree at the truth. For a pure normalisation change
+absolute one fixed instead (Sec.~\ref{sec:mach3}). The two agree at the truth. For a pure normalisation change
 (e.g.\ a flux scale), the relative uncertainty of a reweighted MC sample is indeed unchanged, which
 is why this choice was made.
 \begin{description}
@@ -296,8 +296,8 @@ $1/\sqrt{a_j}$ in the fit window, and the per-bin breakdown CSV lists $a_j$.
   \item Correlations of one MC sample across channels are not modelled: in semi-inclusive mode the
         same CC MC feeds the ES channel (forward fraction) and the CC channel (backward fraction),
         each with its own $\beta$; the ES MC also feeds the mis-identification term.
-  \item One $\beta$ per energy bin covers all its scattering-angle bins, whose composition (forward-
-        peaked ES signal, flat CC and background) differs, so per-component shape fluctuations
+  \item One $\beta$ per energy bin covers all its scattering-angle bins, whose composition (forward-peaked
+        ES signal, flat CC and background) differs, so per-component shape fluctuations
         within the bin are not modelled.
   \item The signal efficiency's MC uncertainty is treated as independent of the response's; the
         semi-inclusive mis-identification response and the scattering-angle response carry no MC

@@ -127,6 +127,8 @@ end
         # a significantly negative prediction is an error, as in poissonLogLikelihood
         @test_throws ArgumentError _group_negllh(DA, [-5.0, 1.0], [1.0, 1.0], 10.0)
         @test_throws ArgumentError mcstat_loglikelihood(DA, true, [1.0, -5.0], ones(2, 2), ones(2), ones(2, 2), [10.0, 10.0], 1)
+        @test_throws ArgumentError mcstat_loglikelihood(DA, true, [-5.0, 1.0], ones(2, 2), ones(2), ones(2, 2), [Inf, Inf], 1)
+        @test_throws ArgumentError mcstat_perbin(DA, true, [-5.0, 1.0], ones(2, 2), ones(2), ones(2, 2), [10.0, 10.0], 1, 2)
         @test isfinite(_group_negllh(DA, [-1e-6, 1.0], [0.0, 1.0], 10.0))        # numerical noise is floored
     end
 

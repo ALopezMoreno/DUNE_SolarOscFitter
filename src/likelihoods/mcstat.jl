@@ -219,19 +219,19 @@ function _col_MN(day::AbstractMatrix, night::AbstractArray{<:Any,3}, od, on, j)
     return M, N
 end
 function _col_bc(day::AbstractVector, night::AbstractMatrix, od, on, j, β)
-    acc = _bc(od[j], β * _mu_floor(day[j]))
+    acc = _bc(od[j], β * _mu_floor(_checked(day[j])))
     for k in axes(night, 1)
-        acc += _bc(on[k, j], β * _mu_floor(night[k, j]))
+        acc += _bc(on[k, j], β * _mu_floor(_checked(night[k, j])))
     end
     return acc
 end
 function _col_bc(day::AbstractMatrix, night::AbstractArray{<:Any,3}, od, on, j, β)
     acc = zero(promote_type(eltype(day), eltype(night), typeof(β)))
     for c in axes(day, 1)
-        acc += _bc(od[c, j], β * _mu_floor(day[c, j]))
+        acc += _bc(od[c, j], β * _mu_floor(_checked(day[c, j])))
     end
     for k in axes(night, 3), c in axes(night, 1)
-        acc += _bc(on[c, j, k], β * _mu_floor(night[c, j, k]))
+        acc += _bc(on[c, j, k], β * _mu_floor(_checked(night[c, j, k])))
     end
     return acc
 end
@@ -291,7 +291,7 @@ predictions. Bins outside idx:n_fit are 0 (the per-bin diagnostic leaves out the
 function mcstat_perbin(method::MCStatMethod, shared::Bool, day, night, obs_day, obs_night, a, idx, n_fit)
     out_d = zeros(size(day)); out_n = zeros(size(night))
     for j in idx:n_fit
-        μs = Float64.(_column(day, night, j))
+        μs = _checked.(Float64.(_column(day, night, j)))
         ns = Float64.(_column(obs_day, obs_night, j))
         vals = zeros(length(μs))
         if !isfinite(a[j])
