@@ -1,6 +1,6 @@
 # Configuration Reference
 
-All parameters are read from `config.yaml` by `src/readConfig.jl`. Optional keys have defaults shown; required keys will raise an error if absent.
+All parameters are read from `config.yaml` by `src/readConfig.jl`. Optional keys have defaults shown; required keys will raise an error if absent. Unknown keys (e.g. a misspelling) are an error that names the closest known key; the accepted keys are listed in `DETECTOR_CONFIG_KEYS` and `TOP_LEVEL_CONFIG_KEYS` in `src/readConfig.jl`, and a new key must be added there. Obsolete keys (`proposal_matrix`, `binnedNight`, `nuFast`) are accepted with a warning.
 
 ---
 
@@ -11,7 +11,7 @@ All parameters are read from `config.yaml` by `src/readConfig.jl`. Optional keys
 | `outFile` | String | required | Output file prefix. Results written as `{outFile}_mcmc.jld2`, `{outFile}_configSettings.txt`, etc. |
 | `prevFile` | String | `nothing` | Previous run output prefix. Required when `RunMode: derived`. If set in MCMC mode, resumes chains from `{prevFile}_chainState.bin`. |
 | `RunMode` | String | required | `"MCMC"`, `"LLH"`, `"derived"`, `"PROFILE"`, or `"SETUP"` (build the likelihood and stop). Selects the analysis script. |
-| `Asimov` | Bool | required | `true` = use theoretical prediction as data. `false` = read real data (not yet implemented). |
+| `Asimov` | Bool | required | `true` = use theoretical prediction as data. `false` = read real data (not yet implemented: rejected with an error). `data_file` is reserved for it and not read. |
 | `fastFit` | Bool | required | `true` = mean solar production density (and NumOsc.Fast when `nightOsc: false`). `false` = production-region integration (and NumOsc.Slow). See [oscillation_physics.md §5](oscillation_physics.md). |
 | `nightOsc` | Bool | `true` | `true` = NightOsc bin-averaged night Earth crossing. `false` = legacy 3-flavour per-path NumOsc. Was `binnedNight`, which is still read with a warning. See [oscillation_physics.md §7](oscillation_physics.md). |
 | `singleChannel` | Bool or String | `false` | `false` = both channels. `"ES"` = ES only. `"CC"` = CC only. |

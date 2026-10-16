@@ -77,6 +77,69 @@ const KNOWN_STALE_CONFIGS = Set([
     end
 end
 
+# ── unknown config keys ──────────────────────────────────────────────────────
+# A misspelled key used to be ignored silently (its default was used instead). It must stop the
+# run, naming the key, its section and the closest known key; obsolete keys only warn.
+@testset "validate_config_keys" begin
+    repo_root = joinpath(@__DIR__, "..")
+    root = load_parameters(joinpath(repo_root, "config.yaml"))
+    errmsg(c) = try validate_config_keys(c); "" catch e; sprint(showerror, e) end
+
+    @testset "shipped and test configs pass" begin
+        @test validate_config_keys(root) === nothing
+        for path in vcat(joinpath(repo_root, "tests", "fixtures", "regression_config.yaml"),
+                         filter(f -> endswith(f, ".yaml"), readdir(joinpath(repo_root, "configs"), join=true)))
+            @test validate_config_keys(load_parameters(path)) === nothing
+        end
+    end
+
+    @testset "typo at the top level" begin
+        c = deepcopy(root); c["prior_cc_xsec_nrom"] = "Normal(1.0, 0.2)"
+        m = errmsg(c)
+        @test occursin("'prior_cc_xsec_nrom'", m) && occursin("top level", m) &&
+              occursin("did you mean 'prior_cc_xsec_norm'", m)
+    end
+
+    @testset "typo in a detector entry" begin
+        c = deepcopy(root); c["detectors"]["HD"]["Ereco_min_ESS"] = 5.0
+        m = errmsg(c)
+        @test occursin("'Ereco_min_ESS'", m) && occursin("detectors.HD", m) &&
+              occursin("did you mean 'Ereco_min_ES'", m)
+    end
+
+    @testset "key in the wrong section" begin
+        c = deepcopy(root); c["CC_exposure"] = 10.0         # per-detector key at the top level
+        @test occursin("per-detector key", errmsg(c))
+        c = deepcopy(root); c["detectors"]["HD"]["nSteps"] = 10
+        @test occursin("top-level key", errmsg(c))
+        # flat config (no detectors:): detector keys belong at the top level
+        flat = load_parameters(joinpath(repo_root, "configs", "hmcTinyTest.yaml"))
+        @test validate_config_keys(flat) === nothing
+        flat["ES_exposre"] = 1.0
+        @test occursin("did you mean 'ES_exposure'", errmsg(flat))
+    end
+
+    @testset "active_detectors must exist" begin
+        c = deepcopy(root); c["active_detectors"] = ["HDD"]
+        @test occursin("did you mean 'HD'", errmsg(c))
+    end
+
+    @testset "obsolete keys warn, not error" begin
+        c = deepcopy(root); c["proposal_matrix"] = "old_cov.jld2"
+        @test validate_config_keys(c) === nothing
+        @test_logs (:warn, r"proposal_matrix") load_proposal_matrix(c)
+        c = deepcopy(root); c["nuFast"] = false
+        @test_logs (:warn, r"nuFast") validate_config_keys(c)
+        c = deepcopy(root); c["binnedNight"] = true
+        @test validate_config_keys(c) === nothing      # warns where it is read, in main()
+    end
+
+    @testset "Asimov: false is not implemented" begin
+        c = deepcopy(root); c["Asimov"] = false
+        @test occursin("not implemented", errmsg(c))
+    end
+end
+
 # ── build_backgrounds: par_counts alignment & normalisation arithmetic ──────
 # Guards the actual downstream consumer of the arrays above: a mismatch
 # (intentional or not) must not silently misalign `ES_par_counts`/
