@@ -127,6 +127,10 @@ end
         @test occursin("did you mean 'HD'", errmsg(c))
         c = deepcopy(root); c["active_detectors"] = "HD"
         @test occursin("must be a list", errmsg(c))
+        c = deepcopy(root); c["active_detectors"] = String[]
+        @test occursin("is empty", errmsg(c))
+        c = deepcopy(root); c["active_detectors"] = ["HD", "HD"]
+        @test occursin("more than once", errmsg(c))
         c = deepcopy(root); c["detectors"] = Dict{Any,Any}()  # nothing to suggest from
         @test occursin("active_detectors names 'HD'", errmsg(c))
     end
@@ -135,9 +139,20 @@ end
         c = deepcopy(root); c["ES_exposre"] = 1.0
         m = errmsg(c)
         @test occursin("did you mean 'ES_exposure'", m) && occursin("per-detector key", m)
+        # valid at both levels: no "move it" hint
+        c = deepcopy(root); c["mc_stat_likelihod"] = "Poisson"
+        m = errmsg(c)
+        @test occursin("did you mean 'mc_stat_likelihood'", m) && !occursin("per-detector key", m)
+        # flat config: detector keys belong at the top level, so no "move it" hint either
+        flat = load_parameters(joinpath(repo_root, "configs", "hmcTinyTest.yaml"))
+        flat["ES_exposre"] = 1.0
+        @test !occursin("per-detector key", errmsg(flat))
     end
 
     # Every key src/ reads from the YAML must be accepted; otherwise a valid config fails the check.
+    # Catches config[...], block[...], defaults[...], get(...) and haskey(...) with a literal key.
+    # Not caught: keys built by interpolation (block["Ereco_min_$ch"] in threshold_binning) or read
+    # through another variable name; list those by hand.
     @testset "key lists cover every key read in src/" begin
         reads_top, reads_det = Set{String}(), Set{String}()
         for (dir, _, files) in walkdir(joinpath(repo_root, "src")), f in files

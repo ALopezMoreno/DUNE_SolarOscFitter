@@ -232,7 +232,7 @@ function validate_config_keys(config::AbstractDict)
             closest = _closest_key(key, union(known, other_known))
             if key in other_known
                 msg *= " ($other_hint)"
-            elseif closest in other_known
+            elseif closest in other_known && !(closest in known)
                 msg *= " (did you mean '$closest'? That is $other_hint)"
             else
                 msg *= " (did you mean '$closest'?)"
@@ -253,7 +253,12 @@ function validate_config_keys(config::AbstractDict)
         active = get(config, "active_detectors", String[])
         if !(active isa AbstractVector)
             push!(problems, "active_detectors must be a list, e.g. [HD] (got $(repr(active)))")
+        elseif isempty(active)
+            push!(problems, "active_detectors is empty: name at least one entry of detectors:")
         else
+            for name in unique(active)
+                count(==(name), active) > 1 && push!(problems, "active_detectors lists '$name' more than once")
+            end
             for name in active
                 haskey(dets, name) || push!(problems,
                     "active_detectors names '$name', which has no entry under detectors:" *
