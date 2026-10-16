@@ -46,6 +46,8 @@ merge!(cfg, Dict{String,Any}("RunMode" => "derived", "prevFile" => chain, "thinn
 cfg["detectors"]["FXC"] = merge(deepcopy(cfg["detectors"]["FXB"]),
                                 Dict("inclusiveMode" => true, "semiInclusiveMode" => false))
 cfg["active_detectors"] = ["FXA", "FXB", "FXC"]
+# Left to their (identical) defaults, so the run record has to fill them in.
+delete!(cfg, "TPC_threshold"); delete!(cfg, "prior_cc_xsec_norm")
 cfg_file = joinpath(tmp, "derived.yaml")
 YAML.write_file(cfg_file, cfg)
 
@@ -53,6 +55,34 @@ cd(ROOT)
 empty!(ARGS); push!(ARGS, cfg_file)
 include(joinpath(ROOT, "src", "readConfig.jl"))
 main()
+
+# --- the run record (src/runRecord.jl): the config used, defaults filled in, and provenance ---
+@testset "run record of the derived run" begin
+    rec = YAML.load_file(joinpath(tmp, "derived_config.yaml"))
+    @test rec["provenance"]["config_file"] == abspath(cfg_file)
+    @test rec["provenance"]["run_mode"] == "derived"
+    res, dflt = rec["config"], rec["defaults_applied"]
+    for (k, v) in cfg                                     # the file's own values round-trip
+        k == "detectors" && continue
+        @test res[k] == v
+    end
+    for (n, b) in cfg["detectors"], (k, v) in b
+        @test res["detectors"][n][k] == v
+    end
+    @test isempty(intersect(keys(dflt), setdiff(keys(cfg), ["detectors"])))
+    # the defaults recorded are the values the run used
+    g(s) = Base.invokelatest(getglobal, Main, s)
+    @test dflt["TPC_threshold"] * 1e-3 ≈ g(:tpc_threshold) rtol=1e-14
+    @test Base.invokelatest(string_to_distribution, dflt["prior_cc_xsec_norm"]) == g(:prior_cc_xsec_norm)
+    @test dflt["hmc_max_depth"] == g(:hmc_max_depth)
+    @test dflt["CC_xsec_scale"] == g(:CC_xsec_scale)
+    @test dflt["mcmc_seed"] === g(:mcmc_seed) === nothing
+    @test haskey(dflt["detectors"]["FXA"], "module_mass_kt")
+    # re-parsing the resolved detector blocks gives the detectors the run used
+    for n in cfg["active_detectors"]
+        @test Base.invokelatest(parse_detector_block, res["detectors"][n], n; defaults = res) == g(:detector_configs)[n]
+    end
+end
 
 # --- reference values, computed independently of the derived-mode aggregation ---
 pars = [Base.invokelatest(() -> merge(true_params, NamedTuple{Tuple(Symbol.(keys(s)))}(Tuple(values(s)))))

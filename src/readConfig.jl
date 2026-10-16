@@ -43,6 +43,7 @@ end
 
 
 include(joinpath(@__DIR__, "logger.jl"))
+include(joinpath(@__DIR__, "runRecord.jl"))   # <outFile>_config.yaml: resolved config + provenance
 
 # Function to load parameters from the YAML file
 function load_parameters(yaml_file::String)
@@ -437,6 +438,9 @@ function main()
     )[run_mode]
 
     script_path = joinpath(@__DIR__, script_to_run)  # Reference script in the same directory
+
+    # Resolved config + provenance, written before the run so a crashed or killed run keeps it
+    @logmsg Output ("Run record: " * write_run_record(outFile, yaml_file, config))
 
     # include the corresponding script
     include(script_path)
