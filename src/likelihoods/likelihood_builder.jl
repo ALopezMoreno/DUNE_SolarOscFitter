@@ -260,8 +260,8 @@ function make_perbin_likelihood(
     rates = nothing,
     use_ES::Bool = true,
     use_CC::Bool = true,
-    ES_llh = llh_ES_poisson,
-    CC_llh = llh_CC_poisson,
+    ES_llh = llh_ES_poisson_perbin,
+    CC_llh = llh_CC_poisson_perbin,
     uncertainty_ratio_CC_night = nothing,           # needed only for Barlow-Beeston
     debug::Bool = false
 )
@@ -317,8 +317,9 @@ function make_perbin_likelihood(
                     error("uncertainty_ratio_CC_night must be provided for Barlow-Beeston systematics")
                 error("llh_CC_barlowBeeston_perbin is not yet implemented")
             else
-                # Default Poisson per-bin
-                llh_CC_poisson_perbin(d, parameters, _rates)
+                # the CC per-bin function passed in (this used to call llh_CC_poisson_perbin
+                # regardless, which only mattered once a non-Poisson CC likelihood existed)
+                CC_llh(d, parameters, _rates)
             end
 
             out.CC_day   .+= cc.CC_day

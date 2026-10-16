@@ -1,6 +1,16 @@
 include(joinpath(@__DIR__, "histHelpers.jl"))
 
-function create_response_matrix(data, bin_info_x, bin_info_y)
+"""
+    create_response_counts(data, bin_info_x, bin_info_y) -> Matrix{Float64}
+
+MC event counts n[i, j] per (x bin, y bin), before row normalisation. Kept for the MC
+statistical uncertainty of the predictions (src/likelihoods/mcstat.jl).
+"""
+create_response_counts(data, bin_info_x, bin_info_y) = _response_matrix(data, bin_info_x, bin_info_y; normalise=false)
+
+create_response_matrix(data, bin_info_x, bin_info_y) = _response_matrix(data, bin_info_x, bin_info_y; normalise=true)
+
+function _response_matrix(data, bin_info_x, bin_info_y; normalise::Bool)
     """
     Create a detector response matrix from Monte Carlo simulation data.
     
@@ -57,6 +67,8 @@ function create_response_matrix(data, bin_info_x, bin_info_y)
             contribution_matrix[true_bin, reco_bin] += 1
         end
     end
+
+    normalise || return contribution_matrix
 
     # Normalize each row to create probability matrix
     # Each row represents P(y | x) e.g. P(E_reco | E_true) for a given true energy bin
@@ -152,6 +164,15 @@ function build_response_matrices(det)
     CC_eff         = CC_sel_eff
 
     eff_tuple = (ES_nue=ES_nue_eff, ES_nuother=ES_nuother_eff, CC=CC_eff)
+
+    # MC statistics of the signal predictions: response counts n[i, j] (row sums = MC events per
+    # E_true bin) and the per-E_reco total counts behind each efficiency (src/likelihoods/mcstat.jl).
+    mc_tuple = (
+        ES_nue     = (counts = create_response_counts(nue_ES_sample,   Etrue_bins, Ereco_bins_ES_extended), tot = Float64.(ES_nue_tot)),
+        ES_nuother = (counts = create_response_counts(other_ES_sample, Etrue_bins, Ereco_bins_ES_extended), tot = Float64.(ES_nuoth_tot)),
+        CC         = (counts = create_response_counts(CC_sample,       Etrue_bins, Ereco_bins_CC_extended), tot = Float64.(CC_tot)),
+        ang_mask   = ang_mask,
+    )
     bins_tuple = (ES=Ereco_bins_ES_extended, CC=Ereco_bins_CC_extended, cos_scatter=cos_scatter_bins)
 
     if inclusive_analysis || semi_inclusive_analysis
@@ -164,6 +185,8 @@ function build_response_matrices(det)
         CC_incl_sel_eff = @. ifelse(CC_incl_tot == 0, 0.0, CC_incl_sel / CC_incl_tot)
         CC_incl_eff     = CC_incl_sel_eff
         eff_tuple = merge(eff_tuple, (CC_incl=CC_incl_eff,))
+        mc_tuple  = merge(mc_tuple, (CC_incl = (counts = create_response_counts(CC_sample, Etrue_bins, Ereco_bins_ES_extended),
+                                                tot = Float64.(CC_incl_tot)),))
 
         if semi_inclusive_analysis
             # ── CC angular split fractions (uniform-CC assumption) ────────────
@@ -226,6 +249,7 @@ function build_response_matrices(det)
                             eff=eff_tuple, bins=bins_tuple)
     end
 
+    responseMatrices = merge(responseMatrices, (mc = mc_tuple,))
     return responseMatrices, Ereco_bins_ES_extended, Ereco_bins_CC_extended
 end
 

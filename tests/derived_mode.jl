@@ -72,6 +72,8 @@ function wquantile(vals, q)
     return vals[o[clamp(searchsortedfirst(c, q), 1, length(vals))]]
 end
 
+chains_mc(has_CC) = has_CC ? (("ES", 0), ("CC", 0)) : (("ES", 0),)
+
 function asym(day, night, bg, idx)
     b = sum(bg[idx:end])
     D = sum(day[(ndims(day) == 1 ? (idx:length(day),) : (:, idx:size(day, 2)))...]) - 0.5b
@@ -170,6 +172,18 @@ saved = jldopen(f -> Dict(k => f[k] for k in keys(f) if startswith(k, "derived_"
                 @test bd.data ≈ (ang ? vec(sum(obs_d, dims=1)) .+ vec(sum(obs_n, dims=(1, 3))) :
                                        obs_d .+ vec(sum(obs_n, dims=1))) rtol=1e-12
                 @test bd.in_fit == ((1:nrow(bd)) .>= getfield(li, Symbol("index_", ch)))
+            end
+
+            # MC statistics (src/likelihoods/mcstat.jl): the prediction rebuilt from its signal and
+            # background components reproduces the Asimov data in every E_reco bin (day + night;
+            # angular summed over cos θ), and the effective MC counts are positive.
+            for (ch, _) in chains_mc(has_CC)
+                mcc = out.mc_counts[Symbol(ch)]
+                obs_d, obs_n = getfield(li.nObserved, Symbol(ch, "_day")), getfield(li.nObserved, Symbol(ch, "_night"))
+                ang = ch == "ES" && cfgd.angular_reco
+                data_col = ang ? vec(sum(obs_d, dims=1)) .+ vec(sum(obs_n, dims=(1, 3))) : obs_d .+ vec(sum(obs_n, dims=1))
+                @test mcc.M[2:end] ≈ data_col[2:end] rtol=1e-8
+                @test all(a -> a > 0, mcc.a)
             end
 
             # the fit starts at bin 2, whose lower edge is the threshold (Ereco_min_*)

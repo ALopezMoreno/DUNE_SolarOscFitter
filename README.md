@@ -257,6 +257,13 @@ julia --project tests/runtests.jl
 Benchmarks and profiling runs are opt-in via `JULIA_LIKELIHOOD_BENCH=1` and `JULIA_PROFILE=1`.
 
 
+## MC statistical uncertainty
+
+The predictions come from finite MC samples. Set `mc_stat_likelihood: DembinskiAbdelmotteleb`
+(or `BarlowBeeston`) to include their statistical uncertainty in the likelihood; the setup log
+reports the MC uncertainty per channel either way. Method and implementation:
+[docs/mcstat/mcstat.pdf](docs/mcstat/mcstat.pdf).
+
 ## Performance Tips
 
 - Use multiple threads: `julia -t auto` or `julia -t N`

@@ -66,6 +66,7 @@ include(joinpath(@__DIR__, "likelihoods", "likelihood_core.jl"))
 include(joinpath(@__DIR__, "likelihoods", "likelihood_debug.jl"))
 include(joinpath(@__DIR__, "likelihoods", "likelihood_statistical.jl"))
 include(joinpath(@__DIR__, "likelihoods", "likelihood_builder.jl"))
+include(joinpath(@__DIR__, "likelihoods", "mcstat.jl"))
 
 #############################################
 ######## PER-DETECTOR LOOP ########
@@ -264,13 +265,21 @@ for (det_name, det) in detector_configs
             @logmsg Setup "    of which BG: $(sci_notation(_cc_bg_factored))"
         end
     end
+    # ── MC statistics of the predictions: effective MC count per E_reco bin at the truth ──
+    osc_samples_true = compute_oscillated_samples(unoscillatedSample_det, true_params_det,
+                                                  compute_shared_osc_probs(true_params_det, solarModel),
+                                                  Val(det.ES_mode), Val(det.CC_mode))
+    mc_counts_det = mc_effective_counts(det, responseMatrices_det, backgrounds_det, osc_samples_true,
+                                        ES_bg_norms_true_det, CC_bg_norms_true_det, exposure_weights)
+    log_mc_counts(det, mc_counts_det, index_ES_det, index_CC_det)
+
     # ── Per-bin data / signal / background breakdown at the truth ──────────
     night_factor = 0.5 * (1.0 + sum(exposure_weights))   # day + night total of a background spectrum
     if det.ES_mode
         save_rate_breakdown(outFile, det_name, "ES", Ereco_bins_ES_ext.bins, index_ES_det, ES_combined,
                             backgrounds_det.ES, backgrounds_det.ES_conv, backgrounds_det.ES_par_counts,
                             ES_bg_norms_true_det, bg_component_names(det.ES_filepaths_BG, length(backgrounds_det.ES)),
-                            night_factor)
+                            night_factor; mc = get(mc_counts_det, :ES, nothing))
     end
     if det.CC_mode && (!det.inclusive_analysis || det.semi_inclusive_analysis)
         # semi-inclusive: the CC channel holds the backward fraction of CC signal and backgrounds
@@ -278,7 +287,7 @@ for (det_name, det) in detector_configs
         save_rate_breakdown(outFile, det_name, "CC", Ereco_bins_CC_ext.bins, index_CC_det, CC_combined,
                             backgrounds_det.CC, backgrounds_det.CC_conv, backgrounds_det.CC_par_counts,
                             CC_bg_norms_true_det, bg_component_names(det.CC_filepaths_BG, length(backgrounds_det.CC)),
-                            cc_factor)
+                            cc_factor; mc = get(mc_counts_det, :CC, nothing))
     end
 
     @logmsg Setup @sprintf("  D-N asymmetry ES: %.4f%%", eff_asymm_ES * 100)
@@ -310,6 +319,7 @@ for (det_name, det) in detector_configs
     )
 
     detector_outputs[det_name] = (
+        mc_counts          = mc_counts_det,
         likelihood_inputs  = likelihood_inputs_det,
         true_params        = (; true_parameters_det...),
         ES_bg_norms_pars   = ES_bg_norms_pars_det,

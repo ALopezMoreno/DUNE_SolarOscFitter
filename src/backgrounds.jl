@@ -80,6 +80,7 @@ function build_backgrounds(det, Ereco_bins_ES_extended, Ereco_bins_CC_extended)
     # selected and the total counts alike, so the efficiency stays in [0, 1].
     ES_bg    = Vector{Vector{Float64}}()
     ES_sides = Int[]
+    ES_relvar = Vector{Vector{Float64}}()     # per-bin relative MC variance Σw²/(Σw)² (selected)
     for df in df_ES_list
         w    = bg_weights(df)
         mask = Bool.(df.mask)
@@ -91,6 +92,7 @@ function build_backgrounds(det, Ereco_bins_ES_extended, Ereco_bins_CC_extended)
         attenuation = sum(ES_temp_total) / conv.ES_generated
         push!(ES_bg,    Float64.(ES_temp .* detection_time .* ES_eff_bg .* ES_normalisation .* attenuation))
         push!(ES_sides, side)
+        push!(ES_relvar, mc_relative_variance(df.Ereco[mask], w[mask], Ereco_bins_ES_extended))
     end
     ES_conv = Float64[es_face_area_cm2(s, conv.ES_face_areas_m2) for s in ES_sides]
 
@@ -98,12 +100,14 @@ function build_backgrounds(det, Ereco_bins_ES_extended, Ereco_bins_CC_extended)
     # The CC background MC is normalised per kt-year at the reference flux; scale to the module
     # mass and exposure here, and by norm / reference flux in normalize_backgrounds.
     CC_bg = Vector{Vector{Float64}}()
+    CC_relvar = Vector{Vector{Float64}}()
     if !inclusive_analysis || semi_inclusive_analysis
         for df in df_CC_list
             w    = bg_weights(df)
             mask = Bool.(df.mask)
             CC_temp_selec, _ = create_histogram(df.Ereco[mask], Ereco_bins_CC_extended, weights=w[mask], normalise=false)
             push!(CC_bg, Float64.(CC_temp_selec .* conv.module_mass_kt .* CC_normalisation))
+            push!(CC_relvar, mc_relative_variance(df.Ereco[mask], w[mask], Ereco_bins_CC_extended))
         end
     end
     CC_conv = fill(1.0 / conv.CC_reference_flux, length(CC_bg))
@@ -146,7 +150,8 @@ function build_backgrounds(det, Ereco_bins_ES_extended, Ereco_bins_CC_extended)
     end
 
     backgrounds = (ES=ES_bg, CC=CC_bg, sides=ES_sides, ES_conv=ES_conv, CC_conv=CC_conv,
-                   ES_par_counts=ES_bg_par_counts, CC_par_counts=CC_bg_par_counts)
+                   ES_par_counts=ES_bg_par_counts, CC_par_counts=CC_bg_par_counts,
+                   ES_relvar=ES_relvar, CC_relvar=CC_relvar)
 
     return backgrounds, ES_bg_norms_true, CC_bg_norms_true, ES_bg_norms_pars, CC_bg_norms_pars
 end

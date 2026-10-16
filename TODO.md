@@ -24,8 +24,10 @@ Deferred work, agreed with the maintainer. Remove items when done.
 
 ## Statistics (on hold, ask before starting)
 
-- [ ] Barlow–Beeston for limited MC statistics on the backgrounds (radiological weights 5.3e4
-      per event). `barlowBeestonLogLikelihood` exists; check how it is wired in.
+- [x] MC statistical uncertainty in the likelihood: `mc_stat_likelihood` (Dembinski–Abdelmotteleb
+      or Conway), shared day/night factor; docs/mcstat/mcstat.pdf. Open: it is off by default;
+      decide whether to switch it on for production fits once the inputs are event-level (the
+      pre-binned HD neutron/gamma files make their MC uncertainty meaningless).
 - [ ] Energy-scale and resolution systematics. (An unfinished energy-scale sketch, `src/responseSys.jl`,
       was removed as dead code on 2026-10-15; see `git log --all -- src/responseSys.jl`.)
 - [ ] R-hat / ESS convergence diagnostics; toy-data coverage tests.
