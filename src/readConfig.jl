@@ -113,6 +113,20 @@ function load_earth_normalisation_prior(jld2_file::String; required::Bool=true)
     return earth_normalisation_prior
 end
 
+function mc_stat_key(block, defaults, name)
+    v = String(get(block, "mc_stat_likelihood", get(defaults, "mc_stat_likelihood", "Poisson")))
+    v in ("Poisson", "BarlowBeeston", "DembinskiAbdelmotteleb") ||
+        error("Detector $name: mc_stat_likelihood must be Poisson, BarlowBeeston or DembinskiAbdelmotteleb (got $v)")
+    return v
+end
+
+function mc_stat_dn_key(block, defaults, name)
+    v = String(get(block, "mc_stat_day_night", get(defaults, "mc_stat_day_night", "shared")))
+    v in ("shared", "independent") ||
+        error("Detector $name: mc_stat_day_night must be shared or independent (got $v)")
+    return v
+end
+
 """
     threshold_binning(block, channel, name) -> (bin_number, min, max)   [GeV]
 
@@ -138,7 +152,7 @@ end
 Parse one entry from the `detectors:` YAML section (or the flat top-level config
 for backward compatibility) into a per-detector named tuple consumed by setup.jl.
 """
-function parse_detector_block(block::Dict, name::String)
+function parse_detector_block(block::Dict, name::String; defaults::Dict = Dict{String,Any}())
     sc = get(block, "singleChannel", false)
     cc_mode = (sc == false || sc == "CC")
     es_mode = (sc == false || sc == "ES")
@@ -186,6 +200,10 @@ function parse_detector_block(block::Dict, name::String)
         ES_bg_generated_events  = Float64(get(block, "ES_bg_generated_events", 50e6)),
         ES_bg_face_areas_m2     = Float64.(get(block, "ES_bg_face_areas_m2", [2 * 12.0 * 64.0, 2 * 12.0 * 12.0])),
         CC_bg_reference_flux    = Float64(get(block, "CC_bg_reference_flux", 2.2e-6)),
+        # MC statistical uncertainty of the predictions (src/likelihoods/mcstat.jl); top-level
+        # keys set the default for every detector.
+        mc_stat_likelihood      = mc_stat_key(block, defaults, name),
+        mc_stat_day_night       = mc_stat_dn_key(block, defaults, name),
     )
 end
 
@@ -317,7 +335,7 @@ function main()
     if haskey(config, "detectors")
         active = get(config, "active_detectors", sort(collect(keys(config["detectors"]))))
         global detector_configs = OrderedDict{String,Any}(
-            name => parse_detector_block(config["detectors"][name], name)
+            name => parse_detector_block(config["detectors"][name], name; defaults = config)
             for name in active
         )
     else

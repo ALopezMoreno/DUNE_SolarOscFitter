@@ -110,7 +110,7 @@ end
 
 """
     save_rate_breakdown(path_prefix, det_name, channel, edges_GeV, index, data_total, BG_raw,
-                        conv, par_counts, norms_true, names, night_factor)
+                        conv, par_counts, norms_true, names, night_factor; mc = nothing)
 
 Write `<path_prefix>_<det>_<channel>_breakdown.csv`: per Ereco bin the Asimov data (day + all
 night bins), each background component at its true normalisation, their sum and the signal
@@ -118,7 +118,7 @@ night bins), each background component at its true normalisation, their sum and 
 turns a background spectrum into its day + night total.
 """
 function save_rate_breakdown(path_prefix, det_name, channel, edges_GeV, index, data_total, BG_raw,
-                             conv, par_counts, norms_true, names, night_factor)
+                             conv, par_counts, norms_true, names, night_factor; mc = nothing)
     comps = Vector{Vector{Float64}}()
     ni = 1
     for (i, beh) in enumerate(par_counts)
@@ -135,6 +135,10 @@ function save_rate_breakdown(path_prefix, det_name, channel, edges_GeV, index, d
                    background = bg_tot)
     for (nm, c) in zip(names, comps)
         df[!, "bg_" * nm] = c
+    end
+    if mc !== nothing   # MC statistics of the prediction (src/likelihoods/mcstat.jl)
+        df[!, "mc_effective_count"] = mc.a
+        df[!, "mc_rel_uncertainty"] = [isfinite(a) && a > 0 ? 1 / sqrt(a) : 0.0 for a in mc.a]
     end
     path = "$(path_prefix)_$(det_name)_$(channel)_breakdown.csv"
     CSV.write(path, df)

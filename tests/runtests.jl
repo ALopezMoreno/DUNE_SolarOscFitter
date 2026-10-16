@@ -14,6 +14,7 @@ include(joinpath(@__DIR__, "test_es_xsec.jl"))
 include(joinpath(@__DIR__, "test_osc_night.jl"))
 include(joinpath(@__DIR__, "test_response_and_backgrounds.jl"))
 include(joinpath(@__DIR__, "test_input_checks.jl"))
+include(joinpath(@__DIR__, "test_mcstat.jl"))
 
 # End-to-end test of derived mode on the two-detector fixtures (own process: it runs the full
 # setup; ~1 min). On by default; JULIA_SKIP_DERIVED=1 skips it.
@@ -29,7 +30,7 @@ end
 # End-to-end likelihood regression (full setup, one process per variant; a few minutes)
 if get(ENV, "JULIA_REGRESSION", "0") == "1"
     @testset "likelihood regression" begin
-        for variant in ("night", "legacy")
+        for variant in ("night", "legacy", "night_da", "night_bb", "night_da_indep")
             cmd = `$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) $(joinpath(@__DIR__, "regression_likelihood.jl")) $variant`
             @test success(pipeline(cmd; stdout=stdout, stderr=stderr))
         end

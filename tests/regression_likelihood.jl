@@ -11,6 +11,8 @@ ES and CC, two detectors, fixed and free backgrounds, and semi-inclusive angular
 
 variant: "night"  (default night calculation, NightOsc)
          "legacy" (3-flavour per-path NumOsc night calculation)
+         "night_da", "night_bb", "night_da_indep" (night with the MC statistical uncertainty:
+          Dembinski–Abdelmotteleb or Conway's Barlow–Beeston, shared or independent day/night)
 --update rewrites the reference for this variant instead of checking it.
 --grad   also checks the Enzyme reverse-mode gradient of the likelihood against ForwardDiff
          at the "near" point (variant "night" only; the first Enzyme call compiles for minutes).
@@ -25,6 +27,11 @@ const REF_FILE  = joinpath(@__DIR__, "regression_reference.toml")
 const VARIANTS  = Dict(
     "night"  => Dict{String,Any}("nightOsc" => true),
     "legacy" => Dict{String,Any}("nightOsc" => false, "fastFit" => true),
+    # MC statistical uncertainty in the likelihood (src/likelihoods/mcstat.jl), all detectors
+    "night_da"       => Dict{String,Any}("nightOsc" => true, "mc_stat_likelihood" => "DembinskiAbdelmotteleb"),
+    "night_bb"       => Dict{String,Any}("nightOsc" => true, "mc_stat_likelihood" => "BarlowBeeston"),
+    "night_da_indep" => Dict{String,Any}("nightOsc" => true, "mc_stat_likelihood" => "DembinskiAbdelmotteleb",
+                                         "mc_stat_day_night" => "independent"),
 )
 const RTOL = 1e-9
 
@@ -73,6 +80,18 @@ points = Dict(
 )
 llh_values = Dict(name => Float64(Base.invokelatest(total_llh, p)) for (name, p) in points)
 
+# MC-statistics variants: the per-bin diagnostic (derived mode) at the displaced point. Every piece
+# is a finite −Q/2 ≤ 0 (Baker–Cousins form), and per detector the pieces add up to at most the
+# detector's total (the total also has the overflow bin, which the diagnostic leaves out; its
+# contribution is ≤ 0). (The plain Poisson diagnostic is −(μ − n ln μ), not Baker–Cousins.)
+for dname in (haskey(VARIANTS[variant], "mc_stat_likelihood") ? Base.invokelatest(() -> collect(keys(detector_perbin_fns))) : String[])
+    pb  = Base.invokelatest(detector_perbin_fns[dname], points["near"])
+    tot = Base.invokelatest(detector_llh_fns[dname], points["near"])
+    vals = reduce(vcat, [vec(v) for v in values(pb)])
+    (all(isfinite, vals) && all(<=(1e-9), vals) && sum(vals) >= tot - 1e-6 * abs(tot)) ||
+        error("per-bin diagnostic inconsistent for $dname in '$variant' (sum $(sum(vals)), total $tot)")
+end
+
 ref = isfile(REF_FILE) ? TOML.parsefile(REF_FILE) : Dict{String,Any}()
 if update
     ref[variant] = llh_values
@@ -90,7 +109,7 @@ for (name, v) in sort(collect(llh_values))
     @printf("%-7s %-6s  llh = %.12g  reference = %.12g  %s\n", variant, name, v, r, ok ? "ok" : "MISMATCH")
 end
 if check_grad
-    variant == "night" || error("--grad needs the night variant (legacy is not Enzyme-differentiable)")
+    startswith(variant, "night") || error("--grad needs a night variant (legacy is not Enzyme-differentiable)")
     @eval using ForwardDiff, Enzyme
     p = points["near"]
     names = keys(p)

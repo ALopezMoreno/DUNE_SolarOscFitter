@@ -21,6 +21,14 @@ function ereco_edges(b)
     return e
 end
 
+# Relative MC variance of a weighted histogram per bin, Σw² / (Σw)² (0 for empty bins): the
+# square of the fractional MC statistical uncertainty of each bin's content.
+function mc_relative_variance(E, w, bin_info)
+    s1, _ = create_histogram(E, bin_info, weights=w,       normalise=false)
+    s2, _ = create_histogram(E, bin_info, weights=w .^ 2,  normalise=false)
+    return Float64[s > 0 ? q / s^2 : 0.0 for (s, q) in zip(s1, s2)]
+end
+
 function create_histogram(dataRaw, bin_info; weights=nothing, normalise=true)
     """
     Create a histogram from data with optional weights and normalization.

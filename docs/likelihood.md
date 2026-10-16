@@ -97,7 +97,19 @@ if the angular normalisation per energy bin were not trusted; the code no longer
 
 ---
 
-## 4. Barlow–Beeston log-likelihood
+## 3b. MC statistical uncertainty (`mc_stat_likelihood`)
+
+`src/likelihoods/mcstat.jl`. With `mc_stat_likelihood: DembinskiAbdelmotteleb` or `BarlowBeeston`,
+each channel's predictions are scaled by a factor β per E_reco bin, shared by the day bin and all
+night bins of that energy (`mc_stat_day_night: shared`), and profiled in closed form against the
+bin's effective MC count a = M²/Var_MC(M), computed once at the Asimov truth from the signal
+response counts and the background weights. Derivation, references and the tests:
+[mcstat/mcstat.pdf](mcstat/mcstat.pdf) (Dembinski & Abdelmotteleb,
+[arXiv:2206.12346](https://arxiv.org/abs/2206.12346)).
+
+## 4. Barlow–Beeston log-likelihood (old CC-night-only function, not used)
+
+Superseded by §3b; `llh_CC_barlowBeeston` is kept only as the formula reference it was.
 
 **Function:** `barlowBeestonLogLikelihood(nExpected, nMeasured, sigmaVar)` (`likelihood_statistical.jl:149–207`)
 

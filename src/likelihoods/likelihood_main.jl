@@ -7,18 +7,24 @@ for (dname, out) in detector_outputs
     det = detector_configs[dname]
     li  = out.likelihood_inputs
 
-    det_llh = make_likelihood(li;
-        use_ES = det.ES_mode,
-        use_CC = det.CC_mode && (!det.inclusive_analysis || det.semi_inclusive_analysis),
-        ES_llh = det.angular_reco ? llh_ES_angle   : llh_ES_poisson,
-        CC_llh = llh_CC_poisson,
-    )
-    det_perbin = make_perbin_likelihood(li;
-        use_ES = det.ES_mode,
-        use_CC = det.CC_mode && (!det.inclusive_analysis || det.semi_inclusive_analysis),
-        ES_llh = det.angular_reco ? llh_ES_angle_perbin : llh_ES_poisson_perbin,
-        CC_llh = llh_CC_poisson_perbin,
-    )
+    use_CC = det.CC_mode && (!det.inclusive_analysis || det.semi_inclusive_analysis)
+
+    # Channel likelihoods: plain Poisson, or with the MC statistical uncertainty of the
+    # predictions (mc_stat_likelihood; src/likelihoods/mcstat.jl).
+    if det.mc_stat_likelihood == "Poisson"
+        ES_llh,  CC_llh  = det.angular_reco ? llh_ES_angle : llh_ES_poisson, llh_CC_poisson
+        ES_pbin, CC_pbin = det.angular_reco ? llh_ES_angle_perbin : llh_ES_poisson_perbin, llh_CC_poisson_perbin
+    else
+        method = mcstat_method(det.mc_stat_likelihood)
+        shared = det.mc_stat_day_night == "shared"
+        a_ES = haskey(out.mc_counts, :ES) ? out.mc_counts[:ES].a : Float64[]
+        a_CC = haskey(out.mc_counts, :CC) ? out.mc_counts[:CC].a : Float64[]
+        ES_llh,  CC_llh  = llh_ES_mcstat(method, shared, a_ES), llh_CC_mcstat(method, shared, a_CC)
+        ES_pbin, CC_pbin = llh_ES_mcstat_perbin(method, shared, a_ES), llh_CC_mcstat_perbin(method, shared, a_CC)
+    end
+
+    det_llh = make_likelihood(li; use_ES = det.ES_mode, use_CC = use_CC, ES_llh = ES_llh, CC_llh = CC_llh)
+    det_perbin = make_perbin_likelihood(li; use_ES = det.ES_mode, use_CC = use_CC, ES_llh = ES_pbin, CC_llh = CC_pbin)
     detector_llh_fns[dname]    = det_llh
     detector_perbin_fns[dname] = det_perbin
 end

@@ -141,6 +141,22 @@ Status tags:
     on frozen synthetic samples (`tests/fixtures/`): ES and CC, two detectors, fixed and free
     backgrounds, semi-inclusive angular ES. It does not depend on the real (changing) inputs.
 
+5.5a MC statistical uncertainty (`mc_stat_likelihood`, src/likelihoods/mcstat.jl, notes in
+    docs/mcstat/mcstat.pdf). **[tested]** `test_mcstat.jl`, `derived_mode.jl`, regression variants
+    `night_da`, `night_bb`, `night_da_indep`:
+    - the closed-form scale β is the minimum of the profiled likelihood, per bin and for a shared
+      day + night group (against brute-force minimisation);
+    - the per-bin form equals MaCh3's `GetTestStatLLH` (DA and Conway);
+    - a → ∞ gives Poisson; Asimov data give β = 1 and an unchanged likelihood at the truth;
+      profiling never lowers the likelihood below Poisson;
+    - the signal MC variance agrees with brute-force resampling of the MC; the background
+      relative variance is Σw²/(Σw)²;
+    - the prediction rebuilt from its components equals the Asimov data in every E_reco bin and
+      mode (plain, angular, inclusive, semi-inclusive);
+    - per-bin pieces add up to the channel likelihood; Enzyme agrees with ForwardDiff.
+    The effective counts are frozen at the truth (as MaCh3's default); the scattering-angle and
+    mis-ID responses carry no MC variance. **[inferred]** that these omissions are small.
+
 5.6 Per-bin log L (`make_perbin_likelihood`, a diagnostic) summed over bins equals the total log L
     minus the overflow (last, +∞) energy bin, which the diagnostic leaves out by design (it holds
     little signal and dominated the bin-importance scores). `per_bin_llh` returns one result per

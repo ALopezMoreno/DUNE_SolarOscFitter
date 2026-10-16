@@ -112,6 +112,8 @@ Strings are evaluated as Julia `Distributions.jl` expressions.
 | `module_mass_kt` | Float | (default `10`) Fiducial mass of one module [kt]. Sets the signal target counts (from the LAr molar mass) and scales the CC background MC, which is normalised per kt-year. |
 | `ES_bg_generated_events` | Float | (default `50e6`) Events generated for each ES background MC file; each file's weighted event count over this is the fraction that reaches the detector. |
 | `ES_bg_face_areas_m2` | [Float, Float] | (default `[1536, 288]`, i.e. 2·12·64 and 2·12·12 m²) Exposed area of the long faces (`side` = 0) and the end caps (`side` = 1); files without a `side` use the sum. Multiplies the ES background flux normalisation. |
+| `mc_stat_likelihood` | String | (default `Poisson`) MC statistical uncertainty of the predictions in the likelihood: `Poisson` (none), `DembinskiAbdelmotteleb` (recommended) or `BarlowBeeston` (Conway's approximation). Can also be set at the top level as the default for all detectors. See [mcstat/mcstat.pdf](mcstat/mcstat.pdf). |
+| `mc_stat_day_night` | String | (default `shared`) `shared`: one MC scale factor per E_reco bin for its day and all night bins, which come from the same MC events; `independent`: one per bin, as MaCh3 does. Top level or per detector. |
 | `CC_bg_reference_flux` | Float | (default `2.2e-6` cm⁻²s⁻¹) Flux at which the CC background MC is normalised; each CC background is scaled by its normalisation divided by this. |
 | `CC_xsec_scale` | Float | (default `1.0`) Fixed scale factor on the CC cross section relative to the MARLEY prediction. Applied to both Asimov data and prediction (unlike `cc_xsec_norm`, which is a fitted nuisance). |
 
