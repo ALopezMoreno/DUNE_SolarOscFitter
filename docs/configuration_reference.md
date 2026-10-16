@@ -166,12 +166,16 @@ chain can be traced back to what produced it:
 
 - `provenance`: config file (absolute path, SHA-256), git commit and branch, `git_dirty` (tracked
   files differ from the commit; untracked files are ignored) with the list of changed files,
-  Julia version, host, threads, RunMode, working directory, local timestamp.
+  Julia version, host, threads, RunMode, working directory, local timestamp, and `input_sha256`:
+  the SHA-256 of every input file the config names (most of `inputs/` is not in git).
 - `defaults_applied`: the keys absent from the config file and the values used for them.
 - `config`: the configuration actually used (the file plus `defaults_applied`).
-  `YAML.load_file("{outFile}_config.yaml")["config"]` is a complete config for a re-run.
+  `YAML.load_file("{outFile}_config.yaml")["config"]` is a complete config for a re-run. With
+  `mcmc_seed` unset the seed actually drawn is not recorded, so such a re-run is statistically,
+  not bitwise, equivalent.
 
 An existing record is moved to `{outFile}_config.old<k>.yaml`, never overwritten. MCMC runs also
 store the same text in the chain file, as the string `run_config` (`run_config_2`, ... when a
-resumed run appends to a file that already has one). Derived mode writes the record at its own
-`outFile` only; it does not add it to the chain file it reads.
+resumed run appends to a file that already has one). A new MCMC run whose `{outFile}.jld2` exists
+stops before writing anything. Derived mode writes into `{prevFile}.jld2` (`outFile` is unused), so
+its record is `{prevFile}_derived_config.yaml`; it is not added to the chain file.

@@ -52,15 +52,37 @@ cfg_file = joinpath(tmp, "derived.yaml")
 YAML.write_file(cfg_file, cfg)
 
 cd(ROOT)
-empty!(ARGS); push!(ARGS, cfg_file)
 include(joinpath(ROOT, "src", "readConfig.jl"))
+
+# A new MCMC run onto an existing chain file must stop before it touches that chain's run record.
+@testset "aborted run keeps the existing record" begin
+    d = mktempdir()
+    mcfg = merge(deepcopy(cfg), Dict{String,Any}("RunMode" => "MCMC", "outFile" => joinpath(d, "run")))
+    delete!(mcfg, "prevFile")
+    YAML.write_file(joinpath(d, "mcmc.yaml"), mcfg)
+    write(joinpath(d, "run.jld2"), "existing chain")
+    write(joinpath(d, "run_config.yaml"), "existing record")
+    empty!(ARGS); push!(ARGS, joinpath(d, "mcmc.yaml"))
+    @test_throws ErrorException main()
+    @test read(joinpath(d, "run_config.yaml"), String) == "existing record"
+    @test !isfile(joinpath(d, "run_config.old1.yaml"))
+end
+
+empty!(ARGS); push!(ARGS, cfg_file)
 main()
 
 # --- the run record (src/runRecord.jl): the config used, defaults filled in, and provenance ---
 @testset "run record of the derived run" begin
-    rec = YAML.load_file(joinpath(tmp, "derived_config.yaml"))
+    # derived mode writes into prevFile.jld2, so its record sits next to the chain
+    @test !isfile(joinpath(tmp, "derived_config.yaml"))
+    rec = YAML.load_file(chain * "_derived_config.yaml")
     @test rec["provenance"]["config_file"] == abspath(cfg_file)
     @test rec["provenance"]["run_mode"] == "derived"
+    # every input file is pinned by its hash
+    sha = rec["provenance"]["input_sha256"]
+    for f in (cfg["solar_model_file"], cfg["flux_model_file"], cfg["earth_model_file"])
+        @test sha[f] == bytes2hex(open(SHA.sha256, f))
+    end
     res, dflt = rec["config"], rec["defaults_applied"]
     for (k, v) in cfg                                     # the file's own values round-trip
         k == "detectors" && continue

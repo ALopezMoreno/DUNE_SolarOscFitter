@@ -11,7 +11,7 @@
 
 # ── 1. RUN CONTROL ──────────────────────────────────────────────────────────
 
-outFile:  "outputs/NEWCHAIN"   # output file prefix. Not used in derived mode
+outFile:  "outputs/NEWCHAIN"   # output file prefix. Not used in derived mode (record: <prevFile>_derived_config.yaml)
 # prevFile: "outputs/OLDCHAIN"  # resume from saved chain state OR load for derived mode
 
 RunMode:  "MCMC"   # MCMC | LLH | derived | PROFILE | SETUP (build the likelihood only)

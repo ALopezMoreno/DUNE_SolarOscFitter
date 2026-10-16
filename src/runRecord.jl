@@ -12,6 +12,9 @@ killed still leaves its record. It writes `<outFile>_config.yaml` with three sec
                      `YAML.load_file(record)["config"]` is a complete config file for a re-run.
 
 An existing record is never overwritten: it is renamed to `<outFile>_config.old<k>.yaml`.
+Derived mode writes into `<prevFile>.jld2`, so main() passes `<prevFile>_derived` as the prefix.
+Input files are pinned by SHA-256 (`provenance: input_sha256`): most of inputs/ is gitignored, so
+the git commit alone does not identify them.
 MCMC runs also store the same text in the chain file (key `run_config`, see store_run_record!).
 
 `defaults_applied` is built from the globals readConfig.jl set, so its key lists below must
@@ -35,6 +38,7 @@ function _toplevel_defaults_used()
         "prior_cc_xsec_curv" => () -> "Normal(0.0, 0.05)",
         "true_8B_flux"       => () -> integrated_8B_flux_true,
         "true_cc_xsec_norm"  => () -> cc_xsec_norm_true,
+        "Asimov"             => () -> true,                              # the only data mode
         "nightOsc"           => () -> nightOsc,
         "ad_backend"         => () -> ad_backend,
         "hmc_max_depth"      => () -> hmc_max_depth,
@@ -151,6 +155,22 @@ function run_provenance(yaml_file::AbstractString; run_mode = "unknown", repo::A
     return p
 end
 
+"""
+    input_hashes(config) -> OrderedDict
+
+SHA-256 of every existing file named by a string value of `config` (nested dicts and lists
+included), keyed by the path as written in the config.
+"""
+function input_hashes(config)
+    paths = String[]
+    collect_paths(x) = nothing
+    collect_paths(x::AbstractString) = (isfile(x) && push!(paths, x); nothing)
+    collect_paths(d::AbstractDict) = foreach(collect_paths, values(d))
+    collect_paths(v::AbstractVector) = foreach(collect_paths, v)
+    collect_paths(config)
+    return OrderedDict{String,Any}(p => bytes2hex(open(sha256, p)) for p in sort(unique(paths)))
+end
+
 # Text of the last run record written in this process (also stored in MCMC chain files).
 const RUN_RECORD_TEXT = Ref("")
 const RUN_RECORD_STORED = Ref(false)
@@ -177,10 +197,13 @@ function write_run_record(outFile::AbstractString, yaml_file::AbstractString, co
         mv(path, old)
         @warn "Run record $path already existed; moved it to $old"
     end
+    resolved = resolved_config(config, detectors)
+    prov = run_provenance(yaml_file; run_mode = string(get(config, "RunMode", "unknown")))
+    prov["input_sha256"] = input_hashes(resolved)
     record = OrderedDict{String,Any}(
-        "provenance"       => run_provenance(yaml_file; run_mode = string(get(config, "RunMode", "unknown"))),
+        "provenance"       => prov,
         "defaults_applied" => _sorted(defaults_applied(config, detectors)),
-        "config"           => resolved_config(config, detectors),
+        "config"           => resolved,
     )
     text = """
     # SolarOscFitter run record (src/runRecord.jl).

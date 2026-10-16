@@ -439,8 +439,15 @@ function main()
 
     script_path = joinpath(@__DIR__, script_to_run)  # Reference script in the same directory
 
-    # Resolved config + provenance, written before the run so a crashed or killed run keeps it
-    @logmsg Output ("Run record: " * write_run_record(outFile, yaml_file, config))
+    # A new MCMC run refuses an existing chain file (runMCMCbatch); check it before the run record
+    # is written, so an aborted run does not displace the record of the chain already there.
+    run_mode == "MCMC" && prevFile === nothing && isfile(outFile * ".jld2") &&
+        error("Output file $(outFile).jld2 already exists. Delete it or choose a different outFile before starting a new run.")
+
+    # Resolved config + provenance, written before the run so a crashed or killed run keeps it.
+    # Derived mode writes into prevFile.jld2 (outFile is unused), so its record goes next to it.
+    record_prefix = (run_mode == "derived" && prevFile !== nothing) ? prevFile * "_derived" : outFile
+    @logmsg Output ("Run record: " * write_run_record(record_prefix, yaml_file, config))
 
     # include the corresponding script
     include(script_path)
