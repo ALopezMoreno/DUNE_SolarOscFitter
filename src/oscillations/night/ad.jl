@@ -244,7 +244,43 @@ function _node_objective(θ::Vector{Float64}, iv::_Interval, ip::Int, n::Int, kb
     return acc
 end
 
-# wᵀ ∂P/∂x for x = [Δm²₂₁, θ₁₂, θ₁₃, (layer_norms...)]
+# Forward pass over interval k at θ, keeping each path's stage-1 outputs (kap, psi) in the
+# adjoint workspace; the workspace ends with every quantity the reverse pass reads.
+function _forward_interval_store!(b::BinnedP1e, k::Int, θ::Vector{Float64}, norms::Vector{Float64})
+    iv = b.intervals[k]
+    ws = _workspace(b, k, Float64)
+    aw = _adj_workspace(b, k)
+    fill!(ws.R_bin, 0.0)
+    for ip in axes(iv.L, 1)
+        _nodes_path!(ws, iv, ip, θ[1], θ[2], θ[3], norms, b.phase_const)
+        aw.kap_all[:, :, ip] .= view(ws.kap, :, :, 1)
+        aw.psi_all[:, :, ip] .= view(ws.psi, :, :, 1)
+        _energy_path!(ws, iv, ip)
+    end
+    return ws
+end
+
+"""
+    _p1e_forward_store!(b, x) -> P
+
+The primal P(x) (same operations as `b(x...)`), computed so that the reverse rule can reuse its
+forward pass instead of repeating it: the per-interval workspaces keep every intermediate the
+adjoint reads, and the point x is recorded. Any other primal call clears the record.
+"""
+function _p1e_forward_store!(b::BinnedP1e, x::Vector{Float64})
+    θ = length(x) == 3 ? vcat(x, ones(b.n_layers)) : copy(x)
+    norms = θ[4:end]
+    num = zeros(b.shape); den = zeros(b.shape[1])
+    for k in eachindex(b.intervals)
+        ws = _forward_interval_store!(b, k, θ, norms)
+        _stage_zenith!(num, den, b.intervals[k], ws)
+    end
+    _task_store(b)[:forward_x] = copy(x)
+    return [den[i] > 0 ? num[i, j] / den[i] : 0.0 for i in axes(num, 1), j in axes(num, 2)]
+end
+
+# wᵀ ∂P/∂x for x = [Δm²₂₁, θ₁₂, θ₁₃, (layer_norms...)]. Reuses the forward pass of
+# _p1e_forward_store! when it was the last NightOsc evaluation at this x in this task.
 function _p1e_vjp_manual(b::BinnedP1e, x::Vector{Float64}, w::Matrix{Float64})
     θ = length(x) == 3 ? vcat(x, ones(b.n_layers)) : copy(x)
     θbar = zeros(length(θ))
@@ -252,19 +288,15 @@ function _p1e_vjp_manual(b::BinnedP1e, x::Vector{Float64}, w::Matrix{Float64})
     den = _den(b)
     numbar = [den[i] > 0 ? w[i, j] / den[i] : 0.0 for i in axes(w, 1), j in axes(w, 2)]
     pc = b.phase_const
+    stored = get(_task_store(b), :forward_x, nothing)
+    reuse = stored !== nothing && stored == x
     for (k, iv) in enumerate(b.intervals)
-        ws = _workspace(b, k, Float64)
+        ws = reuse ? _workspace(b, k, Float64) : _forward_interval_store!(b, k, θ, norms)
         aw = _adj_workspace(b, k)
-        # forward pass, keeping the stage-1 outputs
-        fill!(ws.R_bin, 0.0)
-        for ip in axes(iv.L, 1)
-            _nodes_path!(ws, iv, ip, θ[1], θ[2], θ[3], norms, pc)
-            aw.kap_all[:, :, ip] .= view(ws.kap, :, :, 1)
-            aw.psi_all[:, :, ip] .= view(ws.psi, :, :, 1)
-            _energy_path!(ws, iv, ip)
+        if !reuse        # (after _stage_zenith! the workspace already holds Sx and Px)
+            _contract_last!(ws.Sx, ws.S_bin, iv.B_xi)
+            _contract_last!(ws.Px, ws.P_bin, iv.B_xi)
         end
-        _contract_last!(ws.Sx, ws.S_bin, iv.B_xi)
-        _contract_last!(ws.Px, ws.P_bin, iv.B_xi)
         _zenith_adj!(aw, iv, ws, numbar)
         for ip in axes(iv.L, 1)
             view(ws.kap, :, :, 1) .= view(aw.kap_all, :, :, ip)
@@ -298,7 +330,8 @@ end
 
 function EnzymeRules.augmented_primal(config::EnzymeRules.RevConfigWidth{1}, ::Const{typeof(_p1e_vec)},
                                       ::Type{RT}, b::Const{BinnedP1e}, x::Annotation{Vector{Float64}}) where {RT}
-    P = _p1e_vec(b.val, x.val)
+    # the primal through _p1e_forward_store!, so the reverse pass can reuse its forward pass
+    P = length(x.val) == 3 ? _p1e_vec(b.val, x.val) : _p1e_forward_store!(b.val, x.val)
     dP = zero(P)
     primal = EnzymeRules.needs_primal(config) ? P : nothing
     shadow = EnzymeRules.needs_shadow(config) ? dP : nothing

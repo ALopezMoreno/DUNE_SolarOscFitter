@@ -19,8 +19,8 @@ Asimov:   true
 
 fastFit:  true    # solar production average at the mean density (true) or integrated (false)
 nightOsc: true    # NightOsc: exact (cos z, E_true) bin-averaged night Earth crossing; false = legacy 3-flavour per-path calc
-ad_backend: "ForwardDiff"  # HMC gradients: "ForwardDiff" or "Enzyme" (reverse mode: cost independent
-                           # of the number of parameters; requires nightOsc: true)
+ad_backend: "Enzyme"       # HMC gradients: "Enzyme" (reverse mode: cost independent of the number of
+                           # parameters, ~2x faster here; requires nightOsc: true) or "ForwardDiff"
 # mcmc_seed: 1234          # fix the MCMC RNG for reproducible chains (default: random)
 
 

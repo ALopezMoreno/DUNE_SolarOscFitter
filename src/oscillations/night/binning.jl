@@ -211,6 +211,7 @@ function (b::BinnedP1e)(dm2, th12, th13, layer_norms=nothing; missing_value=0)
     T = promote_type(typeof(dm2), typeof(th12), typeof(th13),
                      layer_norms === nothing ? Float64 : eltype(layer_norms))
     norms = layer_norms === nothing ? ones(T, b.n_layers) : T[x for x in layer_norms]
+    delete!(_task_store(b), :forward_x)   # the workspaces no longer hold _p1e_forward_store!'s state
     num = zeros(T, b.shape)
     den = zeros(b.shape[1])
     for (k, iv) in enumerate(b.intervals)

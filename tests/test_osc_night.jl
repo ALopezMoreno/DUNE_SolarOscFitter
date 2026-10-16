@@ -120,6 +120,22 @@ end
         @test he(θ0) == sum(W .* b(θ0[1] * 1e-5, θ0[2], θ0[3], θ0[4:9]))   # primal unchanged by the rule
     end
 
+    @testset "reverse rule reuses the primal's forward pass only when it is valid" begin
+        x1 = [4.0e-5, 0.60, 0.149, 0.9, 1.1, 1.15, 0.85, 1.05, 1.0]
+        x2 = [6.5e-5, 0.55, 0.150, 1.1, 0.9, 1.00, 1.10, 0.95, 1.0]
+        fresh = (delete!(NightOsc._task_store(b), :forward_x); NightOsc._p1e_vjp_manual(b, x1, W))
+        # same primal as the plain call, and the stored forward state gives the same VJP exactly
+        @test NightOsc._p1e_forward_store!(b, x1) == b(x1[1], x1[2], x1[3], x1[4:9])
+        NightOsc._p1e_forward_store!(b, x1)
+        @test NightOsc._p1e_vjp_manual(b, x1, W) == fresh
+        # a primal at another point in between invalidates the stored state: still correct
+        NightOsc._p1e_forward_store!(b, x1); b(x2[1], x2[2], x2[3], x2[4:9])
+        @test NightOsc._p1e_vjp_manual(b, x1, W) == fresh
+        # stored state for a different point is not reused
+        NightOsc._p1e_forward_store!(b, x2)
+        @test NightOsc._p1e_vjp_manual(b, x1, W) == fresh
+    end
+
     @testset "step propagator matches the 3-flavour NumOsc solver" begin
         # Independent check of the physics: NumOsc (full 3ν, constant potential per 10 km step)
         # against p1e_paths at the fitter's 300 km linear-slope steps. Measured ≤ 5e-4; the
