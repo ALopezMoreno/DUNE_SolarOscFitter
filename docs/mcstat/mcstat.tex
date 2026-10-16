@@ -175,9 +175,11 @@ the test statistic as a configuration choice (\code{LikelihoodOptions: TestStati
 (the marginal likelihood of Arg\"uelles et al.~\cite{IceCube}) and \code{Pearson}. All are
 evaluated per analysis bin in \code{SampleHandlerInterface::}\allowbreak\code{GetTestStatLLH(data, mc, w2)}, where
 \code{w2} is the sum of the squared weights of all MC events (signal and background) filled into
-the bin. By default \code{w2} is computed once and then frozen (\code{UpdateW2 = false}). The
-fitter's per-bin (``independent'') option reproduces MaCh3's formulas exactly; this is checked
-in \code{tests/test\_mcstat.jl}.
+the bin. By default \code{w2} is computed once and then frozen (\code{UpdateW2 = false}), while
+the effective count $k=\mu^2/w_2$ is recomputed from the current prediction at every call: MaCh3
+holds the \emph{absolute} MC uncertainty fixed. For a given prediction and effective count, the
+fitter's per-bin (``independent'') option evaluates exactly MaCh3's formulas; this is checked in
+\code{tests/test\_mcstat.jl}.
 
 \section{Implementation in SolarOscFitter}
 
@@ -186,7 +188,11 @@ in \code{tests/test\_mcstat.jl}.
 For each channel and reconstructed-energy bin $j$, the prediction at the Asimov truth, summed over
 day and all night bins, $M_j$, is rebuilt from its components, and its MC variance $V_j$ is
 computed (\code{mc\_effective\_counts} in \code{src/likelihoods/mcstat.jl}). The effective count is
-$a_j = M_j^2/V_j$, computed once at the truth and then held fixed, as in MaCh3.
+$a_j = M_j^2/V_j$, computed once at the truth and then held fixed. Holding $a_j$ fixed means holding
+the \emph{relative} MC uncertainty $1/\sqrt{a_j}$ fixed as the prediction moves; MaCh3 holds the
+absolute one fixed instead (Sec.~6). The two agree at the truth. For a pure normalisation change
+(e.g.\ a flux scale), the relative uncertainty of a reweighted MC sample is indeed unchanged, which
+is why this choice was made.
 \begin{description}
   \item[Backgrounds.] Each template's bin content is a sum of selected event weights, so its
     relative variance is $\sum w^2/(\sum w)^2$; it is multiplied by the square of the template's
@@ -211,11 +217,16 @@ of the MC (\code{tests/test\_mcstat.jl}).
 
 \subsection{One factor per energy bin for day and night}
 
-The night prediction in each zenith bin is the same set of MC events as the day prediction,
-weighted by exposure. Their MC fluctuations are therefore not independent: if the MC happened to
+The night prediction in each zenith bin is built from the same MC events as the day prediction.
+For backgrounds it is exactly the day template weighted by exposure; for signal the same response
+matrix is weighted by different (oscillated) true-energy rates, so the correlation is close to,
+but not exactly, one. Their MC fluctuations are therefore not independent: if the MC happened to
 put too many events into energy bin $j$, it did so for the day bin and for every night bin. Giving
 each $(\cos z, E)$ bin its own factor, as a literal per-bin treatment does, counts some 50 copies
-of one fluctuation as independent, and so understates the effect. The default
+of one fluctuation as independent. That has two effects: it \emph{understates} the uncertainty on
+the overall normalisation of the energy bin, and it \emph{overstates} the MC freedom in the
+day/night shape, since each zenith bin can then move on its own and absorb part of a day-night
+difference, which is where most of the $\Delta m^2_{21}$ information is. The default
 (\code{mc\_stat\_day\_night: shared}) therefore uses one $\beta_j$ for the group $G_j$ of all day
 and night bins of energy bin $j$:
 \begin{equation}
@@ -238,7 +249,10 @@ form that does not lose precision when $a_j$ is large:
   \tfrac12 a_j(\beta-1)^2 &= \tfrac12 a_j x^2 .
 \end{align}
 No iterative solver is needed. The likelihood remains smooth and is differentiated exactly by
-ForwardDiff and by Enzyme.
+ForwardDiff and by Enzyme. In Conway's form, a group with no data ($N_j=0$) and $M_j > a_j$ has its
+optimum at the boundary $\beta_j = 0$ (the Gaussian constraint is weaker than the data term); the
+group then has zero gradient. This is a known property of Conway's approximation that the
+Dembinski--Abdelmotteleb form does not share, since $\beta_j = a_j/(M_j+a_j) > 0$.
 
 \subsection{Properties checked by the tests}
 
@@ -276,8 +290,15 @@ $1/\sqrt{a_j}$ in the fit window, and the per-bin breakdown CSV lists $a_j$.
 \subsection{Limitations}
 
 \begin{itemize}
-  \item The effective counts are frozen at the truth. Away from the truth, the MC variance of a
-        reweighted prediction changes; MaCh3 makes the same default choice.
+  \item The effective counts (relative MC uncertainties) are frozen at the truth. Away from the
+        truth, the MC variance of a reweighted prediction changes in ways a single relative
+        uncertainty does not capture; MaCh3's default freezes the absolute one instead.
+  \item Correlations of one MC sample across channels are not modelled: in semi-inclusive mode the
+        same CC MC feeds the ES channel (forward fraction) and the CC channel (backward fraction),
+        each with its own $\beta$; the ES MC also feeds the mis-identification term.
+  \item One $\beta$ per energy bin covers all its scattering-angle bins, whose composition (forward-
+        peaked ES signal, flat CC and background) differs, so per-component shape fluctuations
+        within the bin are not modelled.
   \item The signal efficiency's MC uncertainty is treated as independent of the response's; the
         semi-inclusive mis-identification response and the scattering-angle response carry no MC
         variance.

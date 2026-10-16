@@ -111,10 +111,23 @@ end
         var_an = mean(signal_column(T, draw(), eff, zeros(5), g)[2] for _ in 1:400)
         @test var_an ≈ var_mc rtol=0.08
 
-        # efficiency term: eff = sel/tot with sel ~ Binomial(tot, ε)
-        tot, ε = [200.0], 0.3
-        c0 = signal_column([100.0], ones(1, 1), [ε], tot, [1.0])
-        @test c0[2][1] ≈ (100ε)^2 * (1 - ε) / (ε * 200)
+        # with the efficiency term on: eff_j = sel_j / tot_j from the same toy, sel ~ Binomial(tot, ε)
+        tot0, ε0 = [300.0, 250.0, 200.0, 150.0, 100.0], [0.9, 0.8, 0.7, 0.9, 0.5]
+        draw_eff() = [count(_ -> rand(rng) < ε0[j], 1:Int(tot0[j])) / tot0[j] for j in 1:5]
+        reps2 = [signal_column(T, draw(), draw_eff(), tot0, g)[1] for _ in 1:4000]
+        var_mc2 = vec(var(reduce(hcat, reps2), dims=2))
+        var_an2 = mean(signal_column(T, draw(), draw_eff(), tot0, g)[2] for _ in 1:400)
+        @test var_an2 ≈ var_mc2 rtol=0.08
+    end
+
+    @testset "guards" begin
+        using ForwardDiff
+        # Conway at N = 0, M = a exactly: finite gradient (sqrt'(0) used to give NaN)
+        @test all(isfinite, ForwardDiff.gradient(x -> _group_negllh(BB, x, [0.0, 0.0], 1.0), [0.6, 0.4]))
+        # a significantly negative prediction is an error, as in poissonLogLikelihood
+        @test_throws ArgumentError _group_negllh(DA, [-5.0, 1.0], [1.0, 1.0], 10.0)
+        @test_throws ArgumentError mcstat_loglikelihood(DA, true, [1.0, -5.0], ones(2, 2), ones(2), ones(2, 2), [10.0, 10.0], 1)
+        @test isfinite(_group_negllh(DA, [-1e-6, 1.0], [0.0, 1.0], 10.0))        # numerical noise is floored
     end
 
     @testset "background relative variance Σw²/(Σw)²" begin
