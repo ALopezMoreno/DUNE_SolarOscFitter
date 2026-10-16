@@ -304,18 +304,18 @@ HMC requires the gradient of the log-likelihood with respect to all sampled para
 
 ForwardDiff operates in forward mode over all N sampled parameters simultaneously (N ≈ 5–30 depending on config), so its cost grows with N.
 
-**Reverse mode (`ad_backend: "Enzyme"`).** With `nightOsc: true`, the whole likelihood is differentiable by Enzyme in reverse mode, whose cost does not depend on N. This is the backend to use with many Earth-density parameters. On the HD CC config (17 parameters, through BAT's gradient path), Enzyme agrees with ForwardDiff to ~1e-13. Timings were measured with other jobs running: Enzyme ~115 ms and ForwardDiff ~245 ms per gradient. The first gradient call compiles for 2–3 minutes per process.
+**Reverse mode (`ad_backend: "Enzyme"`, the default with `nightOsc: true`).** The whole likelihood is differentiable by Enzyme in reverse mode, whose cost does not depend on N. This is the backend to use with many Earth-density parameters. On the HD CC config, Enzyme agrees with ForwardDiff to ~1e-13. Timings on one thread (October 2026): one likelihood evaluation 19 ms, of which NightOsc is 99.8 %; Enzyme gradient ~85 ms; ForwardDiff gradient ~200 ms, which grows with the number of NightOsc inputs. The first gradient call compiles for 2–3 minutes per process.
 
 What makes it work (keep these properties when editing the likelihood path):
 - Settings read by the likelihood are `const` (`E_calc`, `exposure_weights`, `N_COSZ_BINS`, `CC_XSEC_NORM_TRUE`, and `OSC`, whose type carries the night backend, the Earth-uncertainty switch and `fastFit`), and `LikelihoodInputs` has concrete field types.
 - Detector modes are type parameters (`DetFlags`), so `det_flags.ES_mode` etc. are compile-time constants and the unused channel branches disappear.
 - No logging macros (they contain `try`/`catch`), dynamic splats (`vcat(x...)`), `Adjoint` wrappers of constant matrices, or generators/zips mixing constant data with differentiable values inside the likelihood: those are written as loops or moved into `@noinline` helpers.
-- NightOsc has a custom Enzyme rule (`_p1e_vec`). The forward pass uses its cached workspaces. The reverse pass, `_p1e_vjp_manual`, computes wᵀ∂P/∂x:
-  - it reruns the forward pass once, keeping each path's stage-1 output;
+- NightOsc has a custom Enzyme rule (`_p1e_vec`). Its forward pass (`_p1e_forward_store!`) computes the primal while keeping each path's stage-1 output in per-task workspaces, and records the point (`:forward_x` in the task store). The reverse pass, `_p1e_vjp_manual`, computes wᵀ∂P/∂x:
+  - it reuses that forward state when the record names the same point; otherwise (another NightOsc call came in between, or a different point) it recomputes the forward pass and re-records. Any plain primal call clears the record, so state is never reused at the wrong point, also with several NightOsc calls per evaluation;
   - it applies hand-written adjoints of stages 3 (zenith integrals) and 2 (energy integrals); the Filon integral is linear in its amplitudes, so its adjoint is the phase-dependent weights plus three phase derivatives, `_filon_adj`;
   - it runs one small Enzyme reverse pass per (path, energy node) for stage 1 (`_node!`).
 
-  Measured on the HD CC grid: ~80 ms, about 4–5× one evaluation, allocating 0.1 MB. The earlier whole-kernel nested Enzyme pass took ~190 ms and 50 MB. The cost does not grow with the number of Earth-density parameters. The nested Enzyme calls go through `invokelatest`, which avoids an Enzyme 0.13 nested-compilation bug. `tests/test_osc_night.jl` checks the rule against ForwardDiff.
+  Measured on the HD CC grid: ~60–65 ms with the forward state reused (~75 ms recomputing), about 3–4× one evaluation, allocating 0.1 MB. About half of it is the nested per-node Enzyme passes. The earlier whole-kernel nested Enzyme pass took ~190 ms and 50 MB. The cost does not grow with the number of Earth-density parameters. The nested Enzyme calls go through `invokelatest`, which avoids an Enzyme 0.13 nested-compilation bug. `tests/test_osc_night.jl` checks the rule against ForwardDiff.
 - Do not use Enzyme's runtime-activity mode: on this code it wrote derivative values into the observed (Asimov) data.
 
 ---

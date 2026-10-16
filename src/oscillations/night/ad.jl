@@ -288,8 +288,13 @@ function _p1e_vjp_manual(b::BinnedP1e, x::Vector{Float64}, w::Matrix{Float64})
     den = _den(b)
     numbar = [den[i] > 0 ? w[i, j] / den[i] : 0.0 for i in axes(w, 1), j in axes(w, 2)]
     pc = b.phase_const
-    stored = get(_task_store(b), :forward_x, nothing)
+    store = _task_store(b)
+    stored = get(store, :forward_x, nothing)
     reuse = stored !== nothing && stored == x
+    # Recomputing overwrites the workspaces with the state at x, so the record must name x
+    # afterwards (and nothing while the intervals are being overwritten); otherwise a later
+    # reverse pass at the previously recorded point would reuse x's state.
+    reuse || delete!(store, :forward_x)
     for (k, iv) in enumerate(b.intervals)
         ws = reuse ? _workspace(b, k, Float64) : _forward_interval_store!(b, k, θ, norms)
         aw = _adj_workspace(b, k)
@@ -316,6 +321,7 @@ function _p1e_vjp_manual(b::BinnedP1e, x::Vector{Float64}, w::Matrix{Float64})
             end
         end
     end
+    reuse || (store[:forward_x] = copy(x))
     return θbar[1:length(x)]
 end
 

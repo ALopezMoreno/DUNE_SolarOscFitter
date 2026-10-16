@@ -134,6 +134,24 @@ end
         # stored state for a different point is not reused
         NightOsc._p1e_forward_store!(b, x2)
         @test NightOsc._p1e_vjp_manual(b, x1, W) == fresh
+        # forwards at x1, x2, x1 and reverses in the opposite order (as one gradient whose
+        # objective calls the engine three times): the recomputing reverse at x2 must not leave
+        # the record naming x1 while the workspace holds x2's state
+        fresh2 = (delete!(NightOsc._task_store(b), :forward_x); NightOsc._p1e_vjp_manual(b, x2, W))
+        NightOsc._p1e_forward_store!(b, x1); NightOsc._p1e_forward_store!(b, x2); NightOsc._p1e_forward_store!(b, x1)
+        @test NightOsc._p1e_vjp_manual(b, x1, W) == fresh
+        @test NightOsc._p1e_vjp_manual(b, x2, W) == fresh2
+        @test NightOsc._p1e_vjp_manual(b, x1, W) == fresh
+    end
+
+    @testset "Enzyme gradient with several NightOsc calls per evaluation" begin
+        d(θ) = θ .* [1.3, 1.02, 0.99, 1.1, 0.9, 1.05, 0.95, 1.0, 1.0]
+        P(θ) = binned_p1e(b, θ[1] * 1e-5, θ[2], θ[3], (θ[4], θ[5], θ[6], θ[7], θ[8], θ[9]))
+        g3(θ) = sum(W .* P(d(θ))) + 2 * sum(W .* P(θ)) + 3 * sum(W .* P(d(θ)))
+        θ0 = [4.0, 0.60, 0.149, 0.9, 1.1, 1.15, 0.85, 1.05, 1.0]
+        ge = Enzyme.gradient(Enzyme.Reverse, Enzyme.Const(g3), θ0)[1]
+        gf = ForwardDiff.gradient(g3, θ0)
+        @test maximum(abs.(ge .- gf)) < 1e-9 * maximum(abs.(gf))
     end
 
     @testset "step propagator matches the 3-flavour NumOsc solver" begin

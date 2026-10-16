@@ -193,6 +193,10 @@ Status tags:
 6.3 The Enzyme reverse-mode gradient of the full likelihood matches ForwardDiff (~1e-13) and leaves
     the primal value unchanged. **[tested]** unit level in `test_osc_night.jl`; full likelihood via
     `regression_likelihood.jl night --grad` (manual; 5.5e-16 on the fixtures, 2026-10-15).
+    The reverse rule's reuse of the primal's forward state gives exactly the VJP of a fresh pass,
+    for any order of calls at different points within one gradient. **[tested]**
+    (`test_osc_night.jl`: reuse equality, stale-state cases, three NightOsc calls per gradient
+    against ForwardDiff)
 
 ## 7. Sampling and I/O ([mcmc_and_priors.md](docs/mcmc_and_priors.md))
 
