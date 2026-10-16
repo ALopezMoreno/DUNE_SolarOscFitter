@@ -66,6 +66,17 @@ include(joinpath(ROOT, "src", "readConfig.jl"))
     @test_throws ErrorException main()
     @test read(joinpath(d, "run_config.yaml"), String) == "existing record"
     @test !isfile(joinpath(d, "run_config.old1.yaml"))
+
+    # derived mode without a usable chain stops before setup, leaving the record alone
+    for pf in (nothing, joinpath(d, "nochain"), joinpath(d, "run.jld2"))
+        dcfg = merge(deepcopy(mcfg), Dict{String,Any}("RunMode" => "derived"))
+        pf === nothing || (dcfg["prevFile"] = pf)
+        YAML.write_file(joinpath(d, "derived.yaml"), dcfg)
+        empty!(ARGS); push!(ARGS, joinpath(d, "derived.yaml"))
+        @test_throws ErrorException main()
+    end
+    @test read(joinpath(d, "run_config.yaml"), String) == "existing record"
+    @test !any(f -> occursin("old", f) || occursin("derived_config", f), readdir(d))
 end
 
 empty!(ARGS); push!(ARGS, cfg_file)
