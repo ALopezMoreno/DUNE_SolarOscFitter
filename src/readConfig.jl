@@ -209,7 +209,8 @@ function _levenshtein(a::AbstractString, b::AbstractString)
     return prev[end]
 end
 
-_closest_key(key, known) = argmin(k -> (_levenshtein(key, k), k), collect(known))
+_closest_key(key, known) = isempty(known) ? nothing : argmin(k -> (_levenshtein(key, k), k), collect(known))
+_did_you_mean(key, known) = (k = _closest_key(key, known); k === nothing ? "" : " (did you mean '$k'?)")
 
 """
     validate_config_keys(config)
@@ -227,10 +228,14 @@ function validate_config_keys(config::AbstractDict)
         for key in sort(collect(string.(keys(dict))))
             key in known && continue
             msg = "unknown key '$key' in $section"
+            # Suggest from both sections: a misspelled key may also be in the wrong one.
+            closest = _closest_key(key, union(known, other_known))
             if key in other_known
                 msg *= " ($other_hint)"
+            elseif closest in other_known
+                msg *= " (did you mean '$closest'? That is $other_hint)"
             else
-                msg *= " (did you mean '$(_closest_key(key, known))'?)"
+                msg *= " (did you mean '$closest'?)"
             end
             push!(problems, msg)
         end
@@ -245,10 +250,15 @@ function validate_config_keys(config::AbstractDict)
             check(block, DETECTOR_CONFIG_KEYS, "detectors.$name", TOP_LEVEL_CONFIG_KEYS,
                   "a top-level key: move it out of the detector entry")
         end
-        for name in get(config, "active_detectors", String[])
-            haskey(dets, name) || push!(problems,
-                "active_detectors names '$name', which has no entry under detectors: " *
-                "(did you mean '$(_closest_key(string(name), string.(keys(dets))))'?)")
+        active = get(config, "active_detectors", String[])
+        if !(active isa AbstractVector)
+            push!(problems, "active_detectors must be a list, e.g. [HD] (got $(repr(active)))")
+        else
+            for name in active
+                haskey(dets, name) || push!(problems,
+                    "active_detectors names '$name', which has no entry under detectors:" *
+                    _did_you_mean(string(name), string.(keys(dets))))
+            end
         end
     end
     isempty(problems) || error("Invalid config:\n  " * join(problems, "\n  "))
@@ -257,8 +267,10 @@ function validate_config_keys(config::AbstractDict)
     get(config, "nuFast", true) == false &&
         @warn "config key nuFast is obsolete (the nuFast backend was removed); please delete it"
     # Asimov is the only data mode; `Asimov: false` used to be silently ignored.
-    get(config, "Asimov", true) == true ||
+    asimov = get(config, "Asimov", true)
+    asimov === false &&
         error("Asimov: false (fit to real data from data_file) is not implemented; set Asimov: true")
+    asimov === true || error("Asimov must be true or false (got $(repr(asimov)))")
     return nothing
 end
 

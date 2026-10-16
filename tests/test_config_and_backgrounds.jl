@@ -87,8 +87,11 @@ end
 
     @testset "shipped and test configs pass" begin
         @test validate_config_keys(root) === nothing
+        # Committed configs only: untracked work-in-progress configs in configs/ are the user's.
+        tracked = readlines(`git -C $repo_root ls-files -- 'configs/*.yaml'`)
+        @test !isempty(tracked)
         for path in vcat(joinpath(repo_root, "tests", "fixtures", "regression_config.yaml"),
-                         filter(f -> endswith(f, ".yaml"), readdir(joinpath(repo_root, "configs"), join=true)))
+                         joinpath.(repo_root, tracked))
             @test validate_config_keys(load_parameters(path)) === nothing
         end
     end
@@ -122,6 +125,32 @@ end
     @testset "active_detectors must exist" begin
         c = deepcopy(root); c["active_detectors"] = ["HDD"]
         @test occursin("did you mean 'HD'", errmsg(c))
+        c = deepcopy(root); c["active_detectors"] = "HD"
+        @test occursin("must be a list", errmsg(c))
+        c = deepcopy(root); c["detectors"] = Dict{Any,Any}()  # nothing to suggest from
+        @test occursin("active_detectors names 'HD'", errmsg(c))
+    end
+
+    @testset "misspelled per-detector key at the top level" begin
+        c = deepcopy(root); c["ES_exposre"] = 1.0
+        m = errmsg(c)
+        @test occursin("did you mean 'ES_exposure'", m) && occursin("per-detector key", m)
+    end
+
+    # Every key src/ reads from the YAML must be accepted; otherwise a valid config fails the check.
+    @testset "key lists cover every key read in src/" begin
+        reads_top, reads_det = Set{String}(), Set{String}()
+        for (dir, _, files) in walkdir(joinpath(repo_root, "src")), f in files
+            endswith(f, ".jl") || continue
+            src = read(joinpath(dir, f), String)
+            for m in eachmatch(r"(?:\b(config|block|defaults)\[\s*|\b(?:get|haskey)\(\s*(config|block|defaults)\s*,\s*)\"([^\"$]+)\"", src)
+                var = something(m.captures[1], m.captures[2])
+                push!(var == "block" ? reads_det : reads_top, m.captures[3])
+            end
+        end
+        @test !isempty(reads_top) && !isempty(reads_det)
+        @test setdiff(reads_top, union(TOP_LEVEL_CONFIG_KEYS, OBSOLETE_CONFIG_KEYS)) == Set()
+        @test setdiff(reads_det, DETECTOR_CONFIG_KEYS) == Set()
     end
 
     @testset "obsolete keys warn, not error" begin
@@ -137,6 +166,10 @@ end
     @testset "Asimov: false is not implemented" begin
         c = deepcopy(root); c["Asimov"] = false
         @test occursin("not implemented", errmsg(c))
+        c = deepcopy(root); c["Asimov"] = "true"           # a string, not a Bool
+        @test occursin("must be true or false", errmsg(c))
+        c = deepcopy(root); delete!(c, "Asimov")           # optional, defaults to true
+        @test validate_config_keys(c) === nothing
     end
 end
 

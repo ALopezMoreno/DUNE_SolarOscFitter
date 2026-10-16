@@ -11,9 +11,12 @@ All parameters are read from `config.yaml` by `src/readConfig.jl`. Optional keys
 | `outFile` | String | required | Output file prefix. Results written as `{outFile}_mcmc.jld2`, `{outFile}_configSettings.txt`, etc. |
 | `prevFile` | String | `nothing` | Previous run output prefix. Required when `RunMode: derived`. If set in MCMC mode, resumes chains from `{prevFile}_chainState.bin`. |
 | `RunMode` | String | required | `"MCMC"`, `"LLH"`, `"derived"`, `"PROFILE"`, or `"SETUP"` (build the likelihood and stop). Selects the analysis script. |
-| `Asimov` | Bool | required | `true` = use theoretical prediction as data. `false` = read real data (not yet implemented: rejected with an error). `data_file` is reserved for it and not read. |
+| `Asimov` | Bool | `true` | `true` = use theoretical prediction as data. `false` = read real data (not yet implemented: rejected with an error). `data_file` is reserved for it and not read. |
+| `data_file` | String | — | Reserved for real data (`Asimov: false`); accepted but not read yet. |
 | `fastFit` | Bool | required | `true` = mean solar production density (and NumOsc.Fast when `nightOsc: false`). `false` = production-region integration (and NumOsc.Slow). See [oscillation_physics.md §5](oscillation_physics.md). |
 | `nightOsc` | Bool | `true` | `true` = NightOsc bin-averaged night Earth crossing. `false` = legacy 3-flavour per-path NumOsc. Was `binnedNight`, which is still read with a warning. See [oscillation_physics.md §7](oscillation_physics.md). |
+| `ad_backend` | String | `"Enzyme"` if `nightOsc`, else `"ForwardDiff"` | Gradient backend for HMC: `"Enzyme"` (reverse mode) or `"ForwardDiff"`. |
+| `mcmc_seed` | Int | random | Seed for the MCMC random number generator, for reproducible chains. |
 | `singleChannel` | Bool or String | `false` | `false` = both channels. `"ES"` = ES only. `"CC"` = CC only. |
 | `inclusiveMode` | Bool | `false` | `true` = fold CC signal into ES Ereco bins; disable separate CC likelihood. |
 | `semiInclusiveMode` | Bool | `false` | `true` = forward hemisphere treated inclusively (CC folded into ES bins) while the backward hemisphere keeps a separate CC likelihood. Requires `singleChannel: false`; mutually exclusive with `inclusiveMode`. |
