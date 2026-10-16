@@ -329,6 +329,10 @@ end
 # Enzyme rule
 #################################################################################
 
+# Reverse passes (= Enzyme gradients of the likelihood) so far in this process; used to report
+# the sampler's cost per MCMC step (mcmcHelpers.jl). Atomic: chains run on several threads.
+const GRADIENT_COUNT = Threads.Atomic{Int}(0)
+
 # Entry point with the custom rule; x = [Δm²₂₁, θ₁₂, θ₁₃, (layer_norms...)]
 function _p1e_vec(b::BinnedP1e, x::Vector{Float64})
     return length(x) == 3 ? b(x[1], x[2], x[3]) : b(x[1], x[2], x[3], x[4:end])
@@ -347,6 +351,7 @@ end
 function EnzymeRules.reverse(config::EnzymeRules.RevConfigWidth{1}, ::Const{typeof(_p1e_vec)},
                              ::Type{RT}, tape, b::Const{BinnedP1e}, x::Annotation{Vector{Float64}}) where {RT}
     xv, dP = tape
+    Threads.atomic_add!(GRADIENT_COUNT, 1)
     if !(x isa Const) && any(!iszero, dP)
         # invokelatest: Enzyme 0.13 fails to compile the nested autodiff call otherwise
         x.dval .+= Base.invokelatest(_p1e_vjp_manual, b.val, xv, dP)::Vector{Float64}

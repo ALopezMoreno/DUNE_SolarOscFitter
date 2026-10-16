@@ -110,7 +110,9 @@ convergence = AssumeConvergence()
 
 @logmsg MCMC "running $mcmcChains chains with $mcmcSteps steps each (HMC)."
 
-proposal_algorithm = HamiltonianMC(termination=GeneralisedNoUTurn(max_depth=4))
+# NUTS tree-depth cap: at most 2^max_depth leapfrog steps (gradients) per MCMC step. Every
+# batch logs how close the steps come to it (log_sampler_cost in mcmcHelpers.jl).
+proposal_algorithm = HamiltonianMC(termination=GeneralisedNoUTurn(max_depth=hmc_max_depth))
 if ad_backend == "Enzyme" && !uses_night_osc(OSC)
   error("ad_backend: Enzyme requires nightOsc: true " *
         "(the legacy NumOsc night calculation is not Enzyme-differentiable)")

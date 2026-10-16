@@ -79,6 +79,7 @@ Strings are evaluated as Julia `Distributions.jl` expressions.
 | `maxTuningAttempts` | Int | Maximum adaptive tuning rounds. `0` = skip tuning. |
 | `nTuning` | Int | Steps per tuning round. |
 | `earth_potential_uncertainties` | Bool | Include Earth density nuisance parameters. Requires `earth_normalisation_prior_file`. |
+| `hmc_max_depth` | Int | (default `4`) NUTS tree-depth cap: each MCMC step uses at most 2^`hmc_max_depth` gradient evaluations. Each batch logs the gradients actually used per step (with the Enzyme backend) and warns when steps run into the cap, which cuts trajectories short of their natural end and lowers the effective sample size. |
 | `proposal_matrix` | String | (optional, currently unused) Path to a JLD2 file with a `posterior_cov` matrix. The HMC sampler tunes its own metric, so setting it only logs a warning. |
 
 ---

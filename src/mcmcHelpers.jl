@@ -182,11 +182,30 @@ function _sample_one_batch(mcmc_states, f_pretransform, nsteps)
     return new_states, batch_samples
 end
 
-# Mean last-step NUTS tree depth across chains (sampling-health diagnostic).
+# Gradients per MCMC step in the last batch, against the 2^hmc_max_depth cap. Counted from the
+# NightOsc Enzyme rule, so only with ad_backend = Enzyme and nightOsc. Steps that use nearly the
+# whole cap mean NUTS is being cut short (it would continue until a U-turn): raise
+# hmc_max_depth, or improve the mass-matrix adaptation (longer tuning).
+const _GRADIENTS_AT_BATCH_START = Ref(0)
+function log_sampler_cost(nsteps, nchains)
+    g = NightOsc.GRADIENT_COUNT[]
+    used = g - _GRADIENTS_AT_BATCH_START[]
+    _GRADIENTS_AT_BATCH_START[] = g
+    (used > 0 && nsteps > 0) || return nothing
+    per_step, cap = used / (nsteps * nchains), 2^hmc_max_depth
+    @logmsg MCMC @sprintf("Gradients per MCMC step: %.1f of at most %d (hmc_max_depth = %d)", per_step, cap, hmc_max_depth)
+    per_step > 0.9 * cap &&
+        @warn "NUTS trajectories hit the tree-depth cap ($(round(per_step, digits=1)) of $cap gradients per step): " *
+              "they are cut short of a U-turn, which lowers the effective sample size. Consider raising " *
+              "hmc_max_depth or tuning longer (nTuning × maxTuningAttempts)."
+    return nothing
+end
+
+# Last-step NUTS tree depth per chain (the depth of each chain's final transition only).
 function _log_tree_depth(mcmc_states)
     try
         ds = [Int(AdvancedHMC.stat(s.chain_state.proposal.transition).tree_depth) for s in mcmc_states]
-        @logmsg MCMC "Mean NUTS tree depth: $(round(sum(ds)/length(ds), digits=2)) (per-chain: $ds)"
+        @logmsg MCMC "NUTS tree depth of the last transition per chain: $ds"
     catch
     end
 end
@@ -212,6 +231,7 @@ function runMCMCbatch(currentBatch, priors, args...)
           )
           mcmc_states = BAT.mcmc_burnin!(nothing, mcmc_states, salg, BAT.nop_func)
           @logmsg MCMC "Tuning finished, running batches"
+          _GRADIENTS_AT_BATCH_START[] = NightOsc.GRADIENT_COUNT[]   # count sampling batches only
 
           run_state = RunState(mcmc_states, f_pretransform, 0)
       else
@@ -222,6 +242,7 @@ function runMCMCbatch(currentBatch, priors, args...)
               warmup_process()                        # avoids cold-heap GC collapse on resume
           end
           @logmsg MCMC ("Continuing chains from " * prevFile)
+          _GRADIENTS_AT_BATCH_START[] = NightOsc.GRADIENT_COUNT[]   # not the warm-up's gradients
       end
       return run_state
 
@@ -243,6 +264,7 @@ function runMCMCbatch(currentBatch, priors, args...)
       end
 
       _log_tree_depth(run_state.mcmc_states)
+      log_sampler_cost(nsteps, length(run_state.mcmc_states))
 
       if is_last
           mode_result = mode(batch_samples)
