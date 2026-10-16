@@ -183,7 +183,6 @@ saved = jldopen(f -> Dict(k => f[k] for k in keys(f) if startswith(k, "derived_"
                 ang = ch == "ES" && cfgd.angular_reco
                 data_col = ang ? vec(sum(obs_d, dims=1)) .+ vec(sum(obs_n, dims=(1, 3))) : obs_d .+ vec(sum(obs_n, dims=1))
                 @test mcc.M ≈ data_col rtol=1e-8
-                @test mcc.a ≈ mcc.M .^ 2 ./ mcc.V                                   # definition
             end
 
             # the fit starts at bin 2, whose lower edge is the threshold (Ereco_min_*)

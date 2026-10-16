@@ -160,7 +160,8 @@ Status tags:
     Not modelled **[inferred small, unverified]**: the same CC MC in both semi-inclusive channels;
     MC variance of the mis-ID and scattering-angle responses; per-component shape fluctuations
     within one E_reco bin. Conway's form pins β = 0 for N = 0 and M > a (zero gradient there).
-    Predictions significantly below 0 raise an error, as in plain Poisson. **[tested]**
+    Predictions significantly below 0 raise an error on every path (incl. a = Inf bins and the
+    per-bin diagnostic), as in plain Poisson. **[tested]**
 
 5.6 Per-bin log L (`make_perbin_likelihood`, a diagnostic) summed over bins equals the total log L
     minus the overflow (last, +∞) energy bin, which the diagnostic leaves out by design (it holds
