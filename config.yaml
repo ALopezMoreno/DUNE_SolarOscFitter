@@ -66,7 +66,7 @@ maxTuningAttempts: 30     # tuning cycles  (0 = skip tuning -- recommended for H
 
 earth_potential_uncertainties: true   # marginalise over Earth density profile
 
-# proposal_matrix: "outputs/posterior_covariance.jld2"  # warm-start from prior run
+# warm_start_chain: "outputs/previous_run"  # mass matrix + starting points from an earlier run (its outFile)
 
 
 # ── 5. LLH / DERIVED ────────────────────────────────────────────────────────

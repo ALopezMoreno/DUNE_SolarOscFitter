@@ -61,7 +61,8 @@ function load_proposal_matrix(config)
     # loading (and, on failure, silently dropping) a file that has no effect.
     global propMatrix = nothing
     if haskey(config, "proposal_matrix")
-        @warn "proposal_matrix ($(config["proposal_matrix"])) is set but not used by the HMC sampler; ignoring it."
+        @warn "proposal_matrix ($(config["proposal_matrix"])) is set but not used by the HMC sampler; ignoring it. " *
+              "To start from a previous run's posterior, set warm_start_chain to that run's outFile."
     end
 end
 
@@ -416,6 +417,9 @@ function main()
 
     # Previous file?
     global prevFile = haskey(config, "prevFile") ? config["prevFile"] : nothing
+    # Warm start: outFile of an earlier run whose posterior sets the mass matrix and the chain
+    # starting points of a new run (src/warmStart.jl). Ignored when resuming (prevFile).
+    global warm_start_chain = get(config, "warm_start_chain", nothing)
 
     # CC cross-section scale factor (1.0 = standard MARLEY prediction)
     global CC_xsec_scale = Float64(get(config, "CC_xsec_scale", 1.0))

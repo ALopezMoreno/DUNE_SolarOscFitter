@@ -99,15 +99,13 @@ Each batch of `batchSteps` steps (200, set in `mcmc.jl`) is appended as `batch_N
 
 ## 4. Tuning
 
-BAT.jl's adaptive tuning runs for up to `maxTuningAttempts` rounds of `nTuning` steps each. During tuning, the step size (ε) and mass matrix (M) are adapted to achieve an acceptance rate near the HMC target (~0.8). The tuning state is discarded before sampling begins.
+BAT.jl's adaptive tuning runs for up to `maxTuningAttempts` rounds of `nTuning` steps each. BAT samples in a pretransformed space (PriorToNormal: every prior becomes a standard normal) and puts an affine map z ↦ A z + b on top, which plays the role of the mass matrix. The step size is tuned by dual averaging (StepSizeAdaptor), and A by BAT's RAM rule. Both keep adapting through the sampling batches; a resumed run continues from the saved tuner state.
 
-Setting `maxTuningAttempts: 0` skips tuning entirely (faster, but efficiency may be poor unless a good `proposal_matrix` is provided via config).
+The RAM rule was written for random-walk Metropolis and does not learn the posterior shape for HMC: on a toy posterior with a ×100 spread of widths it ended at A ≈ identity from a cold start, and pulled a correct A back to identity within the burn-in. The tuned scales of chain 1 are logged after tuning ("Chain 1 tuned transform scales"); values near 1 mean A is still the prior shape. When posterior widths differ a lot from the prior widths, NUTS then needs long trajectories (often the full 2^`hmc_max_depth` gradients per step).
 
-**Mass matrix warm-start:** If `proposal_matrix` is set in config, a pre-computed covariance matrix from a previous chain is loaded as the initial mass matrix. Generate one with:
+Setting `maxTuningAttempts: 0` skips tuning entirely.
 
-```bash
-python3 utils/makeOutputCovariance.py outputs/my_chain
-```
+**Mass-matrix warm start:** set `warm_start_chain` to the `outFile` of an earlier run (same fitted parameters and priors; the likelihood may differ slightly, e.g. a changed binning). Its samples are mapped into the pretransformed space, b and A are set to their mean and Cholesky-factored covariance, A is kept fixed (only the step size is tuned), and the chains start from the earlier run's draws. Even a short, poorly mixed earlier run gives a far better A than the default. The warm-started run can in turn warm-start the next one. On the toy above, ESS per gradient went from 4 to 125 per 1000 gradients.
 
 ---
 

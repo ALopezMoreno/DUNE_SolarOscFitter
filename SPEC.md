@@ -206,6 +206,13 @@ Status tags:
 
 7.2 Seeds fix the chains: two runs with the same config and seed give identical samples. **[untested]**
 
+7.4 Warm start (`warm_start_chain`): the mass matrix (BAT's affine transform in the PriorToNormal
+    space) is the weighted mean and covariance of the previous run's samples mapped into that space,
+    it stays unchanged through burn-in and sampling, and the chains start from previous draws. A
+    previous run missing a fitted parameter is refused. **[tested]** (`test_warm_start.jl`)
+    BAT's default RAM tuning does not adapt the transform for HMC (on a toy it returned ≈ identity
+    and erased a correct warm start). **[inferred]** (toy study 2026-10-16; not a test.)
+
 7.3 Coverage: on Asimov or toy data, the 68%/95% credible intervals cover the true values at the
     nominal rate. **[untested]** (needs toy-data generation.)
 

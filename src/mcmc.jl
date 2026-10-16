@@ -13,6 +13,7 @@ using Random
 
 include(joinpath(@__DIR__, "setup.jl"))
 include(joinpath(@__DIR__, "mcmcHelpers.jl"))
+include(joinpath(@__DIR__, "warmStart.jl"))
 
 
 # Set prior distributions from config
@@ -107,6 +108,21 @@ else
 end
 
 convergence = AssumeConvergence()
+
+# Warm start from an earlier run's posterior: fixed mass matrix + chains started from its draws.
+# Only for a fresh run; a resumed run carries its own transform in the chain state.
+warm_start = nothing
+if warm_start_chain !== nothing
+  if prevFile !== nothing
+    @logmsg MCMC "warm_start_chain is ignored when resuming from prevFile"
+  else
+    global warm_start = build_warm_start(warm_start_chain, posterior, prior, PriorToNormal(); init = init)
+    global init = warm_start.init
+    @logmsg MCMC "Warm start from $warm_start_chain: mass matrix from $(warm_start.nsamples) samples, " *
+                 "kept fixed (step size still tuned); chains start from its draws"
+    log_transform_scales("Warm-start", warm_start.scales, warm_start.names)
+  end
+end
 
 @logmsg MCMC "running $mcmcChains chains with $mcmcSteps steps each (HMC)."
 
