@@ -14,13 +14,20 @@ and β is profiled analytically.
   BarlowBeeston (Conway):  −log L = Σ_b P(n_b; β μ_b) + a (β − 1)² / 2,   a β² + (M − a) β − N = 0
 
 with P(n; μ) = μ − n + n ln(n/μ) (Baker–Cousins), N = Σ_b n_b and M = Σ_b μ_b. The day bin and
-all night (cos z) bins of one E_reco bin come from the SAME MC events (night = day template ×
-exposure), so by default ("shared") one β per E_reco bin multiplies all of them. "independent"
-gives every bin its own β with the same a (MaCh3's per-bin treatment; it treats the night
-copies of one MC fluctuation as independent and so understates the effect).
+all night (cos z) bins of one E_reco bin come from the same MC events (exactly for backgrounds,
+night = day template × exposure; approximately for signal, whose night bins weight the same
+response with different oscillated E_true rates), so by default ("shared") one β per E_reco bin
+multiplies all of them. "independent" gives every bin its own β with the same a, as MaCh3 does
+per bin: it treats the night copies of one MC fluctuation as independent, which understates the
+normalisation uncertainty but lets the MC absorb day/night shape differences, diluting the
+day-night (Δm²₂₁) information.
 
-The effective counts are computed once at the Asimov truth and then held fixed (MaCh3's default,
-UpdateW2 = false). Notes: docs/mcstat/mcstat.pdf.
+What is frozen: the effective count a, i.e. the RELATIVE MC uncertainty 1/√a, computed once at the
+Asimov truth. MaCh3 (UpdateW2 = false) instead freezes Σw², the absolute uncertainty, and
+recomputes a = μ²/Σw² from the current prediction; the two agree at the truth only.
+Not modelled: correlations of one MC sample across channels (the CC MC feeds both semi-inclusive
+channels; the ES MC also feeds the mis-ID term) and per-component shape fluctuations within one
+E_reco bin (one β covers all cos θ bins). Notes: docs/mcstat/mcstat.pdf.
 =#
 using Printf
 using Statistics: median
@@ -136,8 +143,11 @@ abstract type MCStatMethod end
 struct DembinskiAbdelmotteleb <: MCStatMethod end
 struct BarlowBeeston <: MCStatMethod end          # Conway's approximation
 
-# The positive-floor used by poissonLogLikelihood (softplus at 1e-9).
+# The positive-floor used by poissonLogLikelihood (softplus at 1e-9). As there, a prediction that
+# is negative beyond numerical noise is an error, not something to floor away.
 _mu_floor(e) = 0.5 * (e + 1e-9 + sqrt((e - 1e-9)^2 + 1e-18))
+@noinline _negative_prediction(e) = throw(ArgumentError("MC-stat likelihood: prediction significantly negative (μ = $e)"))
+@inline _checked(e) = (e < -1e-3 && _negative_prediction(e); e)
 
 # Baker–Cousins P(n; μ) = μ − n + n ln(n/μ) for a data count n and prediction μ > 0.
 _bc(n, μ) = n > 0 ? μ - n + n * (log(n) - log(μ)) : μ
@@ -153,7 +163,9 @@ function _beta_penalty(::BarlowBeeston, N, M, a)
     # a β² + (M − a) β − N = 0  ⇔  a x² + (a + M) x + (M − N) = 0; the root with β ≥ 0, in the
     # form without cancellation (the discriminant equals (a − M)² + 4 a N ≥ 0)
     s = a + M
-    x = -2 * (M - N) / (s + sqrt((a - M)^2 + 4 * a * N))
+    D = (a - M)^2 + 4 * a * N
+    # max(): at N = 0 and M = a exactly, sqrt'(0) would give a NaN gradient (dD vanishes there)
+    x = -2 * (M - N) / (s + sqrt(max(D, 1e-300)))
     return 1 + x, a * x^2 / 2
 end
 
@@ -163,18 +175,80 @@ function _group_negllh(method, μs, ns, a)
     if !isfinite(a)
         acc = zero(eltype(μs))
         for k in eachindex(μs)
-            acc += _bc(ns[k], _mu_floor(μs[k]))
+            acc += _bc(ns[k], _mu_floor(_checked(μs[k])))
         end
         return acc
     end
     M = zero(eltype(μs)); N = 0.0
     for k in eachindex(μs)
-        M += _mu_floor(μs[k]); N += ns[k]
+        M += _mu_floor(_checked(μs[k])); N += ns[k]
     end
     β, pen = _beta_penalty(method, N, M, a)
     acc = pen
     for k in eachindex(μs)
         acc += _bc(ns[k], β * _mu_floor(μs[k]))
+    end
+    return acc
+end
+
+# One bin with its own β (independent mode); scalar form of _group_negllh.
+function _bin_negllh(method, μ, n, a)
+    m = _mu_floor(_checked(μ))
+    isfinite(a) || return _bc(n, m)
+    β, pen = _beta_penalty(method, n, m, a)
+    return _bc(n, β * m) + pen
+end
+
+# Allocation-free sums over the bins of E_reco column j (the day bin(s) and every night bin), for
+# the likelihood path: reverse-mode AD pays for every temporary array.
+function _col_MN(day::AbstractVector, night::AbstractMatrix, od, on, j)
+    M = _mu_floor(_checked(day[j])); N = Float64(od[j])
+    for k in axes(night, 1)
+        M += _mu_floor(_checked(night[k, j])); N += on[k, j]
+    end
+    return M, N
+end
+function _col_MN(day::AbstractMatrix, night::AbstractArray{<:Any,3}, od, on, j)
+    M = zero(promote_type(eltype(day), eltype(night))); N = 0.0
+    for c in axes(day, 1)
+        M += _mu_floor(_checked(day[c, j])); N += od[c, j]
+    end
+    for k in axes(night, 3), c in axes(night, 1)
+        M += _mu_floor(_checked(night[c, j, k])); N += on[c, j, k]
+    end
+    return M, N
+end
+function _col_bc(day::AbstractVector, night::AbstractMatrix, od, on, j, β)
+    acc = _bc(od[j], β * _mu_floor(day[j]))
+    for k in axes(night, 1)
+        acc += _bc(on[k, j], β * _mu_floor(night[k, j]))
+    end
+    return acc
+end
+function _col_bc(day::AbstractMatrix, night::AbstractArray{<:Any,3}, od, on, j, β)
+    acc = zero(promote_type(eltype(day), eltype(night), typeof(β)))
+    for c in axes(day, 1)
+        acc += _bc(od[c, j], β * _mu_floor(day[c, j]))
+    end
+    for k in axes(night, 3), c in axes(night, 1)
+        acc += _bc(on[c, j, k], β * _mu_floor(night[c, j, k]))
+    end
+    return acc
+end
+function _col_indep(method, day::AbstractVector, night::AbstractMatrix, od, on, j, a)
+    acc = _bin_negllh(method, day[j], od[j], a)
+    for k in axes(night, 1)
+        acc += _bin_negllh(method, night[k, j], on[k, j], a)
+    end
+    return acc
+end
+function _col_indep(method, day::AbstractMatrix, night::AbstractArray{<:Any,3}, od, on, j, a)
+    acc = zero(promote_type(eltype(day), eltype(night)))
+    for c in axes(day, 1)
+        acc += _bin_negllh(method, day[c, j], od[c, j], a)
+    end
+    for k in axes(night, 3), c in axes(night, 1)
+        acc += _bin_negllh(method, night[c, j, k], on[c, j, k], a)
     end
     return acc
 end
@@ -194,14 +268,14 @@ for its day and night bins; `false`: one β per bin.
 function mcstat_loglikelihood(method::MCStatMethod, shared::Bool, day, night, obs_day, obs_night, a, idx)
     acc = zero(promote_type(eltype(day), eltype(night)))
     for j in idx:length(a)
-        μs = _column(day, night, j)
-        ns = Float64.(_column(obs_day, obs_night, j))
-        if shared
-            acc += _group_negllh(method, μs, ns, a[j])
+        if !shared
+            acc += _col_indep(method, day, night, obs_day, obs_night, j, a[j])
+        elseif !isfinite(a[j])
+            acc += _col_bc(day, night, obs_day, obs_night, j, 1.0)
         else
-            for k in eachindex(μs)
-                acc += _group_negllh(method, view(μs, k:k), view(ns, k:k), a[j])
-            end
+            M, N = _col_MN(day, night, obs_day, obs_night, j)
+            β, pen = _beta_penalty(method, N, M, a[j])
+            acc += pen + _col_bc(day, night, obs_day, obs_night, j, β)
         end
     end
     return -acc

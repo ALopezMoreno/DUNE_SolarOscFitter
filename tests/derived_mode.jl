@@ -176,14 +176,14 @@ saved = jldopen(f -> Dict(k => f[k] for k in keys(f) if startswith(k, "derived_"
 
             # MC statistics (src/likelihoods/mcstat.jl): the prediction rebuilt from its signal and
             # background components reproduces the Asimov data in every E_reco bin (day + night;
-            # angular summed over cos θ), and the effective MC counts are positive.
+            # angular summed over cos θ).
             for (ch, _) in chains_mc(has_CC)
                 mcc = out.mc_counts[Symbol(ch)]
                 obs_d, obs_n = getfield(li.nObserved, Symbol(ch, "_day")), getfield(li.nObserved, Symbol(ch, "_night"))
                 ang = ch == "ES" && cfgd.angular_reco
                 data_col = ang ? vec(sum(obs_d, dims=1)) .+ vec(sum(obs_n, dims=(1, 3))) : obs_d .+ vec(sum(obs_n, dims=1))
-                @test mcc.M[2:end] ≈ data_col[2:end] rtol=1e-8
-                @test all(a -> a > 0, mcc.a)
+                @test mcc.M ≈ data_col rtol=1e-8
+                @test mcc.a ≈ mcc.M .^ 2 ./ mcc.V                                   # definition
             end
 
             # the fit starts at bin 2, whose lower edge is the threshold (Ereco_min_*)

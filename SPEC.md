@@ -154,8 +154,13 @@ Status tags:
     - the prediction rebuilt from its components equals the Asimov data in every E_reco bin and
       mode (plain, angular, inclusive, semi-inclusive);
     - per-bin pieces add up to the channel likelihood; Enzyme agrees with ForwardDiff.
-    The effective counts are frozen at the truth (as MaCh3's default); the scattering-angle and
-    mis-ID responses carry no MC variance. **[inferred]** that these omissions are small.
+    What is frozen: the effective count a (the relative MC uncertainty) at the truth; MaCh3's
+    default freezes Σw² (the absolute one) instead. `shared` is exact for backgrounds and an
+    approximation for signal; `independent` dilutes the day/night (Δm²₂₁) information.
+    Not modelled **[inferred small, unverified]**: the same CC MC in both semi-inclusive channels;
+    MC variance of the mis-ID and scattering-angle responses; per-component shape fluctuations
+    within one E_reco bin. Conway's form pins β = 0 for N = 0 and M > a (zero gradient there).
+    Predictions significantly below 0 raise an error, as in plain Poisson. **[tested]**
 
 5.6 Per-bin log L (`make_perbin_likelihood`, a diagnostic) summed over bins equals the total log L
     minus the overflow (last, +∞) energy bin, which the diagnostic leaves out by design (it holds

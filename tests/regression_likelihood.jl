@@ -81,15 +81,27 @@ points = Dict(
 llh_values = Dict(name => Float64(Base.invokelatest(total_llh, p)) for (name, p) in points)
 
 # MC-statistics variants: the per-bin diagnostic (derived mode) at the displaced point. Every piece
-# is a finite −Q/2 ≤ 0 (Baker–Cousins form), and per detector the pieces add up to at most the
-# detector's total (the total also has the overflow bin, which the diagnostic leaves out; its
-# contribution is ≤ 0). (The plain Poisson diagnostic is −(μ − n ln μ), not Baker–Cousins.)
+# is a finite −Q/2 ≤ 0 (Baker–Cousins form), and per detector the pieces add up to the detector's
+# total minus its overflow E_reco bin, which the diagnostic leaves out (computed here on its own).
+# (The plain Poisson diagnostic is −(μ − n ln μ), not Baker–Cousins, so it is not checked.)
 for dname in (haskey(VARIANTS[variant], "mc_stat_likelihood") ? Base.invokelatest(() -> collect(keys(detector_perbin_fns))) : String[])
-    pb  = Base.invokelatest(detector_perbin_fns[dname], points["near"])
-    tot = Base.invokelatest(detector_llh_fns[dname], points["near"])
+    p   = points["near"]
+    pb  = Base.invokelatest(detector_perbin_fns[dname], p)
+    tot = Base.invokelatest(detector_llh_fns[dname], p)
+    out = Base.invokelatest(() -> detector_outputs[dname]); det = Base.invokelatest(() -> detector_configs[dname])
+    li  = out.likelihood_inputs
+    r   = Base.invokelatest(expected_rates, li, p)
+    m, sh = Base.invokelatest(mcstat_method, det.mc_stat_likelihood), det.mc_stat_day_night == "shared"
+    overflow = 0.0
+    for (ch, on) in ((:ES, det.ES_mode), (:CC, det.CC_mode && (!det.inclusive_analysis || det.semi_inclusive_analysis)))
+        on || continue
+        a = out.mc_counts[ch].a
+        overflow += Base.invokelatest(mcstat_loglikelihood, m, sh, getfield(r, Symbol(ch, "_day")), getfield(r, Symbol(ch, "_night")),
+                                      getfield(li.nObserved, Symbol(ch, "_day")), getfield(li.nObserved, Symbol(ch, "_night")), a, length(a))
+    end
     vals = reduce(vcat, [vec(v) for v in values(pb)])
-    (all(isfinite, vals) && all(<=(1e-9), vals) && sum(vals) >= tot - 1e-6 * abs(tot)) ||
-        error("per-bin diagnostic inconsistent for $dname in '$variant' (sum $(sum(vals)), total $tot)")
+    (all(isfinite, vals) && all(<=(1e-9), vals) && isapprox(sum(vals), tot - overflow; rtol = 1e-9, atol = 1e-9)) ||
+        error("per-bin diagnostic inconsistent for $dname in '$variant' (sum $(sum(vals)), total − overflow $(tot - overflow))")
 end
 
 ref = isfile(REF_FILE) ? TOML.parsefile(REF_FILE) : Dict{String,Any}()
