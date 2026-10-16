@@ -257,7 +257,8 @@ function runMCMCbatch(currentBatch, priors, args...)
           try
               A = mcmc_states[1].chain_state.f_transform.A
               log_transform_scales("Chain 1 tuned", sqrt.(diag(A * A')), collect(keys(BAT.varshape(prior))))
-          catch
+          catch err
+              @logmsg MCMC "Could not log the tuned transform scales: $(sprint(showerror, err))"
           end
           _GRADIENTS_AT_BATCH_START[] = NightOsc.GRADIENT_COUNT[]   # count sampling batches only
 

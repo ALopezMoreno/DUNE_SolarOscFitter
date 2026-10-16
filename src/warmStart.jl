@@ -48,12 +48,13 @@ function load_chain_samples(prefix::AbstractString, names)
     return cols, w
 end
 
-# Weighted mean and covariance of the columns of Z (one sample per column).
+# Weighted mean and covariance of the columns of Z (one sample per column; integer weights count
+# repeats, as in the saved chains).
 function weighted_mean_cov(Z::AbstractMatrix, w::AbstractVector)
     W = sum(w)
     μ = Z * w ./ W
     D = Z .- μ
-    Σ = (D .* reshape(w, 1, :)) * D' ./ (W - sum(abs2, w) / W)     # unbiased for frequency weights
+    Σ = (D .* reshape(w, 1, :)) * D' ./ (W - 1)     # w = multiplicities: the covariance of the repeated samples
     return μ, Symmetric(Σ)
 end
 
@@ -72,10 +73,13 @@ function build_warm_start(prefix::AbstractString, posterior, prior, pretransform
 
     _, f_pretransform = BAT.transform_and_unshape(pretransform, posterior, BATContext())
     Z = reduce(hcat, [f_pretransform(x) for x in nts])
-    ok = vec(all(isfinite, Z; dims = 1))        # samples at (or past) a prior boundary map to ±Inf
+    # Samples past the current prior support map to NaN; PriorToNormal clamps samples exactly on a
+    # boundary to |z| ≈ 8, an outlier that would inflate Σ. Drop both (|z| ≥ 7.5 is ~1e-13 a priori).
+    ok = vec(all(z -> isfinite(z) && abs(z) < 7.5, Z; dims = 1))
     count(!, ok) <= 0.01 * length(ok) ||
-        error("warm_start_chain: $(count(!, ok)) of $(length(ok)) samples in $prefix fall outside the " *
-              "current prior support (were the priors changed?)")
+        error("warm_start_chain: $(count(!, ok)) of $(length(ok)) samples in $prefix lie on or outside the " *
+              "current prior boundaries (were the priors changed?)")
+    count(!, ok) > 0 && @warn "warm_start_chain: dropped $(count(!, ok)) samples on or outside a prior boundary"
     Z, nts, wk = Z[:, ok], nts[ok], wk[ok]
     μ, Σ = weighted_mean_cov(Z, wk)
     C = cholesky(Σ; check = false)
