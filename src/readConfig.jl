@@ -401,6 +401,7 @@ function main()
     # cost independent of the number of parameters, ~2x faster than ForwardDiff on HD with 8
     # NightOsc inputs, more with more Earth parameters; needs nightOsc) or "ForwardDiff" (cost grows
     # with the number of NightOsc inputs). Default: Enzyme with nightOsc, ForwardDiff without.
+    global ad_backend_defaulted = !haskey(config, "ad_backend")
     global ad_backend = String(get(config, "ad_backend", nightOsc ? "Enzyme" : "ForwardDiff"))
     ad_backend in ("ForwardDiff", "Enzyme") ||
         error("ad_backend must be \"ForwardDiff\" or \"Enzyme\", got \"$ad_backend\"")

@@ -121,7 +121,8 @@ else
   BATContext(ad = ADSelector(Symbol(ad_backend)),
              rng = BAT.Random123.Philox4x((UInt64(mcmc_seed), UInt64(0))))
 end
-@logmsg MCMC "HMC gradients: $ad_backend" * (mcmc_seed === nothing ? "" : ", RNG seed $mcmc_seed")
+@logmsg MCMC "HMC gradients: $ad_backend" * (ad_backend_defaulted ? " (default; set ad_backend to override)" : "") *
+             (mcmc_seed === nothing ? "" : ", RNG seed $mcmc_seed")
 
 batchSteps = 200   # checkpoint/output cadence only — tuning persists across batches
 nBatches   = ceil(Int, mcmcSteps / batchSteps)
