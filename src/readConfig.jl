@@ -405,6 +405,9 @@ function main()
     global ad_backend = String(get(config, "ad_backend", nightOsc ? "Enzyme" : "ForwardDiff"))
     ad_backend in ("ForwardDiff", "Enzyme") ||
         error("ad_backend must be \"ForwardDiff\" or \"Enzyme\", got \"$ad_backend\"")
+    # NUTS tree-depth cap (each MCMC step uses at most 2^hmc_max_depth gradients)
+    global hmc_max_depth = Int(get(config, "hmc_max_depth", 4))
+    1 <= hmc_max_depth <= 12 || error("hmc_max_depth must be between 1 and 12, got $hmc_max_depth")
     # Optional MCMC RNG seed (integer) for reproducible chains; unset = random.
     global mcmc_seed = get(config, "mcmc_seed", nothing)
 
