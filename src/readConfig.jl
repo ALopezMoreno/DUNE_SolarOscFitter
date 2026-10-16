@@ -397,9 +397,11 @@ function main()
         @warn "config key binnedNight is now nightOsc; please rename it"
     end
     global nightOsc = Bool(get(config, "nightOsc", get(config, "binnedNight", true)))
-    # Automatic differentiation for HMC: "ForwardDiff" (cost grows with the number of
-    # parameters) or "Enzyme" (reverse mode: cost independent of it; needs nightOsc).
-    global ad_backend = String(get(config, "ad_backend", "ForwardDiff"))
+    # Automatic differentiation for HMC: "Enzyme" (reverse mode through NightOsc's custom rule:
+    # cost independent of the number of parameters, ~2x faster than ForwardDiff on HD with 8
+    # NightOsc inputs, more with more Earth parameters; needs nightOsc) or "ForwardDiff" (cost grows
+    # with the number of NightOsc inputs). Default: Enzyme with nightOsc, ForwardDiff without.
+    global ad_backend = String(get(config, "ad_backend", nightOsc ? "Enzyme" : "ForwardDiff"))
     ad_backend in ("ForwardDiff", "Enzyme") ||
         error("ad_backend must be \"ForwardDiff\" or \"Enzyme\", got \"$ad_backend\"")
     # Optional MCMC RNG seed (integer) for reproducible chains; unset = random.
