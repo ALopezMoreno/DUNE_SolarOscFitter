@@ -10,6 +10,7 @@ include(joinpath(@__DIR__, "..", "src", "likelihoods", "likelihood_builder.jl"))
 # Unit tests for correctness
 include(joinpath(@__DIR__, "test_likelihood_correctness.jl"))
 include(joinpath(@__DIR__, "test_config_and_backgrounds.jl"))
+include(joinpath(@__DIR__, "test_run_record.jl"))
 include(joinpath(@__DIR__, "test_es_xsec.jl"))
 include(joinpath(@__DIR__, "test_osc_night.jl"))
 include(joinpath(@__DIR__, "test_response_and_backgrounds.jl"))

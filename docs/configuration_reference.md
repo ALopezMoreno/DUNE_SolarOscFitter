@@ -8,7 +8,7 @@ All parameters are read from `config.yaml` by `src/readConfig.jl`. Optional keys
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `outFile` | String | required | Output file prefix. Results written as `{outFile}_mcmc.jld2`, `{outFile}_configSettings.txt`, etc. |
+| `outFile` | String | required | Output file prefix. Results written as `{outFile}.jld2` (MCMC), `{outFile}_configSettings.txt`, etc. Every run also writes the run record `{outFile}_config.yaml` (see "Run record" below). |
 | `prevFile` | String | `nothing` | Previous run output prefix. Required when `RunMode: derived`. If set in MCMC mode, resumes chains from `{prevFile}_chainState.bin`. |
 | `RunMode` | String | required | `"MCMC"`, `"LLH"`, `"derived"`, `"PROFILE"`, or `"SETUP"` (build the likelihood and stop). Selects the analysis script. |
 | `Asimov` | Bool | required | `true` = use theoretical prediction as data. `false` = read real data (not yet implemented). |
@@ -158,3 +158,24 @@ Strings are evaluated as Julia `Distributions.jl` expressions.
 | `reconstruction_sample_CC` | String | CSV file (Etrue, Ereco, mask) for CC response matrix. |
 | `ES_background_files` | String[] | CSV files for each ES background component. |
 | `CC_background_files` | String[] | CSV files for each CC background component. |
+
+## Run record (`{outFile}_config.yaml`)
+
+Every run writes `{outFile}_config.yaml` before the RunMode script starts (src/runRecord.jl), so a
+chain can be traced back to what produced it:
+
+- `provenance`: config file (absolute path, SHA-256), git commit and branch, `git_dirty` (tracked
+  files differ from the commit; untracked files are ignored) with the list of changed files,
+  Julia version, host, threads, RunMode, working directory, local timestamp, and `input_sha256`:
+  the SHA-256 of every input file the config names (most of `inputs/` is not in git).
+- `defaults_applied`: the keys absent from the config file and the values used for them.
+- `config`: the configuration actually used (the file plus `defaults_applied`).
+  `YAML.load_file("{outFile}_config.yaml")["config"]` is a complete config for a re-run. With
+  `mcmc_seed` unset the seed actually drawn is not recorded, so such a re-run is statistically,
+  not bitwise, equivalent.
+
+An existing record is moved to `{outFile}_config.old<k>.yaml`, never overwritten. MCMC runs also
+store the same text in the chain file, as the string `run_config` (`run_config_2`, ... when a
+resumed run appends to a file that already has one). A new MCMC run whose `{outFile}.jld2` exists
+stops before writing anything. Derived mode writes into `{prevFile}.jld2` (`outFile` is unused), so
+its record is `{prevFile}_derived_config.yaml`; it is not added to the chain file.

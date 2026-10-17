@@ -89,7 +89,7 @@ for batch in 1:n_batches
 end
 ```
 
-Each batch of `batchSteps` steps (200, set in `mcmc.jl`) is appended as `batch_N` inside a single JLD2 file. The batch size only sets the checkpoint/output cadence — tuning state persists across batches. The Python utilities (`posteriorHelpers.py`) handle both the flat (legacy) and batched formats transparently.
+Each batch of `batchSteps` steps (200, set in `mcmc.jl`) is appended as `batch_N` inside a single JLD2 file. The batch size only sets the checkpoint/output cadence — tuning state persists across batches. The Python utilities (`posteriorHelpers.py`) handle both the flat (legacy) and batched formats transparently. The file also holds the run record as the string `run_config` (see [configuration_reference.md](configuration_reference.md), "Run record"); readers only look at `batch_*` and `derived_*` keys.
 
 **Resuming runs:** Setting `prevFile` in config loads the serialised `_chainState.bin` from a previous run and passes it as the initial state, so chains continue from where they stopped rather than re-tuning from scratch. On resume, `warmup_process()` runs a throwaway likelihood evaluation first to warm the heap — without it, large resumed runs hit a severe GC collapse.
 

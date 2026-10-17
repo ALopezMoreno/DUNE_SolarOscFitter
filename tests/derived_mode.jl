@@ -46,13 +46,76 @@ merge!(cfg, Dict{String,Any}("RunMode" => "derived", "prevFile" => chain, "thinn
 cfg["detectors"]["FXC"] = merge(deepcopy(cfg["detectors"]["FXB"]),
                                 Dict("inclusiveMode" => true, "semiInclusiveMode" => false))
 cfg["active_detectors"] = ["FXA", "FXB", "FXC"]
+# Left to their (identical) defaults, so the run record has to fill them in.
+delete!(cfg, "TPC_threshold"); delete!(cfg, "prior_cc_xsec_norm")
 cfg_file = joinpath(tmp, "derived.yaml")
 YAML.write_file(cfg_file, cfg)
 
 cd(ROOT)
-empty!(ARGS); push!(ARGS, cfg_file)
 include(joinpath(ROOT, "src", "readConfig.jl"))
+
+# A new MCMC run onto an existing chain file must stop before it touches that chain's run record.
+@testset "aborted run keeps the existing record" begin
+    d = mktempdir()
+    mcfg = merge(deepcopy(cfg), Dict{String,Any}("RunMode" => "MCMC", "outFile" => joinpath(d, "run")))
+    delete!(mcfg, "prevFile")
+    YAML.write_file(joinpath(d, "mcmc.yaml"), mcfg)
+    write(joinpath(d, "run.jld2"), "existing chain")
+    write(joinpath(d, "run_config.yaml"), "existing record")
+    empty!(ARGS); push!(ARGS, joinpath(d, "mcmc.yaml"))
+    @test_throws ErrorException main()
+    @test read(joinpath(d, "run_config.yaml"), String) == "existing record"
+    @test !isfile(joinpath(d, "run_config.old1.yaml"))
+
+    # derived mode without a usable chain stops before setup, leaving the record alone
+    for pf in (nothing, joinpath(d, "nochain"), joinpath(d, "run.jld2"))
+        dcfg = merge(deepcopy(mcfg), Dict{String,Any}("RunMode" => "derived"))
+        pf === nothing || (dcfg["prevFile"] = pf)
+        YAML.write_file(joinpath(d, "derived.yaml"), dcfg)
+        empty!(ARGS); push!(ARGS, joinpath(d, "derived.yaml"))
+        @test_throws ErrorException main()
+    end
+    @test read(joinpath(d, "run_config.yaml"), String) == "existing record"
+    @test !any(f -> occursin("old", f) || occursin("derived_config", f), readdir(d))
+end
+
+empty!(ARGS); push!(ARGS, cfg_file)
 main()
+
+# --- the run record (src/runRecord.jl): the config used, defaults filled in, and provenance ---
+@testset "run record of the derived run" begin
+    # derived mode writes into prevFile.jld2, so its record sits next to the chain
+    @test !isfile(joinpath(tmp, "derived_config.yaml"))
+    rec = YAML.load_file(chain * "_derived_config.yaml")
+    @test rec["provenance"]["config_file"] == abspath(cfg_file)
+    @test rec["provenance"]["run_mode"] == "derived"
+    # every input file is pinned by its hash
+    sha = rec["provenance"]["input_sha256"]
+    for f in (cfg["solar_model_file"], cfg["flux_model_file"], cfg["earth_model_file"])
+        @test sha[f] == bytes2hex(open(SHA.sha256, f))
+    end
+    res, dflt = rec["config"], rec["defaults_applied"]
+    for (k, v) in cfg                                     # the file's own values round-trip
+        k == "detectors" && continue
+        @test res[k] == v
+    end
+    for (n, b) in cfg["detectors"], (k, v) in b
+        @test res["detectors"][n][k] == v
+    end
+    @test isempty(intersect(keys(dflt), setdiff(keys(cfg), ["detectors"])))
+    # the defaults recorded are the values the run used
+    g(s) = Base.invokelatest(getglobal, Main, s)
+    @test dflt["TPC_threshold"] * 1e-3 ≈ g(:tpc_threshold) rtol=1e-14
+    @test Base.invokelatest(string_to_distribution, dflt["prior_cc_xsec_norm"]) == g(:prior_cc_xsec_norm)
+    @test dflt["hmc_max_depth"] == g(:hmc_max_depth)
+    @test dflt["CC_xsec_scale"] == g(:CC_xsec_scale)
+    @test dflt["mcmc_seed"] === g(:mcmc_seed) === nothing
+    @test haskey(dflt["detectors"]["FXA"], "module_mass_kt")
+    # re-parsing the resolved detector blocks gives the detectors the run used
+    for n in cfg["active_detectors"]
+        @test Base.invokelatest(parse_detector_block, res["detectors"][n], n; defaults = res) == g(:detector_configs)[n]
+    end
+end
 
 # --- reference values, computed independently of the derived-mode aggregation ---
 pars = [Base.invokelatest(() -> merge(true_params, NamedTuple{Tuple(Symbol.(keys(s)))}(Tuple(values(s)))))

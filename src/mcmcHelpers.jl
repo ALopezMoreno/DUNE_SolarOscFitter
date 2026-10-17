@@ -159,6 +159,7 @@ function saveBatch(samples, start_step_number, priors, batchNumber)
       g["weights"] = weights
       g["stepno"]  = stepno
       g["chainid"] = chainid
+      @isdefined(store_run_record!) && store_run_record!(f)   # run_config (runRecord.jl), once
     end
   catch err
     @error "Failed to write MCMC data to $fileName; stopping so the samples are not silently lost." exception = (err, catch_backtrace())
