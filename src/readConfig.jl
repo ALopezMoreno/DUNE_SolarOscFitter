@@ -147,6 +147,139 @@ function threshold_binning(block, ch, name)
     return (bin_number = n + 1, min = (thr - w) * 1e-3, max = hi * 1e-3, threshold = thr * 1e-3)
 end
 
+# ── Known config keys ─────────────────────────────────────────────────────────
+# Every key read from the YAML must be listed here; validate_config_keys() rejects anything else,
+# so a misspelled key cannot silently fall back to its default. Adding a key: read it in
+# parse_detector_block (per detector) or main() (top level) AND add it to the matching list.
+
+# Keys of one `detectors:` entry, read by parse_detector_block (also accepted at the top level of
+# a flat config without `detectors:`).
+const DETECTOR_CONFIG_KEYS = Set([
+    "singleChannel", "inclusiveMode", "semiInclusiveMode", "use_scattering_info", "ES_cos_cut",
+    "ES_exposure", "CC_exposure",
+    "reconstruction_sample_ES_nue", "reconstruction_sample_ES_nuother",
+    "reconstruction_sample_ES_angle", "reconstruction_sample_CC",
+    "ES_background_files", "CC_background_files",
+    "ES_background_normalisations", "CC_background_normalisations",
+    "ES_background_systematics", "CC_background_systematics",
+    "Ereco_min_ES", "Ereco_min_CC", "range_Ereco_ES", "range_Ereco_CC",
+    "nBins_Ereco_ES", "nBins_Ereco_CC", "nBins_cos_scatter",
+    "module_mass_kt", "ES_bg_generated_events", "ES_bg_face_areas_m2", "CC_bg_reference_flux",
+    "mc_stat_likelihood", "mc_stat_day_night",
+])
+
+# Top-level keys, read by main().
+const TOP_LEVEL_CONFIG_KEYS = Set([
+    # run control
+    "outFile", "prevFile", "RunMode", "fastFit", "nightOsc", "ad_backend", "hmc_max_depth", "mcmc_seed",
+    # Asimov is the only data mode: `Asimov: false` is rejected below; data_file is reserved for
+    # real data and not read yet (both documented in docs/configuration_reference.md).
+    "Asimov", "data_file",
+    # input files
+    "solar_model_file", "flux_model_file", "earth_model_file", "earth_uncertainty_file",
+    "earth_normalisation_prior_file", "solar_exposure_file",
+    # shared binning
+    "TPC_threshold", "nBins_Etrue", "range_Etrue", "nBins_cosz", "nBins_cosz_fine", "cosz_fine_edge",
+    # detectors
+    "detectors", "active_detectors", "mc_stat_likelihood", "mc_stat_day_night",
+    # MCMC / LLH / derived
+    "nSteps", "nChains", "nTuning", "maxTuningAttempts", "llh_bins", "thinning",
+    # priors and nuisances
+    "prior_sin2_th12", "prior_sin2_th13", "prior_dm2_21", "prior_8B_flux", "prior_HEP_flux",
+    "fix_cc_xsec", "prior_cc_xsec_norm", "prior_cc_xsec_tilt", "prior_cc_xsec_curv",
+    "earth_potential_uncertainties", "CC_xsec_scale",
+    # Asimov truth
+    "true_sin2_th12", "true_sin2_th13", "true_dm2_21", "true_8B_flux", "true_integrated_HEP_flux",
+    "true_cc_xsec_norm",
+])
+
+# Known but obsolete top-level keys: accepted with a warning (or an error, for a value that can no
+# longer be honoured) where they are read in main() / load_proposal_matrix.
+const OBSOLETE_CONFIG_KEYS = Set(["proposal_matrix", "binnedNight", "nuFast"])
+
+function _levenshtein(a::AbstractString, b::AbstractString)
+    a, b = collect(lowercase(a)), collect(lowercase(b))
+    prev = collect(0:length(b))
+    for i in 1:length(a)
+        cur = similar(prev); cur[1] = i
+        for j in 1:length(b)
+            cur[j+1] = min(prev[j+1] + 1, cur[j] + 1, prev[j] + (a[i] == b[j] ? 0 : 1))
+        end
+        prev = cur
+    end
+    return prev[end]
+end
+
+_closest_key(key, known) = isempty(known) ? nothing : argmin(k -> (_levenshtein(key, k), k), collect(known))
+_did_you_mean(key, known) = (k = _closest_key(key, known); k === nothing ? "" : " (did you mean '$k'?)")
+
+"""
+    validate_config_keys(config)
+
+Error on any config key that is not read by the fitter (top level or inside a `detectors:` entry),
+naming the key, its section and the closest known key. Obsolete keys are allowed here (they warn
+where they are read). Also checks that every name in `active_detectors` has a `detectors:` entry.
+"""
+function validate_config_keys(config::AbstractDict)
+    multi = haskey(config, "detectors")
+    top_known = multi ? union(TOP_LEVEL_CONFIG_KEYS, OBSOLETE_CONFIG_KEYS) :
+                        union(TOP_LEVEL_CONFIG_KEYS, OBSOLETE_CONFIG_KEYS, DETECTOR_CONFIG_KEYS)
+    problems = String[]
+    function check(dict, known, section, other_known, other_hint)
+        for key in sort(collect(string.(keys(dict))))
+            key in known && continue
+            msg = "unknown key '$key' in $section"
+            # Suggest from both sections: a misspelled key may also be in the wrong one.
+            closest = _closest_key(key, union(known, other_known))
+            if key in other_known
+                msg *= " ($other_hint)"
+            elseif closest in other_known && !(closest in known)
+                msg *= " (did you mean '$closest'? That is $other_hint)"
+            else
+                msg *= " (did you mean '$closest'?)"
+            end
+            push!(problems, msg)
+        end
+    end
+    check(config, top_known, "the top level", DETECTOR_CONFIG_KEYS,
+          "a per-detector key: with a `detectors:` section it must go inside each detector entry")
+    if multi
+        dets = config["detectors"]
+        dets isa AbstractDict || error("config: `detectors:` must be a mapping of detector name => settings")
+        for (name, block) in dets
+            block isa AbstractDict || error("config: detectors.$name must be a mapping of settings")
+            check(block, DETECTOR_CONFIG_KEYS, "detectors.$name", TOP_LEVEL_CONFIG_KEYS,
+                  "a top-level key: move it out of the detector entry")
+        end
+        active = get(config, "active_detectors", String[])
+        if !(active isa AbstractVector)
+            push!(problems, "active_detectors must be a list, e.g. [HD] (got $(repr(active)))")
+        elseif isempty(active)
+            push!(problems, "active_detectors is empty: name at least one entry of detectors:")
+        else
+            for name in unique(active)
+                count(==(name), active) > 1 && push!(problems, "active_detectors lists '$name' more than once")
+            end
+            for name in active
+                haskey(dets, name) || push!(problems,
+                    "active_detectors names '$name', which has no entry under detectors:" *
+                    _did_you_mean(string(name), string.(keys(dets))))
+            end
+        end
+    end
+    isempty(problems) || error("Invalid config:\n  " * join(problems, "\n  "))
+    # Obsolete keys: proposal_matrix and binnedNight warn where they are read; nuFast: true errors
+    # in main(), so only the harmless `nuFast: false` is reported here.
+    get(config, "nuFast", true) == false &&
+        @warn "config key nuFast is obsolete (the nuFast backend was removed); please delete it"
+    # Asimov is the only data mode; `Asimov: false` used to be silently ignored.
+    asimov = get(config, "Asimov", true)
+    asimov === false &&
+        error("Asimov: false (fit to real data from data_file) is not implemented; set Asimov: true")
+    asimov === true || error("Asimov must be true or false (got $(repr(asimov)))")
+    return nothing
+end
+
 """
     parse_detector_block(block, name) -> NamedTuple
 
@@ -300,6 +433,7 @@ function main()
         println("Failed to load config parameters. Exiting.")
         return
     end
+    validate_config_keys(config)   # unknown (e.g. misspelled) keys are an error, not a default
 
     ##########################################
     #### Set inputs from config YAML file ####
