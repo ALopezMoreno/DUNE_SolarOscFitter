@@ -66,6 +66,20 @@ CC_XSEC_E_MEV, CC_XSEC_SIGMA_1E42 = read_cc_xsec_table(CC_XSEC_PATH)
 # Tabulated domain in GeV; build_unoscillated_sample() checks the Etrue range against it.
 CC_XSEC_DOMAIN = (CC_XSEC_E_MEV[1] * 1e-3, CC_XSEC_E_MEV[end] * 1e-3)
 
+"""
+    check_cc_xsec_covers(bin_edges)
+
+The CC table is never extrapolated: the whole Etrue range must lie inside it. The tolerance
+absorbs the rounding of `min + n*width` in calculate_bins (QuadGK never evaluates the endpoints).
+"""
+function check_cc_xsec_covers(bin_edges; domain = CC_XSEC_DOMAIN, path = CC_XSEC_PATH)
+    tol = 1e-9 * (domain[2] - domain[1])
+    (domain[1] - tol <= bin_edges[1] && bin_edges[end] <= domain[2] + tol) ||
+        error("range_Etrue [$(bin_edges[1] * 1e3), $(bin_edges[end] * 1e3)] MeV is outside the CC cross-section " *
+              "table $(path), which covers [$(domain[1] * 1e3), $(domain[2] * 1e3)] MeV")
+    return nothing
+end
+
 # σ_CC(E_ν) [cm² per ⁴⁰Ar], E_ν in GeV: linear interpolation, error (BoundsError) outside the
 # table. CC_xsec_scale is a fixed overall factor (1 = the table as given).
 CC_xsec = linear_interpolation(CC_XSEC_E_MEV .* 1e-3, CC_XSEC_SIGMA_1E42 .* 1e-42 .* CC_xsec_scale,

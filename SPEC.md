@@ -78,7 +78,8 @@ Status tags:
     (3.7–3.9 MeV), σ ≥ 0 and strictly increasing above it, interpolation is linear, and evaluating
     outside the table is an error, never an extrapolation. `range_Etrue` of every shipped config lies
     inside the table (setup checks it). Tables without a header row, with non-finite or negative
-    values, or with unsorted or repeated energies are rejected. **[tested]** `test_cc_xsec.jl`.
+    values, or with unsorted or repeated energies are rejected. The run record pins the file read
+    (resolved path and SHA-256), also when run from outside the repository. **[tested]** `test_cc_xsec.jl`.
 
 ## 4. Detector response and event rates ([event_rate_pipeline.md](docs/event_rate_pipeline.md))
 

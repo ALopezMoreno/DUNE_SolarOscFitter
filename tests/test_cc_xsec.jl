@@ -74,4 +74,22 @@ end
         @test_throws ErrorException read_cc_xsec_table(tab("cols.csv",  ["E,s", "1.0,2.0,3.0", "2.0,4.0,5.0"]))
         @test_throws ErrorException read_cc_xsec_table(joinpath(dir, "missing.csv"))
     end
+
+    @testset "setup refuses an Etrue range outside the table" begin
+        @test check_cc_xsec_covers([0.001, 0.021]) === nothing                 # shipped configs
+        edges = [0.001 + i * ((0.030 - 0.001) / 29) for i in 0:29]             # [1, 30] MeV, rounds up
+        @test edges[end] > 0.030
+        @test check_cc_xsec_covers(edges) === nothing                          # rounding is tolerated
+        @test_throws ErrorException check_cc_xsec_covers([0.001, 0.031])       # 31 MeV: beyond the table
+        @test_throws ErrorException check_cc_xsec_covers([-0.001, 0.021])
+    end
+
+    @testset "run record hashes the table actually read" begin
+        # From another working directory the default relative path resolves to the repo root;
+        # the record must still pin that file.
+        h = cd(mktempdir()) do
+            input_hashes(Dict("cc_xsec_file" => DEFAULT_CC_XSEC_FILE))
+        end
+        @test h == Dict(normpath(abspath(resolve_cc_xsec_path(DEFAULT_CC_XSEC_FILE))) => bytes2hex(open(SHA.sha256, normpath(abspath(resolve_cc_xsec_path(DEFAULT_CC_XSEC_FILE))))))
+    end
 end
