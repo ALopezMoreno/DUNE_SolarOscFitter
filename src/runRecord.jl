@@ -43,6 +43,7 @@ function _toplevel_defaults_used()
         "ad_backend"         => () -> ad_backend,
         "hmc_max_depth"      => () -> hmc_max_depth,
         "mcmc_seed"          => () -> mcmc_seed,
+        "warm_start_chain"   => () -> warm_start_chain,                  # nothing = cold start
         "CC_xsec_scale"      => () -> CC_xsec_scale,
         "cc_xsec_file"       => () -> cc_xsec_file,
     )

@@ -173,7 +173,8 @@ const DETECTOR_CONFIG_KEYS = Set([
 # Top-level keys, read by main().
 const TOP_LEVEL_CONFIG_KEYS = Set([
     # run control
-    "outFile", "prevFile", "RunMode", "fastFit", "nightOsc", "ad_backend", "hmc_max_depth", "mcmc_seed",
+    "outFile", "prevFile", "warm_start_chain", "RunMode", "fastFit", "nightOsc", "ad_backend", "hmc_max_depth",
+    "mcmc_seed",
     # Asimov is the only data mode: `Asimov: false` is rejected below; data_file is reserved for
     # real data and not read yet (both documented in docs/configuration_reference.md).
     "Asimov", "data_file",
@@ -587,6 +588,12 @@ function main()
     # is written, so an aborted run does not displace the record of the chain already there.
     run_mode == "MCMC" && prevFile === nothing && isfile(outFile * ".jld2") &&
         error("Output file $(outFile).jld2 already exists. Delete it or choose a different outFile before starting a new run.")
+
+    # The warm-start chain is read after the (long) setup: check that it exists before.
+    if run_mode == "MCMC" && prevFile === nothing && warm_start_chain !== nothing
+        wf = endswith(warm_start_chain, ".jld2") ? warm_start_chain : warm_start_chain * ".jld2"
+        isfile(wf) || error("warm_start_chain: $wf not found (give the earlier run's outFile)")
+    end
 
     # Derived mode reads and writes prevFile.jld2: fail before setup (and the run record) without it.
     if run_mode == "derived"
