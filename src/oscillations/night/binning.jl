@@ -187,7 +187,9 @@ function BinnedP1e(cosz_edges::AbstractVector, energy_edges::AbstractVector, exp
         for t in eachindex(xi), a_ in axes(w_x, 2)
             B_xi[t, first_x[t]+a_-1] = w_x[t, a_]
         end
-        w_xi = Float64[exposure(-ci) for ci in c] .* dc_dxi
+        # c_of(xi_of(a)) can round to 1 ulp outside [cosz_edges[1], cosz_edges[end]]; the nodes lie in
+        # the bins, so clamp (a no-op when the round trip is exact) instead of querying past the table.
+        w_xi = Float64[exposure(clamp(-ci, cosz_edges[1], cosz_edges[end])) for ci in c] .* dc_dxi
 
         push!(intervals, _Interval(nodes, L, V, S, layer, u, 1 ./ u .^ 2, lag_first, lag_w, u_pieces_m, u_piece_bin,
                                    u_strip, W_r, width, B_xi, xi, w_xi,

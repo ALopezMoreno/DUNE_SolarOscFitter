@@ -41,8 +41,8 @@ end
     @test all(>(0), diff(σ[i_th:end]))
 
     # Never extrapolated: evaluating outside [0, 30] MeV is an error.
-    @test_throws BoundsError CC_xsec(30.05e-3)
-    @test_throws BoundsError CC_xsec(-1e-4)
+    @test_throws TabulatedDomainError CC_xsec(30.05e-3)
+    @test_throws TabulatedDomainError CC_xsec(-1e-4)
 
     # The true-energy range of every shipped config lies inside the table.
     root = joinpath(@__DIR__, "..")

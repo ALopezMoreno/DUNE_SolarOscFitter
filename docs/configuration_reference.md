@@ -151,11 +151,11 @@ Strings are evaluated as Julia `Distributions.jl` expressions.
 | Key | Type | Description |
 |-----|------|-------------|
 | `solar_model_file` | String | JLD2 file with solar density profile and ⁸B/HEP production fractions. |
-| `flux_model_file` | String | JLD2 file with neutrino energy spectra. |
-| `earth_model_file` | String | PREM Earth density profile (plain text). |
+| `flux_model_file` | String | JLD2 file with neutrino energy spectra (`energies` in GeV, `flux8B`, `fluxHep`). Validated (finite, strictly increasing energies, flux ≥ 0) and never extrapolated (SPEC 8.1). |
+| `earth_model_file` | String | PREM Earth density profile (plain text, no header: r/R⊕, density, electron fraction). Validated (finite, strictly increasing radii, values ≥ 0) and never extrapolated. |
 | `earth_uncertainty_file` | String | JLD2 file with Earth layer density uncertainties. |
 | `earth_normalisation_prior_file` | String | JLD2 file with `covariance` matrix and `true` vector for Earth density nuisance priors. Required if `earth_potential_uncertainties: true`. |
-| `solar_exposure_file` | String | CSV file with detector exposure vs. solar zenith angle. Sets `exposure_weights`. |
+| `solar_exposure_file` | String | CSV file (no header; every row is a point) with detector exposure vs. cos(solar zenith). Sets `exposure_weights`. Validated (finite, strictly increasing cos z, exposure ≥ 0) and never extrapolated. |
 | `cc_xsec_file` | String | (default `inputs/CC_nue_40Ar_total_marley_v2.0.0.csv`) Total CC ν_e–⁴⁰Ar cross-section table: `#` comment lines, one header row, then `E_nu [MeV], sigma [1e-42 cm² per ⁴⁰Ar]`, strictly increasing energies, finite, ≥ 0 (otherwise setup stops with an error). Interpolated linearly and never extrapolated: `range_Etrue` must lie inside the table (an error otherwise). A relative path is taken from the working directory if it exists there, else from the repository root. The default is MARLEY 2.0.0 (HF-CRPA + Bhattacharya 2009, 0–30 MeV; provenance in the file header). The previous table, MARLEY 1.2 with Bhattacharya 2009 (`inputs/CC_nue_40Ar_total_marley.csv`, to 15.5 MeV, no header), is kept for reference but cannot be used as is: it has no header and does not cover `range_Etrue` up to 21 MeV. |
 | `reconstruction_sample_ES_nue` | String | CSV file (Etrue, Ereco, mask) for νₑ ES response matrix. |
 | `reconstruction_sample_ES_nuother` | String | CSV file for νμ,τ ES response matrix. |

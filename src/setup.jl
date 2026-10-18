@@ -328,6 +328,9 @@ for (det_name, det) in detector_configs
     )
 end  # detector loop
 
+# Tabulated inputs: domain vs the range setup queried (every interpolant is evaluated by now)
+log_tabulated_inputs()
+
 println(" ")
 
 # Load likelihood-building functions

@@ -1,34 +1,13 @@
-# Load solar neutrino fluxes and create interpolated functions
-using Interpolations  # For flux interpolation
-using QuadGK          # For flux normalization integrals
+# Load solar neutrino fluxes and create interpolated functions (solar_flux_spectra in
+# modelInputs.jl: zero flux added at E = 0 and, if needed, at the top of the analysis range;
+# normalised to unit integral; an error outside the table)
 include(joinpath(@__DIR__, "core.jl"))
+include(joinpath(@__DIR__, "modelInputs.jl"))
 
-# Extend energy range for proper interpolation
-# Add zero energy point and ensure coverage up to maximum analysis energy
-extended_energies = [0.0; energies]  # Add zero energy point
-extended_flux8B = [0.0; flux8B]      # 8B flux with zero at E=0
-extended_fluxHep = [0.0; fluxHep]    # HEP flux with zero at E=0
+_spectra = solar_flux_spectra(energies, flux8B, fluxHep, Etrue_bins.max; source = flux_file_path)
+extended_energies = _spectra.energies
+flux_8B_noNormalisation, flux_hep_noNormalisation = _spectra.raw_8B, _spectra.raw_hep
+integral_flux_8B, integral_flux_hep = _spectra.integral_8B, _spectra.integral_hep
 
-# Extend to maximum energy if needed for analysis range
-if Etrue_bins.max > energies[end]
-    extended_energies = [0.0; energies; Etrue_bins.max]
-    extended_flux8B = [0.0; flux8B; 0.0]    # Zero flux beyond data range
-    extended_fluxHep = [0.0; fluxHep; 0.0]  # Zero flux beyond data range
-end
-
-# Create interpolated flux functions (unnormalized)
-flux_8B_noNormalisation = linear_interpolation(extended_energies, extended_flux8B)
-flux_hep_noNormalisation = linear_interpolation(extended_energies, extended_fluxHep)
-
-# Calculate normalization integrals
-lower_limit = extended_energies[1]    # Start from zero energy
-upper_limit = extended_energies[end]  # End at maximum energy
-
-# Integrate flux functions over full energy range
-integral_flux_8B, _ = quadgk(flux_8B_noNormalisation, lower_limit, upper_limit)
-integral_flux_hep, _ = quadgk(flux_hep_noNormalisation, lower_limit, upper_limit)
-
-# Create normalized flux functions
-# These give flux per unit energy, normalized to unit integral
-flux_8B = linear_interpolation(extended_energies, extended_flux8B / integral_flux_8B)
-flux_hep = linear_interpolation(extended_energies, extended_fluxHep / integral_flux_hep)
+# Flux per unit energy, normalised to unit integral
+flux_8B, flux_hep = _spectra.flux_8B, _spectra.flux_hep

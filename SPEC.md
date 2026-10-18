@@ -230,6 +230,29 @@ Status tags:
     toy it ended at A ≈ identity, from a cold start and from a correct warm start (gone within ~50
     init steps). **[inferred]** (toy study 2026-10-16; not a test.)
 
+## 8. Model inputs ([event_rate_pipeline.md](docs/event_rate_pipeline.md#tabulated-inputs-srctabulatedjl-srcmodelinputsjl))
+
+8.1 Input-table contract. Every tabulated model input (⁸B and hep spectra, CC cross section, solar
+    exposure, Earth potential, the potential along a makePaths chord) is built through one helper,
+    `TabulatedInput` (`src/tabulated.jl`), which:
+    - rejects, on construction, tables with non-finite values, unsorted or repeated nodes, fewer than
+      two points, mismatched lengths, or (where the quantity requires it) negative values, with an error
+      naming the input and its source; the NightOsc Earth model, which keeps its own interpolation,
+      rejects the same defects in its table;
+    - interpolates linearly through the nodes (exact at the nodes; at in-domain points identical to
+      Interpolations.jl's `linear_interpolation` on the same nodes);
+    - has an explicit extrapolation policy per input (`:error` by default, `:flat`, `:zero`) and never
+      extrapolates silently: under `:error` a query outside the table raises an error naming the input,
+      the queried value and the domain; queries outside the table are counted under every policy;
+    - records the range queried, and setup logs each input's domain against that range once.
+    Queries computed from coordinates that should land on a table edge (the NightOsc zenith nodes at
+    the lowest night cos z) are clamped to the bin range, so a rounding error never reaches outside the
+    table; an exposure file must cover [lowest night cos z, 0].
+    All shipped inputs use `:error`. Headerless tables keep their first row; a table that requires a
+    header (CC) refuses a numeric first row. Porting the inputs onto the helper left every value
+    unchanged (nodes and midpoints identical to the previous implementation; the likelihood regression
+    is unchanged). **[tested]** `test_tabulated.jl` (and `test_cc_xsec.jl` for the CC table).
+
 ## Planned (Phase 2, not yet in the code)
 
 Earth-density parametrisations beyond per-layer scaling (boundary shifts, local polynomial
