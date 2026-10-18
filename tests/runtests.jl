@@ -17,6 +17,8 @@ include(joinpath(@__DIR__, "test_osc_night.jl"))
 include(joinpath(@__DIR__, "test_response_and_backgrounds.jl"))
 include(joinpath(@__DIR__, "test_input_checks.jl"))
 include(joinpath(@__DIR__, "test_mcstat.jl"))
+# test_warm_start.jl sets fitter globals in Main (posterior, init, warm_start, …): keep it last
+include(joinpath(@__DIR__, "test_warm_start.jl"))
 
 # End-to-end test of derived mode on the two-detector fixtures (own process: it runs the full
 # setup; ~1 min). On by default; JULIA_SKIP_DERIVED=1 skips it.

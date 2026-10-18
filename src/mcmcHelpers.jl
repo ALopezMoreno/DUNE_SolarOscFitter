@@ -61,14 +61,37 @@ end
 # Build the sampling algorithm. Tuning fields (transform_tuning=RAMTuning,
 # proposal_tuning=StepSizeAdaptor, pretransform=PriorToNormal, …) take BAT's
 # native HMC defaults — that's the tuning we now persist rather than reset.
-_build_samplingalg() = TransformedMCMC(
-    proposal    = proposal_algorithm,
-    nchains     = mcmcChains,
-    init        = init,
-    burnin      = burnin,
-    convergence = convergence,
-    nsteps      = batchSteps,   # placeholder; per-batch length is passed explicitly
-)
+# With a warm start (warmStart.jl) the affine transform comes from the previous
+# posterior and is kept fixed: BAT's RAM tuning would pull it back towards identity.
+_build_samplingalg() = warm_start === nothing ?
+    TransformedMCMC(
+        proposal    = proposal_algorithm,
+        nchains     = mcmcChains,
+        init        = init,
+        burnin      = burnin,
+        convergence = convergence,
+        nsteps      = batchSteps,   # placeholder; per-batch length is passed explicitly
+    ) :
+    TransformedMCMC(
+        proposal           = proposal_algorithm,
+        adaptive_transform = warm_start.transform,
+        transform_tuning   = BAT.NoMCMCTransformTuning(),
+        nchains            = mcmcChains,
+        init               = init,
+        burnin             = burnin,
+        convergence        = convergence,
+        nsteps             = batchSteps,
+    )
+
+# Scales of the affine transform (the square root of the mass-matrix diagonal), in units of
+# each parameter's prior width (BAT's PriorToNormal space). Identity = 1 everywhere.
+@noinline function log_transform_scales(label, scales, names)
+    order = sortperm(scales)
+    show_idx = unique(vcat(order[1:min(3, end)], order[max(1, end - 2):end]))
+    @logmsg MCMC "$label transform scales (posterior/prior width): " *
+                 join(["$(names[i]) $(round(scales[i], sigdigits = 2))" for i in show_idx], ", ") *
+                 " (smallest and largest of $(length(scales)))"
+end
 
 
 # On resume, rebuild each chain's likelihood functions from the LIVE current
@@ -232,6 +255,12 @@ function runMCMCbatch(currentBatch, priors, args...)
           )
           mcmc_states = BAT.mcmc_burnin!(nothing, mcmc_states, salg, BAT.nop_func)
           @logmsg MCMC "Tuning finished, running batches"
+          try
+              A = mcmc_states[1].chain_state.f_transform.A
+              log_transform_scales("Chain 1 tuned", sqrt.(diag(A * A')), collect(keys(BAT.varshape(prior))))
+          catch err
+              @logmsg MCMC "Could not log the tuned transform scales: $(sprint(showerror, err))"
+          end
           _GRADIENTS_AT_BATCH_START[] = NightOsc.GRADIENT_COUNT[]   # count sampling batches only
 
           run_state = RunState(mcmc_states, f_pretransform, 0)

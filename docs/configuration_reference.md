@@ -83,7 +83,8 @@ Strings are evaluated as Julia `Distributions.jl` expressions.
 | `nTuning` | Int | Steps per tuning round. |
 | `earth_potential_uncertainties` | Bool | Include Earth density nuisance parameters. Requires `earth_normalisation_prior_file`. |
 | `hmc_max_depth` | Int | (default `4`) NUTS tree-depth cap: each MCMC step uses at most 2^`hmc_max_depth` gradient evaluations. Each batch logs the gradients actually used per step (with the Enzyme backend) and warns when steps run into the cap, which cuts trajectories short of their natural end and lowers the effective sample size. |
-| `proposal_matrix` | String | (optional, currently unused) Path to a JLD2 file with a `posterior_cov` matrix. The HMC sampler tunes its own metric, so setting it only logs a warning. |
+| `warm_start_chain` | String | (optional) `outFile` of an earlier MCMC run with the same fitted parameters and priors. Its samples set the mass matrix (their covariance in BAT's prior-normal space), which is then kept fixed, and the new chains start from its draws. The step size is still tuned. Ignored when resuming with `prevFile`. See [mcmc_and_priors.md](mcmc_and_priors.md#4-tuning). |
+| `proposal_matrix` | String | (unused) Setting it only logs a warning; use `warm_start_chain`. |
 
 ---
 

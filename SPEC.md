@@ -218,6 +218,18 @@ Status tags:
 7.3 Coverage: on Asimov or toy data, the 68%/95% credible intervals cover the true values at the
     nominal rate. **[untested]** (needs toy-data generation.)
 
+7.4 Warm start (`warm_start_chain`): the mass matrix (BAT's affine transform in the PriorToNormal
+    space) is the mean and covariance of the previous run's samples (weights = multiplicities)
+    mapped into that space; samples past the current prior support, or clamped onto a boundary, are
+    dropped (an error if more than 1%). The transform stays unchanged through init, burn-in, sampling
+    and a resume (`prevFile`), and the chains start from previous draws. A previous run missing a
+    fitted parameter is refused. **[tested]** (`test_warm_start.jl`, through `_build_samplingalg`
+    and `rebuild_live_state`.)
+    BAT's default RAM tuning does not learn the posterior shape for HMC: it rescales A along each
+    trajectory by (p_accept − 0.8) while the step size adapts too, and the two are degenerate. On a
+    toy it ended at A ≈ identity, from a cold start and from a correct warm start (gone within ~50
+    init steps). **[inferred]** (toy study 2026-10-16; not a test.)
+
 ## Planned (Phase 2, not yet in the code)
 
 Earth-density parametrisations beyond per-layer scaling (boundary shifts, local polynomial
