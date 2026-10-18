@@ -140,6 +140,29 @@ For each background with a non-zero systematic fraction `sys`:
 - **CC (ν_e + ⁴⁰Ar):** a tabulated total cross section, `cc_xsec_file`. Default `inputs/CC_nue_40Ar_total_marley_v2.0.0.csv`: MARLEY 2.0.0 (DOI 10.5281/zenodo.21880925, arXiv:2604.26801), HF-CRPA continuum + Bhattacharya 2009 discrete transitions, 0–30 MeV in 0.1 MeV steps, zero below the 3.8 MeV threshold. Provenance (command, job config, react-file hashes) is in the file's `#` header. The table is used point by point (no added or dropped points), interpolated linearly, and never extrapolated: setup stops if `range_Etrue` is not inside the table, and `CC_xsec` throws outside it. `CC_xsec_scale` multiplies it by a fixed factor; `cc_xsec_norm/tilt/curv` are the fitted nuisances on top (see [mcmc_and_priors.md](mcmc_and_priors.md)).
 - Relative to the previous table (MARLEY 1.2, Bhattacharya 2009, which ended at 15.5 MeV and was held flat above it), σ is 0.97× at 6 MeV, 0.94× at 10 MeV and 0.89× at 14 MeV, and rises again above 15.5 MeV where the old one was flat. For `config.yaml` (HD, CC only) the predicted CC signal in the fit window falls by 6.3 % for both ⁸B and hep.
 
+### Tabulated inputs (`src/tabulated.jl`, `src/modelInputs.jl`)
+
+Every interpolated model input is a `TabulatedInput(x, y; name, source, units, extrapolation, nonnegative)`:
+linear interpolation (Interpolations.jl) through the given nodes, validated when it is built (finite values,
+strictly increasing x, y ≥ 0 where required; errors name the input and the file), with an explicit
+extrapolation policy: `:error` (default; a `TabulatedDomainError` naming the input, the queried value and the
+domain), `:flat` or `:zero`. Queries outside the table are counted under every policy. All are evaluated at
+setup only; at the end of setup `log_tabulated_inputs()` logs each input's domain, the range actually queried
+and the number of out-of-domain queries. Headerless tables (`read_numeric_table(...; header = false)`) keep
+their first row; tables that need a header (the CC cross section) refuse a numeric first row.
+
+| Input | File | Policy | Notes |
+|---|---|---|---|
+| ⁸B, hep spectra | `flux_model_file` | `:error` | (0, 0) added, and (E_true max, 0) when `range_Etrue` ends above the table; normalised to unit integral |
+| CC cross section | `cc_xsec_file` | `:error` | used as given |
+| Solar exposure | `solar_exposure_file` | `:error` (was flat) | integrals start at the lowest night cos z of the file; NightOsc clamps its zenith nodes to the bins (1-ulp round trip); the file must cover [lowest night cos z, 0] |
+| Earth potential | `earth_model_file` | `:error` | radii × (1 + 1e-10), so the surface stays inside |
+| Potential along a makePaths chord | (built per path) | `:error` (was flat) | evaluated at interior Gauss–Legendre nodes only |
+
+NightOsc's Earth model (`src/oscillations/night/earth_model.jl`) keeps its own interpolation, with the ±1e-9 km
+steps it inserts at each density jump; its input table is validated to the same contract. Its clamp at the
+ends is not reached (queried radii 225–6370.9994 km on the shipped grids).
+
 ---
 
 ## Stage 3: Asimov data and initialization (`src/setup.jl`)

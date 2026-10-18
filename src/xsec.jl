@@ -1,9 +1,9 @@
 using CSV, DataFrames # not used here any more; kept so scripts that include this file still get them
-using Interpolations  # For cross-section interpolation
 using QuadGK: gauss   # Gauss-Legendre nodes for the ES recoil integral
 
 # Load physics constants and detector parameters
 include(joinpath(@__DIR__, "core.jl"))
+include(joinpath(@__DIR__, "tabulated.jl"))   # TabulatedInput, read_numeric_table
 
 # ---------------------------------------------------------------------------------------------
 # CC ν_e + ⁴⁰Ar total cross section, tabulated (config key `cc_xsec_file`, default
@@ -29,40 +29,26 @@ end
 """
     read_cc_xsec_table(path) -> (E_MeV::Vector{Float64}, sigma_1e42::Vector{Float64})
 
-Read a CC cross-section table: skip '#' comment and blank lines, require a header row (a first
-row of numbers is an error, so a headerless file cannot lose its first point), then two numeric
-columns. Errors unless every value is finite, sigma ≥ 0 and the energies strictly increase.
+Read a CC cross-section table (read_numeric_table, tabulated.jl): skip '#' comment and blank
+lines, require a header row (a first row of numbers is an error, so a headerless file cannot lose
+its first point), then two numeric columns. Errors unless every value is finite, sigma ≥ 0 and the
+energies strictly increase (validate_table).
 """
 function read_cc_xsec_table(path::AbstractString)
     isfile(path) || error("CC cross-section table not found: $path (config key cc_xsec_file)")
-    rows = [strip(l) for l in eachline(path)]
-    rows = [l for l in rows if !isempty(l) && !startswith(l, "#")]
-    isempty(rows) && error("CC cross-section table $path is empty")
-    split_row(l) = strip.(split(l, ','))
-    header = split_row(rows[1])
-    if all(f -> tryparse(Float64, f) !== nothing, header)
-        error("CC cross-section table $path has no header row (first row is numeric: \"$(rows[1])\"); " *
-              "add a header such as `E_nu_MeV,sigma_1e-42_cm2`")
-    end
-    length(header) == 2 || error("CC cross-section table $path: expected 2 columns, header has $(length(header))")
-    E = Float64[]; σ = Float64[]
-    for (i, l) in enumerate(rows[2:end])
-        f = split_row(l)
-        vals = length(f) == 2 ? tryparse.(Float64, f) : nothing
-        (vals === nothing || any(isnothing, vals)) &&
-            error("CC cross-section table $path: data row $i is not two numbers: \"$l\"")
-        push!(E, vals[1]); push!(σ, vals[2])
-    end
-    length(E) >= 2 || error("CC cross-section table $path needs at least 2 data rows")
-    all(isfinite, E) && all(isfinite, σ) || error("CC cross-section table $path has non-finite values")
-    all(>=(0), σ) || error("CC cross-section table $path has negative cross sections")
-    all(>(0), diff(E)) ||
-        error("CC cross-section table $path: energies must be strictly increasing (sorted, no duplicates)")
+    E, σ = read_numeric_table(path; name = "CC cross section", ncols = 2, header = true)
+    validate_table(E, σ; name = "CC cross section", source = path, nonnegative = true)
     return E, σ
 end
 
 CC_XSEC_PATH = resolve_cc_xsec_path(@isdefined(cc_xsec_file) ? cc_xsec_file : DEFAULT_CC_XSEC_FILE)
 CC_XSEC_E_MEV, CC_XSEC_SIGMA_1E42 = read_cc_xsec_table(CC_XSEC_PATH)
+
+# σ_CC(E_ν) [cm² per ⁴⁰Ar], E_ν in GeV: linear interpolation, a TabulatedDomainError outside the
+# table (never extrapolated). CC_xsec_scale is a fixed overall factor (1 = the table as given).
+CC_xsec = TabulatedInput(CC_XSEC_E_MEV .* 1e-3, CC_XSEC_SIGMA_1E42 .* 1e-42 .* CC_xsec_scale;
+                         name = "CC cross section", source = CC_XSEC_PATH, units = "GeV",
+                         extrapolation = :error, nonnegative = true)
 # Tabulated domain in GeV; build_unoscillated_sample() checks the Etrue range against it.
 CC_XSEC_DOMAIN = (CC_XSEC_E_MEV[1] * 1e-3, CC_XSEC_E_MEV[end] * 1e-3)
 
@@ -72,18 +58,9 @@ CC_XSEC_DOMAIN = (CC_XSEC_E_MEV[1] * 1e-3, CC_XSEC_E_MEV[end] * 1e-3)
 The CC table is never extrapolated: the whole Etrue range must lie inside it. The tolerance
 absorbs the rounding of `min + n*width` in calculate_bins (QuadGK never evaluates the endpoints).
 """
-function check_cc_xsec_covers(bin_edges; domain = CC_XSEC_DOMAIN, path = CC_XSEC_PATH)
-    tol = 1e-9 * (domain[2] - domain[1])
-    (domain[1] - tol <= bin_edges[1] && bin_edges[end] <= domain[2] + tol) ||
-        error("range_Etrue [$(bin_edges[1] * 1e3), $(bin_edges[end] * 1e3)] MeV is outside the CC cross-section " *
-              "table $(path), which covers [$(domain[1] * 1e3), $(domain[2] * 1e3)] MeV")
-    return nothing
+function check_cc_xsec_covers(bin_edges; xsec = CC_xsec)
+    check_covers(xsec, bin_edges[1], bin_edges[end]; what = "range_Etrue (GeV)")
 end
-
-# σ_CC(E_ν) [cm² per ⁴⁰Ar], E_ν in GeV: linear interpolation, error (BoundsError) outside the
-# table. CC_xsec_scale is a fixed overall factor (1 = the table as given).
-CC_xsec = linear_interpolation(CC_XSEC_E_MEV .* 1e-3, CC_XSEC_SIGMA_1E42 .* 1e-42 .* CC_xsec_scale,
-                               extrapolation_bc=Throw())
 
 # Elastic scattering cross-section calculations
 # Neutrino-electron scattering with the BKS95 electroweak radiative corrections

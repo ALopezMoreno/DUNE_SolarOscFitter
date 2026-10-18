@@ -1,55 +1,5 @@
-using DelimitedFiles   # For reading Earth model data files
-using Interpolations   # For creating interpolated density functions
-
-# Earth physical constants
-const EARTH_RADIUS_KM = 6371.0  # Earth radius in kilometers
-
-function load_earth_model(file_path::String)
-    """
-    Load Earth density model from a data file.
-    
-    Expected file format: whitespace-delimited columns
-    Column 1: Radius factor (fraction of Earth radius)
-    Column 2: Density (g/cm³)
-    Column 3: Electron fraction
-    
-    Returns:
-    Dictionary with radius (km) and matter potential arrays
-    """
-    # Load the data from file (assumes whitespace delimited)
-    data = readdlm(file_path)
-    
-    # Extract and convert data columns
-    # Small factor (1.0000000001) added to avoid numerical issues at boundaries
-    radius = data[:, 1] .* EARTH_RADIUS_KM .* 1.0000000001
-    density = data[:, 2]        # Density in g/cm³
-    e_fraction = data[:, 3]     # Electron fraction
-    
-    # Compute neutrino matter potential
-    potential = density .* e_fraction .* MATTER_POTENTIAL_CONST
-    
-    return Dict(:radius => radius, :potential => potential)
-end
-
-function create_interpolated_model(earth_model::Dict)
-    """
-    Create an interpolated function for the Earth matter potential.
-    
-    Uses linear interpolation between data points with error checking
-    for out-of-range requests.
-    
-    Returns:
-    Interpolated function that can be evaluated at any radius
-    """
-    x = earth_model[:radius]    # Radius values (km)
-    y = earth_model[:potential] # Matter potential values
-    
-    # Create linear interpolation function
-    # extrapolation_bc=Throw() ensures error for out-of-range values
-    linear_interp = linear_interpolation(x, y; extrapolation_bc=Throw())
-    
-    return linear_interp
-end
+# Earth model (load_earth_model in modelInputs.jl) and the cos z grids
+include(joinpath(@__DIR__, "modelInputs.jl"))   # load_earth_model, create_interpolated_model, EARTH_RADIUS_KM
 
 # Load and process Earth model
 earth_model = load_earth_model(earthModelFile)
@@ -85,8 +35,8 @@ end
 const _COSZ_EXP_MIN = let
     cosz_floor = cosz_bins.min
     if @isdefined(solarExposureFile) && isfile(solarExposureFile)
-        raw = readdlm(solarExposureFile, ',')
-        night_cosz = filter(c -> c <= 0.0, Float64.(raw[:, 1]))
+        cz, _ = read_numeric_table(solarExposureFile; name = "solar exposure", ncols = 2, header = false)
+        night_cosz = filter(c -> c <= 0.0, cz)
         isempty(night_cosz) ? cosz_floor : minimum(night_cosz)
     else
         cosz_floor

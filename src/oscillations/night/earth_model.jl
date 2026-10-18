@@ -16,10 +16,10 @@ end
 
 function EarthModel(file::AbstractString; potential_const::Real, jump_threshold::Real=LAYER_JUMP_FACTOR)
     data = readdlm(file)
+    _validate_earth_table(data, file)
     radius = data[:, 1] .* EARTH_RADIUS_KM
     density = Float64.(data[:, 2])
     potential = density .* data[:, 3] .* potential_const
-    issorted(radius) || error("EarthModel: radii in $file must be ascending")
 
     steps = abs.(diff(density))
     jumps = findall(steps .> jump_threshold * median(steps))
@@ -39,9 +39,32 @@ function EarthModel(file::AbstractString; potential_const::Real, jump_threshold:
     return EarthModel(r_out, v_out, sort(boundaries))
 end
 
+# The input-table contract of SPEC 8.1 (src/tabulated.jl's validate_table, which this module
+# does not load): a numeric table of 3 columns and at least 2 rows, finite values, strictly
+# increasing radii in [0, 1], density ≥ 0 and electron fraction ≥ 0.
+function _validate_earth_table(data, file)
+    w = "EarthModel ($file)"
+    (data isa AbstractMatrix{<:Real} && size(data, 2) == 3) ||
+        error("$w: expected a headerless numeric table of 3 columns (r/R⊕, density, electron fraction)")
+    size(data, 1) >= 2 || error("$w: a table needs at least 2 points, it has $(size(data, 1))")
+    i = findfirst(!isfinite, data)
+    i === nothing || error("$w: non-finite value in row $(i[1]), column $(i[2])")
+    r = data[:, 1]
+    i = findfirst(k -> !(r[k+1] > r[k]), 1:length(r)-1)
+    i === nothing || error("$w: radii must be strictly increasing (sorted, no duplicates); rows $i and $(i+1): $(r[i]), $(r[i+1])")
+    (r[1] >= 0 && r[end] <= 1) || error("$w: radii must lie in [0, 1] (fractions of the Earth radius)")
+    i = findfirst(<(0), data[:, 2:3])
+    i === nothing || error("$w: negative $(i[2] == 1 ? "density" : "electron fraction") in row $(i[1])")
+    return nothing
+end
+
 n_layers(earth::EarthModel) = length(earth.layer_boundaries) + 1
 
-# Matter potential at radius r [km], linear interpolation clamped at the ends
+# Matter potential at radius r [km], linear interpolation clamped at the ends. Kept as is
+# rather than ported to TabulatedInput: the jump steps entered above are load-bearing and this
+# formula, y[i] + t (y[i+1] - y[i]), is not bit-identical to Interpolations.jl's. The clamp is
+# not reached: chord radii lie in [0, r_det] with r_det < radius[end] (measured: 225–6370.9994 km on
+# the shipped cos z grids, 2026-10-18).
 function potential(earth::EarthModel, r::Real)
     x, y = earth.radius, earth.potential_grid
     r <= x[1] && return y[1]

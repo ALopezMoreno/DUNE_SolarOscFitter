@@ -4,7 +4,7 @@
 
 using Statistics      # For statistical calculations
 using StaticArrays    # For efficient static arrays
-using Interpolations  # For density profile interpolation
+include(joinpath(@__DIR__, "..", "tabulated.jl"))   # TabulatedInput
 using QuadGK: gauss   # Gauss-Legendre nodes/weights for segment-average density
 
 # Earth model parameters
@@ -203,8 +203,11 @@ function make_potential_for_integrand(cosz, earth_potential_function, n=3)
     distances, matter_potential, jumps = get_potential(cosz, earth_potential_function)
     jump_positions = [jump.x for jump in jumps]
 
-    # create interpolated function for finding optimal integration points
-    f = linear_interpolation(distances, matter_potential; extrapolation_bc=Flat())
+    # Potential along the path, for the integration points. The Gauss-Legendre nodes below lie
+    # strictly inside [0, distances[end]], so the table is never left (it used Flat() before,
+    # which no node reached); not registered for the setup log (one table per path).
+    f = TabulatedInput(distances, matter_potential; name = "Earth potential along a path (cos z = $cosz)",
+                       units = "km", extrapolation = :error, nonnegative = true, register = false)
 
     segments = []
 
