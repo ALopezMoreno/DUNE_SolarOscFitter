@@ -132,6 +132,16 @@ For each background with a non-zero systematic fraction `sys`:
 
 ---
 
+## Unoscillated rates and cross sections (`src/unoscillatedSample.jl`, `src/xsec.jl`)
+
+`build_unoscillated_sample(det)` integrates flux × cross section over each `Etrue` bin (`range_Etrue`, `nBins_Etrue`) by adaptive quadrature and multiplies by the target count, the exposure time and the channel normalisation.
+
+- **ES:** BKS95 analytic cross sections (radiative corrections, κ(T)), integrated over the recoil range above `TPC_threshold`.
+- **CC (ν_e + ⁴⁰Ar):** a tabulated total cross section, `cc_xsec_file`. Default `inputs/CC_nue_40Ar_total_marley_v2.0.0.csv`: MARLEY 2.0.0 (DOI 10.5281/zenodo.21880925, arXiv:2604.26801), HF-CRPA continuum + Bhattacharya 2009 discrete transitions, 0–30 MeV in 0.1 MeV steps, zero below the 3.8 MeV threshold. Provenance (command, job config, react-file hashes) is in the file's `#` header. The table is used point by point (no added or dropped points), interpolated linearly, and never extrapolated: setup stops if `range_Etrue` is not inside the table, and `CC_xsec` throws outside it. `CC_xsec_scale` multiplies it by a fixed factor; `cc_xsec_norm/tilt/curv` are the fitted nuisances on top (see [mcmc_and_priors.md](mcmc_and_priors.md)).
+- Relative to the previous table (MARLEY 1.2, Bhattacharya 2009, which ended at 15.5 MeV and was held flat above it), σ is 0.97× at 6 MeV, 0.94× at 10 MeV and 0.89× at 14 MeV, and rises again above 15.5 MeV where the old one was flat. For `config.yaml` (HD, CC only) the predicted CC signal in the fit window falls by 6.3 % for both ⁸B and hep.
+
+---
+
 ## Stage 3: Asimov data and initialization (`src/setup.jl`)
 
 `setup.jl` calls `propagateSamples` once with the true parameter values to generate the Asimov dataset (the "observed" data used throughout the analysis). The resulting arrays are stored as globals and passed to the likelihood function as fixed observed counts.

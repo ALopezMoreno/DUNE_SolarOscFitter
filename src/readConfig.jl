@@ -42,6 +42,7 @@ function track_memory(interval::Float64=0.1)
 end
 
 
+include(joinpath(@__DIR__, "core.jl"))        # DEFAULT_CC_XSEC_FILE
 include(joinpath(@__DIR__, "logger.jl"))
 include(joinpath(@__DIR__, "runRecord.jl"))   # <outFile>_config.yaml: resolved config + provenance
 
@@ -177,7 +178,7 @@ const TOP_LEVEL_CONFIG_KEYS = Set([
     "Asimov", "data_file",
     # input files
     "solar_model_file", "flux_model_file", "earth_model_file", "earth_uncertainty_file",
-    "earth_normalisation_prior_file", "solar_exposure_file",
+    "earth_normalisation_prior_file", "solar_exposure_file", "cc_xsec_file",
     # shared binning
     "TPC_threshold", "nBins_Etrue", "range_Etrue", "nBins_cosz", "nBins_cosz_fine", "cosz_fine_edge",
     # detectors
@@ -354,6 +355,7 @@ function save_settings_to_file(filename::String)
         write(file, "AD backend: $ad_backend\n")
         write(file, "MCMC seed: $(something(mcmc_seed, "random"))\n")
         write(file, "Earth uncertainty enabled: $earthUncertainty\n")
+        write(file, "CC xsec file: $cc_xsec_file\n")
         write(file, "CC xsec scale: $CC_xsec_scale\n\n")
 
         # Solar and Earth models
@@ -452,6 +454,9 @@ function main()
 
     # Solar angle exposure over time
     global solarExposureFile = config["solar_exposure_file"]
+
+    # CC ν_e–⁴⁰Ar total cross-section table (read and validated in xsec.jl)
+    global cc_xsec_file = String(get(config, "cc_xsec_file", DEFAULT_CC_XSEC_FILE))
 
     # True TPC detection threshold (GeV) — lower integration limit of the ES cross-section.
     # Must match the MC generation threshold. Distinct from the Ereco_min_ES analysis cut.
@@ -552,7 +557,8 @@ function main()
     # Previous file?
     global prevFile = haskey(config, "prevFile") ? config["prevFile"] : nothing
 
-    # CC cross-section scale factor (1.0 = standard MARLEY prediction)
+    # Fixed CC cross-section scale factor (1.0 = the cc_xsec_file table as given). DEAP-3600's 2.4
+    # (arXiv:2605.12769) is relative to MARLEY 1.2 / BGG2009, ≈ 2.66 relative to MARLEY 2.0.0.
     global CC_xsec_scale = Float64(get(config, "CC_xsec_scale", 1.0))
 
     allowed_modes = ["LLH", "MCMC", "derived", "PROFILE", "SETUP"]

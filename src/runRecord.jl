@@ -44,6 +44,7 @@ function _toplevel_defaults_used()
         "hmc_max_depth"      => () -> hmc_max_depth,
         "mcmc_seed"          => () -> mcmc_seed,
         "CC_xsec_scale"      => () -> CC_xsec_scale,
+        "cc_xsec_file"       => () -> cc_xsec_file,
     )
 end
 
@@ -159,12 +160,21 @@ end
     input_hashes(config) -> OrderedDict
 
 SHA-256 of every existing file named by a string value of `config` (nested dicts and lists
-included), keyed by the path as written in the config.
+included), keyed by the path as written in the config. A relative path that does not exist from
+the working directory is looked up from the repository root, as `cc_xsec_file` is
+(resolve_cc_xsec_path in xsec.jl); it is then keyed by that absolute path.
 """
-function input_hashes(config)
+function input_hashes(config; repo::AbstractString = normpath(joinpath(@__DIR__, "..")))
     paths = String[]
     collect_paths(x) = nothing
-    collect_paths(x::AbstractString) = (isfile(x) && push!(paths, x); nothing)
+    function collect_paths(x::AbstractString)
+        if isfile(x)
+            push!(paths, x)
+        elseif !isabspath(x) && isfile(joinpath(repo, x))
+            push!(paths, normpath(joinpath(repo, x)))
+        end
+        return nothing
+    end
     collect_paths(d::AbstractDict) = foreach(collect_paths, values(d))
     collect_paths(v::AbstractVector) = foreach(collect_paths, v)
     collect_paths(config)

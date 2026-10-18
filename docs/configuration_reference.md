@@ -119,7 +119,7 @@ Strings are evaluated as Julia `Distributions.jl` expressions.
 | `mc_stat_likelihood` | String | (default `Poisson`) MC statistical uncertainty of the predictions in the likelihood: `Poisson` (none), `DembinskiAbdelmotteleb` (recommended) or `BarlowBeeston` (Conway's approximation). Can also be set at the top level as the default for all detectors. See [mcstat/mcstat.pdf](mcstat/mcstat.pdf). |
 | `mc_stat_day_night` | String | (default `shared`) `shared`: one MC scale factor per E_reco bin for its day and all night bins, which come from the same MC events; `independent`: one per bin, as MaCh3 does. Top level or per detector. |
 | `CC_bg_reference_flux` | Float | (default `2.2e-6` cm⁻²s⁻¹) Flux at which the CC background MC is normalised; each CC background is scaled by its normalisation divided by this. |
-| `CC_xsec_scale` | Float | (default `1.0`) Fixed scale factor on the CC cross section relative to the MARLEY prediction. Applied to both Asimov data and prediction (unlike `cc_xsec_norm`, which is a fitted nuisance). |
+| `CC_xsec_scale` | Float | (default `1.0`) Fixed scale factor on the CC cross section relative to the table in `cc_xsec_file` (default MARLEY 2.0.0). Applied to both Asimov data and prediction (unlike `cc_xsec_norm`, which is a fitted nuisance). Note for stress tests: the DEAP-3600 measurement (arXiv:2605.12769), 2.4 (+1.3/−1.0), is quoted relative to BGG2009 / MARLEY 1.2 (the old table); relative to the MARLEY 2.0.0 default it corresponds to ≈ 2.6–2.7 (2.4 / 0.902 = 2.66, with 0.902 the ⁸B-folded MARLEY 2.0.0 / 1.2 ratio over the DEAP 12–14.5 MeV window; errors scale alike, +1.4/−1.1). |
 
 ---
 
@@ -155,6 +155,7 @@ Strings are evaluated as Julia `Distributions.jl` expressions.
 | `earth_uncertainty_file` | String | JLD2 file with Earth layer density uncertainties. |
 | `earth_normalisation_prior_file` | String | JLD2 file with `covariance` matrix and `true` vector for Earth density nuisance priors. Required if `earth_potential_uncertainties: true`. |
 | `solar_exposure_file` | String | CSV file with detector exposure vs. solar zenith angle. Sets `exposure_weights`. |
+| `cc_xsec_file` | String | (default `inputs/CC_nue_40Ar_total_marley_v2.0.0.csv`) Total CC ν_e–⁴⁰Ar cross-section table: `#` comment lines, one header row, then `E_nu [MeV], sigma [1e-42 cm² per ⁴⁰Ar]`, strictly increasing energies, finite, ≥ 0 (otherwise setup stops with an error). Interpolated linearly and never extrapolated: `range_Etrue` must lie inside the table (an error otherwise). A relative path is taken from the working directory if it exists there, else from the repository root. The default is MARLEY 2.0.0 (HF-CRPA + Bhattacharya 2009, 0–30 MeV; provenance in the file header). The previous table, MARLEY 1.2 with Bhattacharya 2009 (`inputs/CC_nue_40Ar_total_marley.csv`, to 15.5 MeV, no header), is kept for reference but cannot be used as is: it has no header and does not cover `range_Etrue` up to 21 MeV. |
 | `reconstruction_sample_ES_nue` | String | CSV file (Etrue, Ereco, mask) for νₑ ES response matrix. |
 | `reconstruction_sample_ES_nuother` | String | CSV file for νμ,τ ES response matrix. |
 | `reconstruction_sample_ES_angle` | String | CSV file (Ereco, cos_scatter) for ES angular response matrix. |

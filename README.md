@@ -209,6 +209,7 @@ The analysis requires several input files:
 - **Solar model**: `inputs/AGSS09_high_z.jld2`
 - **Neutrino fluxes**: `inputs/fluxes.jld2`
 - **Earth model**: `inputs/EARTH_MODEL_PREM_DENSE.dat`
+- **CC ν_e–⁴⁰Ar cross section**: `inputs/CC_nue_40Ar_total_marley_v2.0.0.csv` (MARLEY 2.0.0, HF-CRPA + Bhattacharya 2009; config key `cc_xsec_file`)
 - **Detector response**: Monte Carlo samples with E_truth and E_reco for CC and ES channels (csv)
 - **Background samples**: Monte Carlo samples with E_reco for Neutron and gamma backgrounds (csv)
 
@@ -229,7 +230,7 @@ The analysis fits the following parameters:
 - Earth matter density uncertainties
 - Background normalizations
 - Detector response uncertainties
-- CC cross-section shape uncertainties (relative to MARLEY nominal):
+- CC cross-section shape uncertainties (relative to the MARLEY 2.0.0 nominal table, `cc_xsec_file`):
   - `cc_xsec_norm` — overall scale; default `truncated(Normal(1.0, 0.1), 0.1, 2.0)`
   - `cc_xsec_tilt` — power-law spectral slope, applied as `exp(α₁ × log(E/E_pivot))`; default `Normal(0, 0.1)`
   - `cc_xsec_curv` — quadratic spectral curvature, applied as `exp(α₂ × log²(E/E_pivot))`; default `Normal(0, 0.05)`

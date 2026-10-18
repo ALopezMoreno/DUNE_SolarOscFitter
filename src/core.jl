@@ -41,6 +41,10 @@ const AR_ATOMS_PER_KT    = 1e9 / 39.948 * 6.02214076e23   # 1.5075e31
 const N_ELECTRONS_PER_KT = 18 * AR_ATOMS_PER_KT            # 2.7135e32 (was 2.7e32)
 const N_AR40_PER_KT      = 0.99604 * AR_ATOMS_PER_KT       # 1.5015e31 (was 1.45e31, 3.5 % low)
 
+# Default CC ν_e–⁴⁰Ar total cross-section table (config key `cc_xsec_file`): MARLEY 2.0.0,
+# HF-CRPA continuum + Bhattacharya 2009 discrete; provenance in the file's header.
+const DEFAULT_CC_XSEC_FILE = "inputs/CC_nue_40Ar_total_marley_v2.0.0.csv"
+
 # Neutrino-electron scattering cross-section constants
 # These determine the interaction strength for different neutrino flavors
 
