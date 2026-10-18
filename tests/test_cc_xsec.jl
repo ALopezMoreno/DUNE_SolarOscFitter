@@ -93,3 +93,24 @@ end
         @test h == Dict(normpath(abspath(resolve_cc_xsec_path(DEFAULT_CC_XSEC_FILE))) => bytes2hex(open(SHA.sha256, normpath(abspath(resolve_cc_xsec_path(DEFAULT_CC_XSEC_FILE))))))
     end
 end
+
+include(joinpath(@__DIR__, "cc_xsec_shape_checks.jl"))
+
+@testset "CC cross-section shape nuisances (SPEC 3.3)" begin
+    E = collect(range(1.05e-3, 19.95e-3; length=190))                 # 0.1 MeV bins, 1–20 MeV
+    Emev = E .* 1e3
+    flux = @. ifelse(Emev < 16.5, Emev^2 * (16.5 - Emev)^2, 0.0)       # ⁸B-like, zero above endpoint
+    w = CC_xsec.(E) .* flux                                             # zero below threshold
+    B = check_cc_xsec_shape_spec(E, w)
+    # the plain ln(E/E_pivot) basis used before was not orthogonal
+    L = log.(E ./ B.E_pivot)
+    @test abs(sum(w .* L) / sum(w)) > 1e-3
+    # p₁, p₂ do not depend on the overall scale of w
+    B2 = cc_xsec_shape_basis(E, 7.5 .* w)
+    @test B2.p1 ≈ B.p1 atol=1e-14
+    @test B2.p2 ≈ B.p2 atol=1e-14
+    # no CC weight (ES-only detector): zeros, so the shape is 1 whatever tilt/curv are
+    Z = cc_xsec_shape_basis(E, zeros(length(E)))
+    @test all(iszero, Z.p1) && all(iszero, Z.p2)
+    @test_throws ArgumentError cc_xsec_shape_basis(E, -w)
+end

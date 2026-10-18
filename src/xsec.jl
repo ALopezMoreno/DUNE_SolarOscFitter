@@ -128,3 +128,63 @@ ES_xsec_nue(enu) = ES_xsec(enu, kappa_nue, 1.0)
 
 # Other neutrino flavors (μ, τ): NC only
 ES_xsec_nuother(enu) = ES_xsec(enu, kappa_nuother, 0.0)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CC cross-section shape nuisances (SPEC 3.3)
+#
+#   σ(E) = σ_nominal(E) · norm · exp(tilt·p₁(L) + curv·p₂(L)),   L = ln(E/E_pivot)
+#
+# p₁, p₂ are monic polynomials in L orthogonal, under the weight w_i (unoscillated CC ⁸B rate in
+# E_true bin i), to 1 and to each other:
+#   p₁ = L − ⟨L⟩,   p₂ = L² − a·L − b,   ⟨p₁⟩ = ⟨p₂⟩ = ⟨p₁p₂⟩ = 0   (⟨f⟩ = Σ w f / Σ w).
+# Hence at tilt = curv = 0, ∂ln N/∂tilt = ⟨p₁⟩ = 0 and ∂ln N/∂curv = ⟨p₂⟩ = 0 for N = Σ w·shape
+# (first order only: ∂²ln N/∂tilt² = ⟨p₁²⟩ ≠ 0). Monic, so curv is the coefficient of L². The slope
+# d ln σ/d ln E = tilt + curv·(2L − a) equals tilt only where L = a/2, or everywhere when curv = 0.
+# ─────────────────────────────────────────────────────────────────────────────
+
+"""
+    cc_xsec_shape_basis(energies_GeV, w) -> (; p1, p2, E_pivot, mean_L, a, b)
+
+Orthogonal shape basis for the CC cross-section nuisances, built once at setup from the E_true bin
+centres and the weight `w` (unoscillated CC ⁸B rate per bin). `E_pivot` is the `w`-weighted mean
+energy; it only fixes the origin of L (p₁, p₂ do not depend on it). Returns zeros if `w` has no
+weight (no CC channel).
+"""
+function cc_xsec_shape_basis(energies_GeV::AbstractVector{<:Real}, w::AbstractVector{<:Real})
+    length(energies_GeV) == length(w) || throw(DimensionMismatch("energies and weights differ in length"))
+    all(isfinite, w) || throw(ArgumentError("CC xsec shape weights must be finite"))
+    all(>=(0), w) || throw(ArgumentError("CC xsec shape weights must be non-negative"))
+    n = length(w)
+    W = sum(w)
+    if !(W > 0)
+        z = zeros(n)
+        return (; p1 = z, p2 = copy(z), E_pivot = NaN, mean_L = 0.0, a = 0.0, b = 0.0)
+    end
+    wm(f) = sum(w .* f) / W
+    E_pivot = wm(energies_GeV)
+    L = log.(energies_GeV ./ E_pivot)
+    mean_L = wm(L)
+    q = L .- mean_L
+    q = q .- wm(q)                              # re-centre (round-off)
+    m2 = wm(q .^ 2)
+    m2 > 0 || throw(ArgumentError("CC xsec shape basis needs weight in at least two E_true bins"))
+    c = wm(q .^ 3) / m2
+    p2 = q .^ 2 .- c .* q .- m2                 # ⟨p₂⟩ = ⟨p₂ q⟩ = 0 analytically
+    p2 = p2 .- wm(p2)                           # one re-orthogonalisation pass (round-off)
+    p2 = p2 .- (wm(p2 .* q) / m2) .* q
+    # p₂ = L² − a L − b in terms of L = q + ⟨L⟩ (reported in the setup log)
+    a = 2mean_L + c
+    b = m2 - mean_L^2 - c * mean_L
+    wm(p2 .^ 2) > 1e-12 * m2^2 ||
+        @warn "CC xsec shape basis: the CC ⁸B rate sits in only two E_true bins, so p₂ vanishes on it and " *
+              "curv is not constrained by the rate (only by its prior); use more E_true bins"
+    return (; p1 = q, p2 = p2, E_pivot = E_pivot, mean_L = mean_L, a = a, b = b)
+end
+
+"""
+    cc_xsec_shape(norm, tilt, curv, p1, p2)
+
+Per-E_true-bin multiplicative CC cross-section factor `norm · exp(tilt·p1 + curv·p2)`; `p1`, `p2`
+come from `cc_xsec_shape_basis` (constant data). Equals 1 at norm = 1, tilt = curv = 0.
+"""
+cc_xsec_shape(norm, tilt, curv, p1, p2) = exp.(tilt .* p1 .+ curv .* p2) .* norm

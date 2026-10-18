@@ -232,10 +232,10 @@ The analysis fits the following parameters:
 - Detector response uncertainties
 - CC cross-section shape uncertainties (relative to the MARLEY 2.0.0 nominal table, `cc_xsec_file`):
   - `cc_xsec_norm` — overall scale; default `truncated(Normal(1.0, 0.1), 0.1, 2.0)`
-  - `cc_xsec_tilt` — power-law spectral slope, applied as `exp(α₁ × log(E/E_pivot))`; default `Normal(0, 0.1)`
-  - `cc_xsec_curv` — quadratic spectral curvature, applied as `exp(α₂ × log²(E/E_pivot))`; default `Normal(0, 0.05)`
+  - `cc_xsec_tilt` — spectral slope, applied as `exp(tilt × p₁)` with `p₁ = L − ⟨L⟩`, `L = ln(E/E_pivot)`; default `Normal(0, 0.1)`
+  - `cc_xsec_curv` — spectral curvature, applied as `exp(curv × p₂)` with `p₂ = L² − a·L − b`; default `Normal(0, 0.05)`
 
-  `E_pivot` is the flux-weighted mean CC event energy; by construction `cc_xsec_tilt` is orthogonal to `cc_xsec_norm`, and `cc_xsec_curv` is orthogonal to both.
+  `p₁`, `p₂` are orthogonal to 1 and to each other under the unoscillated CC ⁸B rate per E_true bin, so at the nominal point tilt and curv leave the CC ⁸B rate unchanged to first order and do not correlate with `cc_xsec_norm` or each other (see [docs/mcmc_and_priors.md](docs/mcmc_and_priors.md), SPEC 3.3).
 
 > ⚠️ **Warning: Delete Existing Output Files Before Rewriting**
 >

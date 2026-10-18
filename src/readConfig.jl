@@ -593,13 +593,17 @@ function main()
     if run_mode == "MCMC" && prevFile === nothing && warm_start_chain !== nothing
         wf = endswith(warm_start_chain, ".jld2") ? warm_start_chain : warm_start_chain * ".jld2"
         isfile(wf) || error("warm_start_chain: $wf not found (give the earlier run's outFile)")
+        warn_if_xsec_basis_differs(wf, "warm_start_chain")
     end
+    run_mode == "MCMC" && prevFile !== nothing && isfile(prevFile * ".jld2") &&
+        warn_if_xsec_basis_differs(prevFile * ".jld2", "resumed chain")
 
     # Derived mode reads and writes prevFile.jld2: fail before setup (and the run record) without it.
     if run_mode == "derived"
         prevFile === nothing && error("RunMode: derived needs prevFile (the chain prefix, without .jld2)")
         isfile(prevFile * ".jld2") || error("RunMode: derived: chain file $(prevFile).jld2 not found " *
                                             "(prevFile is the prefix, without .jld2)")
+        warn_if_xsec_basis_differs(prevFile * ".jld2", "derived-mode chain")
     end
 
     # Resolved config + provenance, written before the run so a crashed or killed run keeps it.

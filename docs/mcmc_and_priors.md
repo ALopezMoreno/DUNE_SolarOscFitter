@@ -48,10 +48,10 @@ Unless `fix_cc_xsec: true`, three nuisance parameters describe the CC cross-sect
 | Parameter | Config key | Default prior | Role |
 |-----------|-----------|---------------|------|
 | `cc_xsec_norm` | `prior_cc_xsec_norm` | `truncated(Normal(1.0, 0.1), 0.1, 2.0)` | Overall scale |
-| `cc_xsec_tilt` | `prior_cc_xsec_tilt` | `Normal(0.0, 0.1)` | Power-law slope `exp(α₁·log(E/E_pivot))` |
-| `cc_xsec_curv` | `prior_cc_xsec_curv` | `Normal(0.0, 0.05)` | Curvature `exp(α₂·log²(E/E_pivot))` |
+| `cc_xsec_tilt` | `prior_cc_xsec_tilt` | `Normal(0.0, 0.1)` | Spectral slope: `exp(tilt·p₁)`, `p₁ = L − ⟨L⟩` |
+| `cc_xsec_curv` | `prior_cc_xsec_curv` | `Normal(0.0, 0.05)` | Curvature: `exp(curv·p₂)`, `p₂ = L² − a·L − b` |
 
-`E_pivot` is the flux-weighted mean CC event energy, which makes the tilt orthogonal to the norm and the curvature orthogonal to both.
+The cross section is `σ(E) = σ_nominal(E) · norm · exp(tilt·p₁ + curv·p₂)` per E_true bin, with `L = ln(E/E_pivot)` (`E_pivot` is the rate-weighted mean energy; it only fixes the origin of L). `p₁`, `p₂` are monic polynomials in L made orthogonal (Gram–Schmidt) to 1 and to each other under the weight `w_i` = unoscillated CC ⁸B rate in E_true bin i (nominal σ × ⁸B flux × exposure, a setup-time constant): `⟨p₁⟩ = ⟨p₂⟩ = ⟨p₁p₂⟩ = 0`, `⟨f⟩ = Σ w f / Σ w`. Consequently, for the unoscillated CC ⁸B rate `N = Σ w·shape`, `∂ln N/∂tilt = ∂ln N/∂curv = 0` at `tilt = curv = 0` and the tilt–curv cross term vanishes: tilt and curv change the shape, not (to first order) the rate, which is the job of norm. This is first order only (`∂²ln N/∂tilt² = ⟨p₁²⟩ ≠ 0`), and it holds for the unoscillated ⁸B spectrum, not for the oscillated, efficiency-weighted one. Being monic, curv is the coefficient of `(ln E)²`; the slope `d ln σ/d ln E = tilt + curv·(2L − a)` equals tilt where `L = a/2` (about 9 MeV for the default binning), or everywhere when curv = 0. So the same prior strings as in the old basis (`exp(tilt·L + curv·L²)`) induce a slightly different prior on σ(E): old chains with free tilt/curv are not comparable. Setup logs `E_pivot`, `⟨L⟩`, `a`, `b` per detector (`cc_xsec_shape_basis` in `src/xsec.jl`; SPEC 3.3).
 
 ### Earth density systematics
 

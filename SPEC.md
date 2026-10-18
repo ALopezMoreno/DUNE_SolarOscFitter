@@ -68,9 +68,24 @@ Status tags:
 3.2a The recoil quadrature equals the analytic integral of dσ/dT for constant couplings (1e-12);
     I(T) matches BKS95 Eq. A5; σ₀ = 2 G_F² m_e² (ħc)²/π. **[tested]** `test_es_xsec.jl`.
 
-3.3 CC shape systematics: at `cc_xsec_tilt = cc_xsec_curv = 0` and `cc_xsec_norm = 1` the CC cross
-    section equals the nominal table (3.4); tilt is orthogonal to norm and curvature to both (flux-weighted,
-    about E_pivot). **[untested] [inferred]**
+3.3 CC shape systematics: σ(E) = σ_nominal(E) · norm · exp(tilt·p₁(L) + curv·p₂(L)), L = ln(E/E_pivot), applied
+    per E_true bin to CC ⁸B and CC hep, day and night. p₁ = L − ⟨L⟩ and p₂ = L² − a·L − b are monic and
+    orthogonal to 1 and to each other under the weight w_i = unoscillated CC ⁸B rate in E_true bin i
+    (σ_nominal × ⁸B flux × exposure; not the oscillated or efficiency-weighted spectrum):
+    ⟨p₁⟩ = ⟨p₂⟩ = ⟨p₁p₂⟩ = 0 with ⟨f⟩ = Σ w f / Σ w. Then:
+    - at `cc_xsec_tilt = cc_xsec_curv = 0` and `cc_xsec_norm = 1` the CC cross section equals the
+      nominal table (3.4) exactly; norm is a pure multiplicative factor;
+    - for N = Σ_i w_i·shape_i, ∂ln N/∂tilt = ∂ln N/∂curv = 0 at tilt = curv = 0 (to 1e-10 of the
+      natural scale ⟨p²⟩^½), and the cross term ∂²ln N/∂tilt∂curv = ⟨p₁p₂⟩ = 0. This is first order
+      only: ∂²ln N/∂tilt² = ⟨p₁²⟩ and ∂²ln N/∂curv² = ⟨p₂²⟩ are not zero, so a finite tilt or curv
+      does shift N at second order;
+    - ln(σ/σ_nominal) is linear in ln E with slope tilt when curv = 0 (monotone tilt), and quadratic
+      in ln E with second derivative 2·curv; in general the slope is tilt + curv·(2L − a), equal to
+      tilt at L = a/2;
+    - with weight in only two E_true bins p₂ vanishes there and curv is unconstrained by the rate
+      (setup warns); with weight in fewer than two bins setup errors; non-finite weights are an error.
+    **[tested]** `test_cc_xsec.jl` (synthetic ⁸B-like weights) and `derived_mode.jl` (the setup
+    weights of the fixture detectors, and the propagation applying the basis), via `cc_xsec_shape_checks.jl`.
 
 3.4 CC nominal cross section: the ν_e–⁴⁰Ar total cross section is the table in `cc_xsec_file`, by default
     MARLEY 2.0.0 (HF-CRPA + Bhattacharya 2009, 0–30 MeV, provenance in the file header). Every tabulated

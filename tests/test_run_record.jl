@@ -94,3 +94,21 @@ isdefined(Main, :write_run_record) || include(joinpath(@__DIR__, "..", "src", "r
         @test !haskey(f, "run_config_3")
     end
 end
+
+# A reused chain (resume, warm start, derived) made with another meaning of the CC xsec tilt/curv
+# parameters must be flagged (SPEC 3.3): its tilt/curv samples would be read in the current basis.
+@testset "CC xsec basis of a reused chain" begin
+    d = mktempdir()
+    @test occursin("cc_xsec_shape_basis", YAML.write(run_provenance(@__FILE__)))
+    @test run_provenance(@__FILE__)["cc_xsec_shape_basis"] == CC_XSEC_SHAPE_BASIS
+    same  = joinpath(d, "same.jld2");  jldsave(same;  run_config = YAML.write(Dict("provenance" => Dict("cc_xsec_shape_basis" => CC_XSEC_SHAPE_BASIS))))
+    other = joinpath(d, "other.jld2"); jldsave(other; run_config = YAML.write(Dict("provenance" => Dict("cc_xsec_shape_basis" => "v0"))))
+    old   = joinpath(d, "old.jld2");   jldsave(old;   run_config = YAML.write(Dict("provenance" => Dict("git_commit" => "abc"))))
+    none  = joinpath(d, "none.jld2");  jldsave(none;  batch_1 = 1)
+    @test chain_xsec_basis(same) == CC_XSEC_SHAPE_BASIS
+    @test chain_xsec_basis(old) === nothing && chain_xsec_basis(none) === nothing
+    @test_logs warn_if_xsec_basis_differs(same, "chain")
+    for f in (other, old, none)
+        @test_logs (:warn, r"tilt/curv basis") warn_if_xsec_basis_differs(f, "chain")
+    end
+end

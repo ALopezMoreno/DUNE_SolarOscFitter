@@ -15,7 +15,7 @@ variant: "night"  (default night calculation, NightOsc)
           Dembinski–Abdelmotteleb or Conway's Barlow–Beeston, shared or independent day/night)
 --update rewrites the reference for this variant instead of checking it.
 --grad   also checks the Enzyme reverse-mode gradient of the likelihood against ForwardDiff
-         at the "near" point (variant "night" only; the first Enzyme call compiles for minutes).
+         at the "near" point with the CC xsec nuisances moved (variant "night" only; the first Enzyme call compiles for minutes).
 
 Each variant runs in its own process (the setup defines constants). runtests.jl runs both
 when JULIA_REGRESSION=1.
@@ -72,11 +72,18 @@ function displaced(p, f_dm2, d_s12, d_s13, d_earth)
     end
     return (; d...)
 end
+# The CC cross-section shape nuisances (SPEC 3.3), moved by about half a prior sigma; every other
+# point has norm = 1, tilt = curv = 0, where the shape is exactly 1 and so cannot be tested.
+function with_xsec(p; norm = 1.02, tilt = 0.05, curv = -0.03)
+    haskey(p, :cc_xsec_tilt) || error("regression config must leave the CC xsec nuisances free")
+    return merge(p, (cc_xsec_norm = norm, cc_xsec_tilt = tilt, cc_xsec_curv = curv))
+end
 p0 = Base.invokelatest(() -> true_params)
 points = Dict(
     "truth"  => p0,
     "near"   => displaced(p0, 1.3, 0.02, 0.001, 0.05),
     "slow"   => displaced(p0, 25e-6 / p0.dm2_21, -0.03, -0.001, -0.08),
+    "xsec"   => with_xsec(p0),
 )
 llh_values = Dict(name => Float64(Base.invokelatest(total_llh, p)) for (name, p) in points)
 
@@ -123,7 +130,7 @@ end
 if check_grad
     startswith(variant, "night") || error("--grad needs a night variant (legacy is not Enzyme-differentiable)")
     @eval using ForwardDiff, Enzyme
-    p = points["near"]
+    p = with_xsec(points["near"])   # tilt/curv ≠ 0, so their adjoints are not taken at the nominal point
     names = keys(p)
     N = length(names)
     f = Base.invokelatest(() -> x -> total_llh(NamedTuple{names}(ntuple(i -> x[i], Val(N)))))

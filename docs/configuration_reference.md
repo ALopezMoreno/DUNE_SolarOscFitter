@@ -67,8 +67,8 @@ Strings are evaluated as Julia `Distributions.jl` expressions.
 | `prior_8B_flux` | Prior on integrated ⁸B flux (ν/cm²/s). Default: `truncated(Normal(5.25e6, 0.28e6), 1.5e6, 1e7)`. |
 | `prior_HEP_flux` | Prior on integrated HEP flux (ν/cm²/s). Default: `Uniform(0, 2e4)`. |
 | `prior_cc_xsec_norm` | Prior on the CC cross-section normalisation (relative to MARLEY). Default: `truncated(Normal(1.0, 0.1), 0.1, 2.0)`. |
-| `prior_cc_xsec_tilt` | Prior on the CC cross-section power-law tilt α₁, applied as `exp(α₁·log(E/E_pivot))`. Default: `Normal(0.0, 0.1)`. |
-| `prior_cc_xsec_curv` | Prior on the CC cross-section quadratic curvature α₂, applied as `exp(α₂·log²(E/E_pivot))`. Default: `Normal(0.0, 0.05)`. |
+| `prior_cc_xsec_tilt` | Prior on the CC cross-section tilt, applied as `exp(tilt·p₁)`, `p₁ = L − ⟨L⟩`, `L = ln(E/E_pivot)` (orthogonal basis, see [mcmc_and_priors.md](mcmc_and_priors.md)). Default: `Normal(0.0, 0.1)`. |
+| `prior_cc_xsec_curv` | Prior on the CC cross-section curvature, applied as `exp(curv·p₂)`, `p₂ = L² − a·L − b` (orthogonal to 1 and p₁). Default: `Normal(0.0, 0.05)`. |
 | `fix_cc_xsec` | Bool (default `false`). `true` = fix the three CC cross-section shape parameters at their true values instead of fitting them. |
 
 ---

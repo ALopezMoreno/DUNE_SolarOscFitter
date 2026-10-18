@@ -179,9 +179,8 @@ function compute_oscillated_samples(unoscillatedSample, params, oscProbs, ::Val{
         _xsec_norm = hasproperty(params, :cc_xsec_norm) ? params.cc_xsec_norm : CC_XSEC_NORM_TRUE
         _xsec_tilt = hasproperty(params, :cc_xsec_tilt) ? params.cc_xsec_tilt : 0.0
         _xsec_curv = hasproperty(params, :cc_xsec_curv) ? params.cc_xsec_curv : 0.0
-        xsec_shape = exp.(_xsec_tilt .* unoscillatedSample.log_E_norm .+
-                          _xsec_curv .* unoscillatedSample.log_E_norm.^2) .*
-                     _xsec_norm
+        xsec_shape = cc_xsec_shape(_xsec_norm, _xsec_tilt, _xsec_curv,
+                                   unoscillatedSample.xsec_p1, unoscillatedSample.xsec_p2)
 
         # Pre-apply xsec_shape to 1D CC samples so the night (cosz×Etrue) broadcast
         # works: (1,n_Etrue) .* (n_cosz,n_Etrue) is fine; (n_cosz,n_Etrue) .* (n_Etrue,)

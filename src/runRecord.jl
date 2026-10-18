@@ -21,7 +21,7 @@ MCMC runs also store the same text in the chain file (key `run_config`, see stor
 follow the `get(config, key, default)` calls there; tests/test_run_record.jl checks that every
 such key is covered.
 =#
-using YAML, Dates, SHA
+using YAML, Dates, SHA, JLD2
 using DataStructures: OrderedDict
 
 # Top-level keys with a default in readConfig.jl main() → value used (in config-file units),
@@ -153,8 +153,40 @@ function run_provenance(yaml_file::AbstractString; run_mode = "unknown", repo::A
         "timestamp"       => Dates.format(now(), dateformat"yyyy-mm-ddTHH:MM:SS"),
         "run_mode"        => run_mode,
         "working_dir"     => pwd(),
+        "cc_xsec_shape_basis" => CC_XSEC_SHAPE_BASIS,
     ))
     return p
+end
+
+# Meaning of the CC xsec tilt/curv parameters (SPEC 3.3). Change it whenever their meaning changes,
+# so that a chain from before is flagged when it is resumed, warm-started from or derived.
+const CC_XSEC_SHAPE_BASIS = "orthogonal-v1: norm·exp(tilt·p1 + curv·p2), SPEC 3.3"
+
+"""
+    chain_xsec_basis(chainfile) -> String or nothing
+
+The `cc_xsec_shape_basis` recorded in a chain file's run record (`run_config`), or `nothing` if the
+file has no run record or the record predates the key.
+"""
+function chain_xsec_basis(chainfile::AbstractString)
+    text = JLD2.jldopen(f -> haskey(f, "run_config") ? f["run_config"] : nothing, chainfile, "r")
+    text === nothing && return nothing
+    return get(get(YAML.load(text), "provenance", Dict()), "cc_xsec_shape_basis", nothing)
+end
+
+"""
+    warn_if_xsec_basis_differs(chainfile, role)
+
+Warn when a chain that is reused (resume, warm start, derived) was made with another meaning of
+the CC xsec tilt/curv parameters: its tilt/curv samples would be read in the current basis.
+"""
+@noinline function warn_if_xsec_basis_differs(chainfile::AbstractString, role::AbstractString)
+    basis = try chain_xsec_basis(chainfile) catch; nothing end
+    basis == CC_XSEC_SHAPE_BASIS && return nothing
+    @warn "$role $chainfile was made with CC xsec tilt/curv basis $(something(basis, "unknown (older than the orthogonal basis)")), " *
+          "not $(CC_XSEC_SHAPE_BASIS). If tilt/curv were free in that chain, their values mean something " *
+          "else now; only chains with tilt = curv fixed at 0 carry over."
+    return nothing
 end
 
 """
