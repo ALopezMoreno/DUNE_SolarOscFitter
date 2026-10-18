@@ -43,7 +43,7 @@ All priors are defined in `mcmc.jl` and constructed from the distributions in `c
 
 ### CC cross-section shape parameters
 
-Unless `fix_cc_xsec: true`, three nuisance parameters describe the CC cross-section shape relative to the MARLEY nominal:
+Unless `fix_cc_xsec: true`, three nuisance parameters describe the CC cross-section shape relative to the nominal table (`cc_xsec_file`, default MARLEY 2.0.0):
 
 | Parameter | Config key | Default prior | Role |
 |-----------|-----------|---------------|------|

@@ -109,6 +109,7 @@ main()
     @test Base.invokelatest(string_to_distribution, dflt["prior_cc_xsec_norm"]) == g(:prior_cc_xsec_norm)
     @test dflt["hmc_max_depth"] == g(:hmc_max_depth)
     @test dflt["CC_xsec_scale"] == g(:CC_xsec_scale)
+    @test dflt["cc_xsec_file"] == g(:cc_xsec_file) == g(:DEFAULT_CC_XSEC_FILE)
     @test dflt["mcmc_seed"] === g(:mcmc_seed) === nothing
     @test haskey(dflt["detectors"]["FXA"], "module_mass_kt")
     # re-parsing the resolved detector blocks gives the detectors the run used

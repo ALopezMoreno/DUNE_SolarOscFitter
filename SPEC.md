@@ -69,8 +69,16 @@ Status tags:
     I(T) matches BKS95 Eq. A5; σ₀ = 2 G_F² m_e² (ħc)²/π. **[tested]** `test_es_xsec.jl`.
 
 3.3 CC shape systematics: at `cc_xsec_tilt = cc_xsec_curv = 0` and `cc_xsec_norm = 1` the CC cross
-    section equals the MARLEY nominal; tilt is orthogonal to norm and curvature to both (flux-weighted,
+    section equals the nominal table (3.4); tilt is orthogonal to norm and curvature to both (flux-weighted,
     about E_pivot). **[untested] [inferred]**
+
+3.4 CC nominal cross section: the ν_e–⁴⁰Ar total cross section is the table in `cc_xsec_file`, by default
+    MARLEY 2.0.0 (HF-CRPA + Bhattacharya 2009, 0–30 MeV, provenance in the file header). Every tabulated
+    point is used (the first included), values agree with the MARLEY output, σ = 0 below the threshold
+    (3.7–3.9 MeV), σ ≥ 0 and strictly increasing above it, interpolation is linear, and evaluating
+    outside the table is an error, never an extrapolation. `range_Etrue` of every shipped config lies
+    inside the table (setup checks it). Tables without a header row, with non-finite or negative
+    values, or with unsorted or repeated energies are rejected. **[tested]** `test_cc_xsec.jl`.
 
 ## 4. Detector response and event rates ([event_rate_pipeline.md](docs/event_rate_pipeline.md))
 

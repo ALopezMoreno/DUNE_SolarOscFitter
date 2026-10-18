@@ -35,7 +35,8 @@ isdefined(Main, :write_run_record) || include(joinpath(@__DIR__, "..", "src", "r
                               "detectors" => Dict{String,Any}("D" => block), "prior_sin2_th12" => "Uniform(0.1, 0.5)")
     for k in keys(_toplevel_defaults_used())
         config[k] = k == "mcmc_seed" ? 42 : k == "ad_backend" ? "ForwardDiff" : k == "nightOsc" ? true :
-                    startswith(k, "prior_") ? "Normal(0.0, 0.2)" : k == "fix_cc_xsec" ? false : 1.5
+                    startswith(k, "prior_") ? "Normal(0.0, 0.2)" : k == "fix_cc_xsec" ? false :
+                    k == "cc_xsec_file" ? "xsec.csv" : 1.5
     end
     cfg_file = joinpath(tmp, "in.yaml"); YAML.write_file(cfg_file, config)
     config = YAML.load_file(cfg_file)

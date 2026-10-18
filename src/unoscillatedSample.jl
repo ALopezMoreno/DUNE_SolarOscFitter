@@ -90,6 +90,11 @@ function build_unoscillated_sample(det)
 
     bin_edges, energies_GeV = calculate_bins(Etrue_bins)
 
+    # The CC table is never extrapolated: the whole Etrue range must lie inside it.
+    (CC_XSEC_DOMAIN[1] <= bin_edges[1] && bin_edges[end] <= CC_XSEC_DOMAIN[2]) ||
+        error("range_Etrue [$(bin_edges[1] * 1e3), $(bin_edges[end] * 1e3)] MeV is outside the CC cross-section " *
+              "table $(CC_XSEC_PATH), which covers [$(CC_XSEC_DOMAIN[1] * 1e3), $(CC_XSEC_DOMAIN[2] * 1e3)] MeV")
+
     unosc_ES_nue_8B     = integrate_over_bins(unoscillatedRate_ES_nue_8B,     bin_edges) .* (detector_ne   * detection_time * ES_normalisation)
     unosc_ES_nuother_8B = integrate_over_bins(unoscillatedRate_ES_nuother_8B, bin_edges) .* (detector_ne   * detection_time * ES_normalisation)
     unosc_CC_8B         = integrate_over_bins(unoscillatedRate_CC_8B,         bin_edges) .* (detector_nAr40 * detection_time * CC_normalisation)
