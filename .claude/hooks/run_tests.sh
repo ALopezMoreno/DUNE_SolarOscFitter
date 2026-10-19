@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stop hook: run tests/runtests.jl (unit tests ~90 s + derived-mode end-to-end ~65 s) when src/,
+# Stop hook: run the fast test tier, tests/runtests.jl (unit tests, about 2 minutes), when src/,
 # tests/ or utils/posteriorHelpers.py differ from HEAD
 # and from the last state that passed. Runs async; on failure it exits 2, which wakes Claude
 # with the failing output. The regression and benchmark parts stay opt-in (env guards).

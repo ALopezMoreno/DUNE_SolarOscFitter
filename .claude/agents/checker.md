@@ -13,12 +13,14 @@ outputs in a fresh directory from `mktemp -d`, and run Julia there with `--proje
 Steps:
 1. Read the diff. List which SPEC.md items it touches. If it changes physics that SPEC.md does not
    cover, say so: that is a finding.
-2. Run the tests: `julia --project tests/runtests.jl` (~2.5 min: unit tests plus the derived-mode
-   end-to-end test `tests/derived_mode.jl`, which can also be run on its own, ~1 min). If the diff
-   can change the likelihood value, also run `julia -t 2 --project tests/regression_likelihood.jl night`
-   and `... legacy` (~1 min each, frozen fixtures in tests/fixtures/). A changed regression value is
-   a FAIL unless the diff deliberately updates the reference and says why. If the diff touches the
-   Enzyme likelihood path, run `... night --grad` (~8 min).
+2. Run the tests once (see CLAUDE.md "Which tests to run"): the slow tier,
+   `JULIA_TESTS=slow julia --project tests/runtests.jl` (~5 min: unit tests, Enzyme unit tests, warm
+   start, derived mode end to end). If the diff can change the likelihood value, run it with
+   `JULIA_REGRESSION=1` instead (frozen fixtures in tests/fixtures/; or single variants with
+   `julia -t 2 --project tests/regression_likelihood.jl <variant>`). A changed regression value is a
+   FAIL unless the diff deliberately updates the reference and says why. If the diff touches the
+   Enzyme likelihood path, run `... night --grad`. Don't repeat runs the author already reports
+   unless you doubt them or your probes changed nothing they cover; prefer targeted probes.
 3. Try to break it. For this repo, check in particular:
    - the CLAUDE.md "Rules that are easy to break" list (Enzyme-breaking patterns on the likelihood
      path, 2D .* 1D broadcasts on the wrong axis — test with n_cosz != n_Ereco, h5py transposes,
