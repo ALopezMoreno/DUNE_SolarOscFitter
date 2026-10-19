@@ -40,8 +40,23 @@ jldopen(chain * ".jld2", "w") do f
     end
 end
 
+# SPEC 4.6: an exposure table whose two weightings differ strongly, so that a signal/background mix-up
+# shows: the time column of inputs/solarExposure_v2.csv, and a flux column tilted by (1 + 0.6 cos z).
+expo_rows = [parse.(Float64, split(l, ',')) for l in eachline(joinpath(ROOT, "inputs", "solarExposure_v2.csv"))
+             if !isempty(strip(l)) && !startswith(strip(l), "#") && tryparse(Float64, split(l, ',')[1]) !== nothing]
+expo_c  = getindex.(expo_rows, 1)
+expo_wt = getindex.(expo_rows, 2)
+expo_wf = expo_wt .* (1 .+ 0.6 .* expo_c)
+expo_file = joinpath(tmp, "exposure_tilted.csv")
+open(expo_file, "w") do io
+    println(io, "cosz,time_weight,flux_weight")
+    for i in eachindex(expo_c)
+        println(io, repr(expo_c[i]), ",", repr(expo_wt[i]), ",", repr(expo_wf[i]))
+    end
+end
 merge!(cfg, Dict{String,Any}("RunMode" => "derived", "prevFile" => chain, "thinning" => 1,
-                             "outFile" => joinpath(tmp, "derived"), "earth_potential_uncertainties" => true))
+                             "outFile" => joinpath(tmp, "derived"), "earth_potential_uncertainties" => true,
+                             "solar_exposure_file" => expo_file))
 # A third, purely inclusive detector (no CC channel), only in this test's copy of the config.
 cfg["detectors"]["FXC"] = merge(deepcopy(cfg["detectors"]["FXB"]),
                                 Dict("inclusiveMode" => true, "semiInclusiveMode" => false))
@@ -95,7 +110,7 @@ include(joinpath(@__DIR__, "cc_xsec_shape_checks.jl"))
         B = Base.invokelatest(check_cc_xsec_shape_spec, E, U.CC_8B)
         @test U.xsec_p1 == B.p1 && U.xsec_p2 == B.p2           # the basis the likelihood uses
         # and the propagation applies it to CC ⁸B and hep, day and night (unit oscillation probs)
-        nz = size(Base.invokelatest(() -> exposure_weights), 1)
+        nz = size(Base.invokelatest(() -> exposure_weights_signal), 1)
         o1, oN = ones(length(E)), ones(nz, length(E))
         probs = (nue_8B_day = o1, nue_hep_day = o1, nue_8B_night = oN, nue_hep_night = oN)
         par(t, c) = Base.invokelatest(() -> merge(true_params, (cc_xsec_norm = 1.0, cc_xsec_tilt = t, cc_xsec_curv = c)))
@@ -145,28 +160,52 @@ end
     end
 end
 
-# --- SPEC 4.6: the split of the shipped exposure file, and day/night totals built with it ---
-fD, fN = Base.invokelatest(() -> (DAY_FRACTION, NIGHT_FRACTION))   # used below too
-@testset "day/night exposure split (SPEC 4.6)" begin
-    @test fN ≈ 0.4978 atol=5e-5
-    @test fD + fN == 1
+# --- SPEC 4.6: signal (flux-weighted) and background (time-weighted) splits, and the totals built ---
+S  = Base.invokelatest(() -> SIGNAL_FRACTIONS)
+Bf = Base.invokelatest(() -> BG_FRACTIONS)
+wS = Base.invokelatest(() -> exposure_weights_signal)
+wB = Base.invokelatest(() -> exposure_weights_bg)
+# night fraction of a column, independently of the fitter: trapezoids plus the linear value at 0
+function night_fraction_ref(c, e)
+    trap(x, y) = sum((x[2:end] .- x[1:end-1]) .* (y[2:end] .+ y[1:end-1]) ./ 2)
+    k = findlast(<(0), c)
+    e0 = e[k] + (e[k+1] - e[k]) * (0 - c[k]) / (c[k+1] - c[k])
+    return trap([c[1:k]; 0.0], [e[1:k]; e0]) / trap(c, e)
+end
+@testset "day/night exposure splits (SPEC 4.6)" begin
+    @test S.night ≈ night_fraction_ref(expo_c, expo_wf) rtol=1e-12
+    @test Bf.night ≈ night_fraction_ref(expo_c, expo_wt) rtol=1e-12
+    @test Bf.night ≈ 0.4978 atol=1e-4
+    @test S.night < Bf.night - 0.1                     # the tilted flux column: a strongly different split
+    @test S.day + S.night == 1 && Bf.day + Bf.night == 1
+    @test sum(wS) ≈ 1 rtol=1e-7   # quadgk tolerance on the kinked interpolant
+    @test sum(wB) ≈ 1 rtol=1e-7
+    @test maximum(abs.(wS ./ wB .- 1)) > 0.1           # and different night cos z weights
     li = Base.invokelatest(() -> detector_outputs["FXA"].likelihood_inputs)
     truth = Base.invokelatest(() -> true_params)
     r = Base.invokelatest(expected_rates, li, truth)
     probs = Base.invokelatest(compute_shared_osc_probs, truth, solarModel)
     osc = Base.invokelatest(compute_oscillated_samples, li.MC_no_osc, truth, probs)
     M = li.Mreco
-    # rates per unit (full) exposure, folded with scale 1
+    # rates per unit (full) exposure, folded with scale 1 (the night rows carry the signal weights)
     fold_d(x, R, e) = Base.invokelatest(apply_day_response, x, R, e; scale=1.0)
     fold_n(x, R, e) = Base.invokelatest(apply_night_response, x, R, e; scale=1.0)
     R_CC_day, R_CC_night = fold_d(osc.CC.day, M.CC, M.eff.CC), fold_n(osc.CC.night, M.CC, M.eff.CC)
     R_ES_day = fold_d(osc.ES.nue_day, M.ES.nue, M.eff.ES_nue) .+ fold_d(osc.ES.nuother_day, M.ES.nuother, M.eff.ES_nuother)
     R_ES_night = fold_n(osc.ES.nue_night, M.ES.nue, M.eff.ES_nue) .+ fold_n(osc.ES.nuother_night, M.ES.nuother, M.eff.ES_nuother)
+    # with no Earth effect the night signal rows are the signal weights ⊗ the day rate
+    U = li.MC_no_osc
+    nE = length(U.CC_8B)
+    flat = (nue_8B_day = ones(nE), nue_hep_day = ones(nE), nue_8B_night = ones(length(wS), nE), nue_hep_night = ones(length(wS), nE))
+    c0 = Base.invokelatest(compute_oscillated_samples, U, truth, flat; es_mode=false, cc_mode=true).CC
+    @test c0.night ≈ wS .* c0.day' rtol=1e-12
     for (day, night, Rd, Rn, BG) in ((r.CC_day, r.CC_night, R_CC_day, R_CC_night, r.BG_CC_tot),
                                      (r.ES_day, r.ES_night, R_ES_day, R_ES_night, r.BG_ES_tot))
-        @test day ≈ fD .* (Rd .+ BG) rtol=1e-12
-        @test night ≈ fN .* (Rn .+ BG' .* exposure_weights) rtol=1e-12
-        @test day .+ vec(sum(night, dims=1)) ≈ fD .* Rd .+ fN .* vec(sum(Rn, dims=1)) .+ BG .* (fD + fN * sum(exposure_weights)) rtol=1e-12
+        @test day ≈ S.day .* Rd .+ Bf.day .* BG rtol=1e-12
+        @test night ≈ S.night .* Rn .+ Bf.night .* (BG' .* wB) rtol=1e-12
+        @test day .+ vec(sum(night, dims=1)) ≈ S.day .* Rd .+ S.night .* vec(sum(Rn, dims=1)) .+ BG .* (Bf.day + Bf.night * sum(wB)) rtol=1e-12
+        # the swapped weighting is far off
+        @test !isapprox(night, S.night .* Rn .+ S.night .* (BG' .* wS); rtol=1e-3)
     end
 end
 
@@ -190,19 +229,23 @@ end
 
 chains_mc(has_CC) = has_CC ? (("ES", 0), ("CC", 0)) : (("ES", 0),)
 
-# A_DN per unit exposure (SPEC 4.6)
+# Signal A_DN per unit (signal) exposure, background removed with its own split (SPEC 4.6)
 function asym(day, night, bg, idx)
     b = sum(bg[idx:end])
-    D = sum(day[(ndims(day) == 1 ? (idx:length(day),) : (:, idx:size(day, 2)))...]) - fD * b
-    N = sum(night[:, idx:end, (ndims(night) == 3 ? (:,) : ())...]) - fN * b
-    return 2 * (D / fD - N / fN) / (D / fD + N / fN)
+    D = sum(day[(ndims(day) == 1 ? (idx:length(day),) : (:, idx:size(day, 2)))...]) - Bf.day * b
+    N = sum(night[:, idx:end, (ndims(night) == 3 ? (:,) : ())...]) - Bf.night * sum(wB) * b
+    return 2 * (D / S.day - N / S.night) / (D / S.day + N / S.night)
 end
 above(x, idx) = (y = copy(x); ndims(y) == 1 ? (y[1:idx-1] .= 0) : (y[:, 1:idx-1, (ndims(y) == 3 ? (:,) : ())...] .= 0); y)
 
 saved = jldopen(f -> Dict(k => f[k] for k in keys(f) if startswith(k, "derived_")), chain * ".jld2")
 @testset "day/night fractions saved (SPEC 4.6)" begin
-    @test saved["derived_day_fraction"] == fD
-    @test saved["derived_night_fraction"] == fN
+    @test saved["derived_signal_day_fraction"] == S.day && saved["derived_signal_night_fraction"] == S.night
+    @test saved["derived_bg_day_fraction"] == Bf.day && saved["derived_bg_night_fraction"] == Bf.night
+    @test saved["derived_exposure_weights_signal"] == vec(wS)
+    @test saved["derived_exposure_weights_bg"] == vec(wB)
+    # the single, ambiguous set of older files is no longer written
+    @test !any(haskey.(Ref(saved), ["derived_exposure_weights", "derived_day_fraction", "derived_night_fraction"]))
 end
 
 @testset "derived mode, three detectors" begin
@@ -240,9 +283,9 @@ end
                     @test saved[key("$(ch)$(t)_pp_var")]  ≈ wvar(xs)  rtol=1e-6 atol=1e-6 * maximum(abs, wmean(xs))^2
                 end
                 BG = Symbol("BG_", ch, "_tot")
-                bg_mean = wmean([fD .* getfield(r, BG) for r in rates])
+                bg_mean = wmean([Bf.day .* getfield(r, BG) for r in rates])
                 @test saved[key("BG$(ch)day_pp_mean")] ≈ bg_mean rtol=1e-10
-                @test saved[key("BG$(ch)night_pp_mean")] ≈ (fN / fD) .* exposure_weights .* bg_mean' rtol=1e-10
+                @test saved[key("BG$(ch)night_pp_mean")] ≈ (Bf.night / Bf.day) .* wB .* bg_mean' rtol=1e-10
 
                 # 1/2/3σ bands of (total day rate − posterior-mean background), per bin above threshold
                 angular = ch == "ES" && cfgd.angular_reco
@@ -255,8 +298,8 @@ end
 
                 # signal-only rates at the truth (angular ES keeps the background by design)
                 if !angular
-                    @test saved[key("signal_$(ch)day")] ≈ getfield(r_true, Symbol(ch, "_day")) .- fD .* getfield(r_true, BG) rtol=1e-10
-                    @test saved[key("signal_$(ch)night")] ≈ getfield(r_true, Symbol(ch, "_night")) .- fN .* (getfield(r_true, BG)' .* exposure_weights) rtol=1e-10
+                    @test saved[key("signal_$(ch)day")] ≈ getfield(r_true, Symbol(ch, "_day")) .- Bf.day .* getfield(r_true, BG) rtol=1e-10
+                    @test saved[key("signal_$(ch)night")] ≈ getfield(r_true, Symbol(ch, "_night")) .- Bf.night .* (getfield(r_true, BG)' .* wB) rtol=1e-10
                 end
             end
 
@@ -275,14 +318,14 @@ end
             if has_CC
                 # the CC background components add up to the total CC background (day, truth)
                 comps = saved[key("CCbg_comp_day")]
-                @test vec(sum(comps, dims=2)) ≈ fD .* r_true.BG_CC_tot rtol=1e-10
+                @test vec(sum(comps, dims=2)) ≈ Bf.day .* r_true.BG_CC_tot rtol=1e-10
                 @test length(split(saved[key("CCbg_comp_names")], ",")) == size(comps, 2)
                 @test saved[key("data_CCday")] == li.nObserved.CC_day
             end
 
             # setup's per-bin breakdown CSVs (src/inputChecks.jl): components add up to the total
             # background at the truth (day + all night bins; CC × backward fraction if semi-inclusive)
-            nf = fD + fN * sum(exposure_weights)
+            nf = Bf.day + Bf.night * sum(wB)
             for (ch, _) in chans
                 bd = CSV.read(joinpath(tmp, "derived_$(dname)_$(ch)_breakdown.csv"), DataFrame)
                 bgcols = filter(c -> startswith(c, "bg_"), names(bd))
@@ -350,7 +393,10 @@ end
             assert np.allclose(p['derived_CC_asymmetry'], f['derived_' + det + '_CC_asymmetry'][()])
         d = ph.load_bin_diagnostics([chain], verbose=False)
         assert d['detector'] == 'FXA'
-        assert np.isclose(float(np.mean(d['derived_night_fraction'])), f['derived_night_fraction'][()])
+        for k in ('signal_day_fraction', 'signal_night_fraction', 'bg_day_fraction', 'bg_night_fraction'):
+            assert np.isclose(float(np.mean(d['derived_' + k])), f['derived_' + k][()]), k
+        for k in ('exposure_weights_signal', 'exposure_weights_bg'):
+            assert np.allclose(np.squeeze(d['derived_' + k]), np.squeeze(f['derived_' + k][()])), k
         try:
             ph.load_bin_diagnostics([chain], detector='NOPE', verbose=False); raise SystemExit('no error')
         except ValueError:

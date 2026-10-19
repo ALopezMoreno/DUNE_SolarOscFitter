@@ -69,7 +69,7 @@ solar_model_file: "inputs/AGSS09_high_z.jld2"     # Solar structure and neutrino
 flux_model_file: "inputs/fluxes.jld2"             # Solar neutrino energy spectra
 earth_model_file: "inputs/EARTH_MODEL_PREM_DENSE.dat"  # PREM Earth density profile
 earth_uncertainty_file: "inputs/earth_uncertainty_4.5e-5.jld2"  # Earth matter uncertainties
-solar_exposure_file: "inputs/solarExposure.csv"   # Detector exposure vs zenith angle
+solar_exposure_file: "inputs/solarExposure_v2.csv"   # Detector exposure vs zenith angle
 
 reconstruction_sample_CC: "inputs/sergio_reco_CC_withFullCuts.csv"
 reconstruction_sample_ES_nue: "inputs/Enu_Ereco_ES_nue_smeared.csv"      # ES ν_e interactions

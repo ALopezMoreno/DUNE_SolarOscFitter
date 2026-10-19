@@ -87,8 +87,17 @@ function check_layer_agreement(earth::NightOsc.EarthModel, legacy_path, depth_km
     return nothing
 end
 
-# The engine's per-bin exposure must equal exposure_weights up to one common factor
-function check_exposure_normalisation(engine::NightOsc.BinnedP1e, cosz_edges, exposure, exposure_weights; rtol=1e-3)
+# The engine's per-bin exposure must equal exposure_weights up to one common factor.
+# rtol = 1e-2 (SPEC 4.6). The bin totals the likelihood uses are exposure_weights_signal, exact cell
+# integrals of the table; NightOsc's sampled weights only set the weighting inside a bin, and it
+# normalises its bin average by them. The flux-weighted table has a narrow integrable peak at the
+# declination turning point, cos z = −cos(φ + ε) ≈ −0.377, which NightOsc's zenith pieces sample
+# coarsely: on the regression grid the two bins next to it are off by −0.33 % and +0.16 % (all others
+# agree to 1e-6). Its effect on the bin-averaged P1e, against pieces 4× and 16× finer: ≤ 3.7e-4
+# relative (2.4e-4 absolute) at Δm²₂₁ = 2e-5 and ≤ 4.2e-5 at 6e-5 in those two bins, against ≤ 5.3e-5
+# elsewhere (NightOsc's own accuracy, SPEC 1.3). A wrong column (the time weighting given to the
+# signal) still trips the guard: its per-bin ratio to the flux weighting spreads by 3.9 %.
+function check_exposure_normalisation(engine::NightOsc.BinnedP1e, cosz_edges, exposure, exposure_weights; rtol=1e-2)
     den = NightOsc._den(engine)
     w = vec(exposure_weights)
     exposed = findall(>(0), w)

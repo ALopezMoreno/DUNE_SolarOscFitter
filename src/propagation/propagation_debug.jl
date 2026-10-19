@@ -144,10 +144,10 @@ function compute_angular_components(unoscillatedSample, responseMatrices, params
     if det_flags.ES_mode && osc.ES !== nothing
         ES_nue_eff     = responseMatrices.eff.ES_nue
         ES_nuother_eff = responseMatrices.eff.ES_nuother
-        es_nue_day     = apply_day_response(osc.ES.nue_day,     responseMatrices.ES.nue,     ES_nue_eff; scale=DAY_FRACTION)
-        es_other_day   = apply_day_response(osc.ES.nuother_day, responseMatrices.ES.nuother, ES_nuother_eff; scale=DAY_FRACTION)
-        es_nue_night   = apply_night_response(osc.ES.nue_night,     responseMatrices.ES.nue,     ES_nue_eff; scale=NIGHT_FRACTION)
-        es_other_night = apply_night_response(osc.ES.nuother_night, responseMatrices.ES.nuother, ES_nuother_eff; scale=NIGHT_FRACTION)
+        es_nue_day     = apply_day_response(osc.ES.nue_day,     responseMatrices.ES.nue,     ES_nue_eff; scale=SIGNAL_DAY_FRACTION)
+        es_other_day   = apply_day_response(osc.ES.nuother_day, responseMatrices.ES.nuother, ES_nuother_eff; scale=SIGNAL_DAY_FRACTION)
+        es_nue_night   = apply_night_response(osc.ES.nue_night,     responseMatrices.ES.nue,     ES_nue_eff; scale=SIGNAL_NIGHT_FRACTION)
+        es_other_night = apply_night_response(osc.ES.nuother_night, responseMatrices.ES.nuother, ES_nuother_eff; scale=SIGNAL_NIGHT_FRACTION)
         es_day_all   = es_nue_day .+ es_other_day          # (n_Ereco_ES,)
         es_night_all = es_nue_night .+ es_other_night      # (n_cosz, n_Ereco_ES)
         es_total     = vec(es_day_all) .+ vec(sum(es_night_all, dims=1))
@@ -165,8 +165,8 @@ function compute_angular_components(unoscillatedSample, responseMatrices, params
     if det_flags.CC_mode && det_flags.inclusive_analysis &&
        osc.CC !== nothing && hasproperty(responseMatrices, :CC_inclusive)
         CC_incl_eff = responseMatrices.eff.CC_incl
-        cc_day   = apply_day_response(osc.CC.day,   responseMatrices.CC_inclusive, CC_incl_eff; scale=DAY_FRACTION)
-        cc_night = apply_night_response(osc.CC.night, responseMatrices.CC_inclusive, CC_incl_eff; scale=NIGHT_FRACTION)
+        cc_day   = apply_day_response(osc.CC.day,   responseMatrices.CC_inclusive, CC_incl_eff; scale=SIGNAL_DAY_FRACTION)
+        cc_night = apply_night_response(osc.CC.night, responseMatrices.CC_inclusive, CC_incl_eff; scale=SIGNAL_NIGHT_FRACTION)
         cc_total   = vec(cc_day) .+ vec(sum(cc_night, dims=1))
         CC_angular          = responseMatrices.BG.angular .* cc_total'
         CC_angular_night_3d = reshape(responseMatrices.BG.angular, n_cos, n_E, 1) .*
@@ -185,12 +185,12 @@ function compute_angular_components(unoscillatedSample, responseMatrices, params
         cc_night_ereco = zeros(Float64, n_z, n_CC)
     end
 
-    bg_ES_day = isempty(BG_ES) ? zeros(Float64, n_E) : DAY_FRACTION .* vec(BG_ES)
+    bg_ES_day = isempty(BG_ES) ? zeros(Float64, n_E) : BG_DAY_FRACTION .* vec(BG_ES)
 
     if !isempty(BG_ES)
-        bg_night_per_z = NIGHT_FRACTION .* (BG_ES' .* exposure_weights)   # (n_z, n_E)
+        bg_night_per_z = BG_NIGHT_FRACTION .* (BG_ES' .* exposure_weights_bg)   # (n_z, n_E)
         bg_night_total = vec(sum(bg_night_per_z, dims=1))
-        bg_total       = DAY_FRACTION .* vec(BG_ES) .+ bg_night_total
+        bg_total       = BG_DAY_FRACTION .* vec(BG_ES) .+ bg_night_total
         BG_angular          = responseMatrices.BG.angular .* bg_total'
         BG_angular_night_3d = reshape(responseMatrices.BG.angular, n_cos, n_E, 1) .*
                               reshape(bg_night_per_z', 1, n_E, n_z)
@@ -267,8 +267,11 @@ function save_debug_data(unoscillatedSample, responseMatrices, params,
         f["meta/has_ES_mode"]      = det_flags.ES_mode
         f["meta/has_CC_mode"]      = det_flags.CC_mode
         f["meta/has_CC_separate"]  = det_flags.CC_mode && !det_flags.inclusive_analysis
-        f["meta/day_fraction"]     = Float64(DAY_FRACTION)     # day/night split of the exposure (SPEC 4.6)
-        f["meta/night_fraction"]   = Float64(NIGHT_FRACTION)
+        # day/night splits of the exposure (SPEC 4.6): signal flux-weighted, backgrounds time-weighted
+        f["meta/signal_day_fraction"]   = Float64(SIGNAL_DAY_FRACTION)
+        f["meta/signal_night_fraction"] = Float64(SIGNAL_NIGHT_FRACTION)
+        f["meta/bg_day_fraction"]       = Float64(BG_DAY_FRACTION)
+        f["meta/bg_night_fraction"]     = Float64(BG_NIGHT_FRACTION)
 
         # ── unoscillated spectra (true E) ─────────────────────────────────────
         f["unosc/ES_nue_8B"]      = Vector{Float64}(unoscillatedSample.ES_nue_8B)

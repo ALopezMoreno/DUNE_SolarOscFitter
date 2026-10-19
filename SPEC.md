@@ -66,7 +66,7 @@ Partly tested items count in both columns.
 | [4.4](#44) | 🟢 | `expected_rates` shapes |
 | [4.4a](#44a) | 🟢 | Input samples checked at setup |
 | [4.5](#45) | 🟡🟣⚠️ | Event-level inputs; invariance to order and re-binning |
-| [4.6](#46) | 🟢 | Day/night split from the exposure file; A_DN per unit exposure |
+| [4.6](#46) | 🟢 | Day/night exposure: signal flux-weighted, backgrounds time-weighted; A_DN per unit exposure |
 | [5.1](#51) | 🟢 | Poisson log L |
 | [5.2](#52) | 🟢 | Barlow–Beeston → Poisson |
 | [5.3](#53) | 🟢🟡 | Total = ES + CC; LLH scan |
@@ -344,24 +344,51 @@ and to re-binning the analysis grid.
 > (4.4a) and runs anyway. New productions are expected.
 
 <a id="46"></a>
-#### 🟢 4.6 · Day/night exposure split
-- Day and night predictions use **f_day** and **f_night** from the solar exposure file: f_night =
-  ∫ exposure over cos z < 0 / ∫ exposure over the whole table, **f_day + f_night = 1** (exact for the
-  linear interpolant). Setup logs both. The shipped `inputs/solarExposure.csv` gives
-  **f_night = 0.4978** (± 5e-5; 0.497836), checked against an independent trapezoid on the CSV rows
-  (**rtol 1e-12**). A table that does not reach both sides of cos z = 0 is an error.
-- Signal (⁸B, hep; ES, CC, inclusive and mis-ID) and backgrounds alike: day = f_day·(R_day + BG),
-  night bin k = f_night·w_k·(R_k + BG), Σ_k w_k = 1 (`exposure_weights`); **rtol 1e-12**. The file is
-  taken to be weighted by time, so f_night is also the live-time night fraction the backgrounds use.
-- Day-night asymmetries (setup, derived mode, plots) are computed per unit exposure,
-  A_DN = 2(d − n)/(d + n) with d = D/f_day, n = N/f_night: **|A_DN| < 1e-14** with no Earth effect and
-  an unequal split.
-- A table mirror-symmetric in cos z gives f_night = **0.5 exactly**, and with it the likelihood
-  equals the one of the earlier hard-coded 0.5/0.5 split (regression variant `night_sym`, set to the
-  bf9ffec `night` values and matched bit for bit).
+#### 🟢 4.6 · Day/night exposure: signal flux-weighted, backgrounds time-weighted
+- The solar exposure file has two weightings of cos z on the same nodes, header
+  `cosz,time_weight,flux_weight` (made by `utils/make_solar_exposure.py`):
+  - **time_weight**: fraction of time the Sun spends per unit cos z. Used by the **backgrounds**,
+    whose rates are fixed in time: their day/night split and their night cos z weights.
+  - **flux_weight**: the same weighted by the solar flux, (1 AU / r)². Used by the **signal** (⁸B,
+    hep; ES, CC, inclusive, mis-ID; NightOsc's cos z averaging, the night folding, the MC-statistics
+    signal terms, derived mode). By Kepler's second law dt ∝ r² dλ, so the flux weighting is uniform
+    in solar longitude λ: half of it is at night, **f_night^signal = 0.5** (**± 1e-5**).
+  - A legacy single-weight file (headerless `cos z, exposure`) is an **error** pointing to the
+    generator; so is any other header.
+- For each weighting: f_night = ∫ over cos z < 0 / ∫ over the whole table, **f_day + f_night = 1**
+  (exact for the linear interpolant), matching independent trapezoids on the CSV rows (**rtol 1e-12**).
+  A table that does not reach, or has no exposure on, both sides of cos z = 0 is an error. Setup logs
+  both splits.
+- `inputs/solarExposure_v2.csv` (latitude 44.35° N, Kepler orbit): **f_night^bg = 0.4978** (± 1e-4;
+  0.497802); its time column reproduces the legacy `inputs/solarExposure.csv` node by node to
+  **≤ 0.5 %** for |cos z| < 0.92, except within ±0.02 of ±cos(φ + ε) (the declination turning point,
+  an integrable peak that each table samples differently), where 0.02-wide bin integrals agree to
+  **2 %**. The two columns differ by up to ±3.3 %.
+- Predictions: day = f_day^S·R_day + f_day^B·BG; night bin k = f_night^S·R_k + f_night^B·w^B_k·BG,
+  where the night signal rows R_k carry the signal weights w^S_k and Σ_k w^S_k = Σ_k w^B_k = 1
+  (**rtol 1e-12**; checked with weightings that differ strongly, so a swap fails).
+- A_DN is the signal asymmetry per unit (signal) exposure: the background is removed with exactly
+  the factors the predictions carry (f_day^B, and f_night^B·Σ_k w^B_k, since Σ_k w^B_k = 1 only to
+  quadgk's ~1e-8 and backgrounds can be 1e6 × the signal), then A_DN = 2(d − n)/(d + n), d = D/f_day^S, n = N/f_night^S. **|A_DN| < 1e-14** with no
+  Earth effect and unequal, different splits. The logged effective asymmetry is 2(d − n)/(d + n + 2·BG)
+  (per unit exposure the background rate is BG by day and by night, whatever its split).
+- NightOsc's per-bin exposure must match `exposure_weights_signal` up to a common factor within
+  **rtol 1e-2** (it was 1e-3). The bin totals come from `exposure_weights_signal`, an exact cell
+  integral of the table; NightOsc's sampled weights only set the weighting inside a bin, and it
+  normalises by them. The flux-weighted table's integrable peak at −cos(φ + ε) ≈ −0.377 puts the two
+  bins next to it 0.33 % and 0.16 % off on the regression grid; measured effect on the bin-averaged
+  P1e against 4× and 16× finer zenith pieces: **≤ 3.7e-4 relative (2.4e-4 absolute)** at Δm²₂₁ = 2e-5
+  and ≤ 4.2e-5 at 6e-5 in those bins (≤ 5.3e-5 elsewhere, NightOsc's own accuracy, 1.3). The time
+  column given to the signal (3.9 % per-bin spread) still trips the guard.
+- A table mirror-symmetric in cos z with equal columns gives both splits **0.5 exactly**, and with it
+  the likelihood equals the one of the earlier hard-coded 0.5/0.5 split (regression variant
+  `night_sym`, set to the bf9ffec `night` values and matched bit for bit).
 
-> ✅ `test_tabulated.jl` (fractions), `test_response_and_backgrounds.jl` (folding, A_DN),
-> `derived_mode.jl` (fixture totals, derived A_DN and arrays), `regression_likelihood.jl night_sym`
+> ✅ `test_tabulated.jl` (file format, fractions, generator vs legacy table; slow tier: the committed
+> table is the generator's output), `test_response_and_backgrounds.jl` (folding, A_DN, swapped splits),
+> `derived_mode.jl` (strongly different weightings: totals, derived A_DN, arrays and saved keys),
+> `test_osc_night.jl` (guard on the shipped table: passes at 1e-2, swapped column trips it),
+> `regression_likelihood.jl night_sym`
 
 ---
 

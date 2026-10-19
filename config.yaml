@@ -104,7 +104,7 @@ flux_model_file:                "inputs/fluxes.jld2"
 earth_model_file:               "inputs/EARTH_MODEL_PREM_DENSE.dat"
 earth_uncertainty_file:         "inputs/earth_uncertainty_4.5e-5.jld2"
 earth_normalisation_prior_file: "inputs/earth_uncertainty_cov.jld2"
-solar_exposure_file:            "inputs/solarExposure.csv"
+solar_exposure_file:            "inputs/solarExposure_v2.csv"
 
 data_file: "data.txt"   # only used when Asimov: false
 

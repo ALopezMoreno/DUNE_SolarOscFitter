@@ -403,10 +403,11 @@ def add_oscmap_dn_page(pdf):
     ch, E_edges = (("CC", cc_E_edges) if (not inclusive_mode and "derived_signal_CCnight" in diagnostics)
                    else ("ES", es_E_edges))
     have_sig = (f"derived_signal_{ch}night" in diagnostics and f"derived_signal_{ch}day" in diagnostics)
-    expw = _recover_exposure_weights(ch) if have_sig else None
+    # the signal's (flux-weighted) night cos z weights and night/day ratio: per unit exposure (SPEC 4.6)
+    expw = _recover_exposure_weights(ch, "signal") if have_sig else None
     have_asym = have_sig and expw is not None
     if have_asym:
-        expw = expw * _night_day_exposure_ratio(ch)   # per unit exposure (SPEC 4.6)
+        expw = expw * _night_day_exposure_ratio(ch, "signal")
 
     if have_asym:
         true_asym = 2.0 * (day[None, :] - night) / (day[None, :] + night)        # (n_cosz, n_Etrue)
@@ -414,7 +415,8 @@ def add_oscmap_dn_page(pdf):
         sd = np.asarray(diagnostics[f"derived_signal_{ch}day"], dtype=float)                        # (n_Ereco,)
         with np.errstate(divide="ignore", invalid="ignore"):
             day_eq    = expw[:, None] * sd[None, :]               # night signal expected with no regeneration
-                                                                    # (day signal × f_night/f_day × exposure_weights)
+                                                                    # (day signal × f_night/f_day × exposure_weights,
+                                                                    #  all of the signal, flux-weighted)
             reco_asym = 2.0 * (day_eq - sn) / (day_eq + sn)
         reco_asym[~np.isfinite(reco_asym)] = np.nan
         reco_asym[:, sd < 1e-2 * np.nanmax(sd)] = np.nan          # blank bins with negligible signal
@@ -476,14 +478,23 @@ def add_oscmap_dn_page(pdf):
     plt.close(fig)
 
 
-def _night_day_exposure_ratio(ch):
-    """f_night / f_day, the night-to-day exposure ratio (SPEC 4.6). The derive writes the night
-    background as BG_night(c, e) = (f_night/f_day) · exposure_weights(c) · BG_day(e) with
-    Σ_c exposure_weights = 1, so the ratio is Σ_c BG_night[e0, c] / BG_day[e0] at any e0 with
-    appreciable background. Read from derived_day_fraction / derived_night_fraction when saved;
-    otherwise recovered from the background arrays; without either it falls back to 1 (a 50/50 split)."""
-    fd = diagnostics.get("derived_day_fraction")
-    fn = diagnostics.get("derived_night_fraction")
+def _saved(*keys):
+    """The first of `keys` present in the diagnostics, as a float array, else None."""
+    for k in keys:
+        if k in diagnostics and diagnostics[k] is not None:
+            return np.asarray(diagnostics[k], dtype=float)
+    return None
+
+
+def _night_day_exposure_ratio(ch, kind):
+    """f_night / f_day of the signal (kind="signal", flux-weighted) or of the backgrounds (kind="bg",
+    time-weighted), SPEC 4.6. Read from derived_<kind>_day_fraction / _night_fraction; older files
+    have one pair, derived_day_fraction / derived_night_fraction, taken for both. Files older still
+    recover it from the background arrays, which the derive writes as BG_night(c, e) =
+    (f_night/f_day) · exposure_weights(c) · BG_day(e) with Σ_c exposure_weights = 1 (exact for the
+    background split; those files had one split for both). Without any it falls back to 1 (50/50)."""
+    fd = _saved(f"derived_{kind}_day_fraction", "derived_day_fraction")
+    fn = _saved(f"derived_{kind}_night_fraction", "derived_night_fraction")
     if fd is not None and fn is not None:
         return float(np.mean(fn)) / float(np.mean(fd))
     bn = diagnostics.get(f"derived_BG{ch}night_pp_mean")
@@ -494,20 +505,24 @@ def _night_day_exposure_ratio(ch):
         e0 = int(np.nanargmax(bd))
         if np.isfinite(bd[e0]) and bd[e0] > 0:
             ratio = float(bn[e0, :].sum() / bd[e0])
-            if "derived_exposure_weights" in diagnostics:
-                ratio /= float(np.sum(diagnostics["derived_exposure_weights"]))
+            w = _saved("derived_exposure_weights")
+            if w is not None:
+                ratio /= float(np.sum(w))
             return ratio
     print(f"warning: no {ch} background arrays to recover the day/night exposure split; assuming 50/50")
     return 1.0
 
 
-def _recover_exposure_weights(ch):
-    """Per-cos z exposure fraction. Prefer the saved array; else recover it from the saved
-    background, since the derive builds BG_night(c,e) = (f_night/f_day) · exposure_weights(c) · BG_day(e) exactly,
-    so exposure_weights = BG_night[:, e0] / BG_day[e0] / (f_night/f_day) for any e0 with appreciable
-    background (the ratio is Σ_c of the same column, since Σ exposure_weights = 1)."""
-    if "derived_exposure_weights" in diagnostics:
-        return np.asarray(diagnostics["derived_exposure_weights"], dtype=float)
+def _recover_exposure_weights(ch, kind):
+    """Night cos z weights (Σ = 1) of the signal (kind="signal", flux-weighted) or of the backgrounds
+    (kind="bg", time-weighted). Prefer the saved arrays (derived_exposure_weights_<kind>; older files
+    have one, derived_exposure_weights, taken for both); else recover them from the saved background,
+    since the derive builds BG_night(c,e) = (f_night/f_day) · exposure_weights(c) · BG_day(e) exactly,
+    so exposure_weights ∝ BG_night[:, e0] / BG_day[e0] for any e0 with appreciable background
+    (normalised to Σ = 1; those files had one set for both)."""
+    w = _saved(f"derived_exposure_weights_{kind}", "derived_exposure_weights")
+    if w is not None:
+        return w
     bn = diagnostics.get(f"derived_BG{ch}night_pp_mean")
     bd = diagnostics.get(f"derived_BG{ch}day_pp_mean")
     if bn is None or bd is None:

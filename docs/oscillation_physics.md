@@ -176,7 +176,7 @@ By default (`nightOsc: true`) it is computed by NightOsc (7d), which returns P�
 
 The choice is made once, in `build_osc_setup` (`src/propagation/osc_setup.jl`), and stored in the type of the constant `OSC::OscSetup{Night, EarthUnc, FastSolar}`. `setup_earth_propagation` and `compute_oscillation_probabilities` dispatch on `OSC.night` (`NightOscNight` or `NumOscNight{Fast}`), so the likelihood stays type-stable. The builder also checks the configuration against the rest of the analysis, and fails at setup if any check fails:
 - the engine grid matches the analysis cos z and E_true bins, with two `E_calc` points per bin;
-- the engine's per-bin exposure matches `exposure_weights` up to one common factor;
+- the engine's per-bin exposure matches `exposure_weights_signal` (flux-weighted, SPEC 4.6) up to one common factor, within rtol 1e-2 (the table's narrow peak at the declination turning point, cos z ≈ −0.377, is sampled coarsely by the zenith pieces; this moves the bin-averaged P₁ₑ by ≤ 3.7e-4 relative in the two bins next to it, see SPEC 4.6);
 - the number of Earth layers matches the Earth-uncertainty prior;
 - makePaths and NightOsc cross the same layers in the same order (`check_layer_agreement`), so `earth_norm_i` scales the same layer in both calculations.
 
@@ -188,7 +188,7 @@ The choice is made once, in `build_osc_setup` (`src/propagation/osc_setup.jl`), 
 - `binning.jl`: `BinnedP1e` setup and evaluation;
 - `ad.jl`: ForwardDiff and Enzyme rules.
 
-It is a port of SnuPpy's `core/osc/binned_night.py` and its kernels. The engine (`OSC.night.engine`) is built once at setup from `COARSE_COSZ_EDGES`, the E_true bin edges, `exposure_intp` and the Earth model file.
+It is a port of SnuPpy's `core/osc/binned_night.py` and its kernels. The engine (`OSC.night.engine`) is built once at setup from `COARSE_COSZ_EDGES`, the E_true bin edges, `exposure_intp_signal` (flux-weighted) and the Earth model file.
 
 **Why.** The legacy calculation samples one path per cos z bin (or two) and two energies per E_true bin. On long paths the regeneration oscillates many times within one bin, so two samples alias it. Against a dense reference on the HD CC grid (20 cos z × 30 E_true bins, 1–21 MeV), the legacy P₁ₑ is off by up to 0.04–0.06 in single bins (median 2×10⁻³), which is comparable to the regeneration amplitude itself. NightOsc is within 1.5×10⁻⁴ at nominal density and 6×10⁻⁴ with scaled layers (median ~10⁻⁵).
 
@@ -307,7 +307,7 @@ ForwardDiff operates in forward mode over all N sampled parameters simultaneousl
 **Reverse mode (`ad_backend: "Enzyme"`, the default with `nightOsc: true`).** The whole likelihood is differentiable by Enzyme in reverse mode, whose cost does not depend on N. This is the backend to use with many Earth-density parameters. On the HD CC config, Enzyme agrees with ForwardDiff to ~1e-13. Timings on one thread (October 2026): one likelihood evaluation 19 ms, of which NightOsc is 99.8 %; Enzyme gradient ~85 ms; ForwardDiff gradient ~200 ms, which grows with the number of NightOsc inputs. The first gradient call compiles for 2–3 minutes per process.
 
 What makes it work (keep these properties when editing the likelihood path):
-- Settings read by the likelihood are `const` (`E_calc`, `exposure_weights`, `N_COSZ_BINS`, `CC_XSEC_NORM_TRUE`, and `OSC`, whose type carries the night backend, the Earth-uncertainty switch and `fastFit`), and `LikelihoodInputs` has concrete field types.
+- Settings read by the likelihood are `const` (`E_calc`, `exposure_weights_signal`/`_bg` and the day/night fractions, `N_COSZ_BINS`, `CC_XSEC_NORM_TRUE`, and `OSC`, whose type carries the night backend, the Earth-uncertainty switch and `fastFit`), and `LikelihoodInputs` has concrete field types.
 - Detector modes are type parameters (`DetFlags`), so `det_flags.ES_mode` etc. are compile-time constants and the unused channel branches disappear.
 - No logging macros (they contain `try`/`catch`), dynamic splats (`vcat(x...)`), `Adjoint` wrappers of constant matrices, or generators/zips mixing constant data with differentiable values inside the likelihood: those are written as loops or moved into `@noinline` helpers.
 - NightOsc has a custom Enzyme rule (`_p1e_vec`). Its forward pass (`_p1e_forward_store!`) computes the primal while keeping each path's stage-1 output in per-task workspaces, and records the point (`:forward_x` in the task store). The reverse pass, `_p1e_vjp_manual`, computes wᵀ∂P/∂x:

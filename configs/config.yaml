@@ -125,7 +125,7 @@ solar_model_file: "inputs/AGSS09_high_z.jld2"
 flux_model_file: "inputs/fluxes.jld2"
 earth_model_file: "inputs/EARTH_MODEL_PREM_DENSE.dat"
 earth_uncertainty_file: "inputs/earth_uncertainty_4.5e-5.jld2"
-solar_exposure_file: "inputs/solarExposure.csv"
+solar_exposure_file: "inputs/solarExposure_v2.csv"
 
 # Detector response files ###### NOT UPDATED. AT THE MOMENT YOU ARE EXPECTED TO USE YOUR OWN!!!!
 reconstruction_sample_CC: "inputs/sergio_reco_CC_withFullCuts.csv" #"inputs/ES_reconstruction_fullEFF.csv" #"inputs/sergio_reco_CC_withMediumCuts.csv"

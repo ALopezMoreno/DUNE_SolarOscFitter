@@ -1,6 +1,8 @@
 # Frozen configuration for tests/regression_likelihood.jl. Detector samples come from
 # tests/fixtures (synthetic, see make_fixtures.jl); the solar model, fluxes, Earth model,
-# exposure and cross sections from the git-tracked files in inputs/. Do not point this at
+# exposure and cross sections from the git-tracked files in inputs/. The exposure is the
+# generator's output, inputs/solarExposure_v2.csv (time- and flux-weighted columns, SPEC 4.6), so
+# the signal and background splits differ as in production. Do not point this at
 # the changing detector inputs: the regression must only move when the fitter changes.
 #
 # Two detectors, to cover the multi-detector path:
@@ -51,7 +53,7 @@ flux_model_file:                "inputs/fluxes.jld2"
 earth_model_file:               "inputs/EARTH_MODEL_PREM_DENSE.dat"
 earth_uncertainty_file:         "inputs/earth_uncertainty_cov.jld2"
 earth_normalisation_prior_file: "inputs/earth_uncertainty_cov.jld2"
-solar_exposure_file:            "inputs/solarExposure.csv"
+solar_exposure_file:            "inputs/solarExposure_v2.csv"
 data_file: "data.txt"
 
 active_detectors: [FXA, FXB]

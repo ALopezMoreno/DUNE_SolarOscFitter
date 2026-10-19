@@ -34,8 +34,8 @@ using Statistics: median
 
 # ── effective MC counts per E_reco bin, at setup ─────────────────────────────────────────────
 
-# True-energy rate entering the reco folding, day + all night bins, with the day/night split of the
-# exposure that apply_day_response / apply_night_response use (fr = (day = f_day, night = f_night)).
+# True-energy signal rate entering the reco folding, day + all night bins, with the signal's day/night
+# split that apply_day_response / apply_night_response use (fr = (day = f_day, night = f_night)).
 _true_total(day::AbstractVector, night::AbstractMatrix, fr) =
     fr.day .* Float64.(day) .+ fr.night .* vec(sum(Float64.(night), dims=1))
 
@@ -83,17 +83,19 @@ effective_count(M, V) = [V[j] > 0 && M[j] > 0 ? M[j]^2 / V[j] : Inf for j in eac
 
 """
     mc_effective_counts(det, responseMatrices, backgrounds, osc_samples, ES_norms_true,
-                        CC_norms_true, exposure_weights, fractions) -> (ES = (a, M, V), CC = (a, M, V))
+                        CC_norms_true, exposure_weights_bg, signal_fractions, bg_fractions)
+        -> (ES = (a, M, V), CC = (a, M, V))
 
 Per E_reco bin: the predicted events M (day + night) at the truth, rebuilt from its signal and
 background components, their total MC variance V and the effective MC count a = M²/V (Inf when
 V = 0). Covers plain, angular (forward fraction), inclusive and semi-inclusive modes; the
 semi-inclusive mis-ID term enters M with no MC variance (its response is a product of two
-already-smoothed matrices). `fractions = (day = f_day, night = f_night)` is the day/night split of the
-exposure (SPEC 4.6).
+already-smoothed matrices). The day/night splits `(day = f_day, night = f_night)` of the exposure
+(SPEC 4.6) are the signal's (flux-weighted; the night rows of `osc` already carry the signal cos z
+weights) and the backgrounds' (time-weighted, with their night cos z weights `exposure_weights_bg`).
 """
-function mc_effective_counts(det, R, bg, osc, ES_norms_true, CC_norms_true, expo, fr)
-    nf  = fr.day + fr.night * sum(expo)   # day + night total of a background spectrum
+function mc_effective_counts(det, R, bg, osc, ES_norms_true, CC_norms_true, expo_bg, fr, fr_bg)
+    nf  = fr_bg.day + fr_bg.night * sum(expo_bg)   # day + night total of a background spectrum
     mc  = R.mc
     semi, incl = det.semi_inclusive_analysis, det.inclusive_analysis
     f_above = semi ? R.CC_split.above : 1.0

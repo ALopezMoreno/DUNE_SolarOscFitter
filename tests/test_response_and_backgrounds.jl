@@ -153,37 +153,43 @@ end
     @test N_ELECTRONS_PER_KT / N_AR40_PER_KT ≈ 18 / 0.99604
 end
 
-# SPEC 4.6: day and night are folded with the exposure fractions; the day-night asymmetry is taken
-# per unit exposure, so it is zero when day and night rates per unit exposure agree, whatever the split.
-@testset "day/night exposure split and A_DN per unit exposure (SPEC 4.6)" begin
+# SPEC 4.6: the signal is folded with its (flux-weighted) day/night split and night cos z weights, the
+# background with its (time-weighted) ones; the signal day-night asymmetry is taken per unit (signal)
+# exposure after removing the background with its own split, so it is zero with no Earth effect,
+# whatever the two splits. The splits here differ strongly, so mixing them up is visible.
+@testset "day/night exposure splits and A_DN per unit exposure (SPEC 4.6)" begin
     R   = [0.7 0.3 0.0; 0.1 0.6 0.3; 0.0 0.2 0.8; 0.0 0.0 1.0]       # (n_true, n_reco)
     eff = [0.9, 0.8, 0.7]
-    rate = [5.0, 4.0, 3.0, 2.0]                                         # E_true rate, full exposure
-    w    = [0.2, 0.5, 0.3]                                              # exposure_weights, Σ = 1
+    rate = [5.0, 4.0, 3.0, 2.0]                                         # E_true signal rate, full exposure
     BG   = [30.0, 20.0, 10.0]                                           # background, full exposure
-    fD, fN = 0.5021640489567748, 0.4978359510432252
+    S = (day = 0.62, night = 0.38); wS = [0.1, 0.3, 0.6]               # signal split, night cos z weights
+    B = (day = 0.45, night = 0.55); wB = [0.5, 0.3, 0.2]               # background split and weights
     # no keyword default: the caller must say which side it folds
     @test_throws UndefKeywordError apply_day_response(rate, R, eff)
     full = (R' * rate) .* eff
-    @test apply_day_response(rate, R, eff; scale=fD) ≈ fD .* full rtol=1e-14
-    night_rows = w .* rate'                                             # no Earth effect: every row ∝ day
-    @test vec(sum(apply_night_response(night_rows, R, eff; scale=fN), dims=1)) ≈ fN .* full rtol=1e-14
+    @test apply_day_response(rate, R, eff; scale=S.day) ≈ S.day .* full rtol=1e-14
+    night_rows = wS .* rate'                                            # no Earth effect: every row ∝ day
+    @test vec(sum(apply_night_response(night_rows, R, eff; scale=S.night), dims=1)) ≈ S.night .* full rtol=1e-14
 
     # predictions as propagateSamples builds them, without any day-night effect
-    day   = apply_day_response(rate, R, eff; scale=fD) .+ fD .* BG
-    night = apply_night_response(night_rows, R, eff; scale=fN) .+ fN .* (BG' .* w)
-    @test sum(day) + sum(night) ≈ sum(full) + sum(BG) rtol=1e-13     # f_day + f_night = 1
-    @test abs(dn_asymmetry(day, night, BG, 1, fD, fN)) < 1e-14
-    @test abs(dn_asymmetry(day, night, BG, 2, fD, fN)) < 1e-14
-    # raw counts would show a fake asymmetry of 2(fD − fN)/(fD + fN) ≈ 0.87 %
-    D, N = sum(day) - fD * sum(BG), sum(night) - fN * sum(BG)
-    @test 2 * (D - N) / (D + N) ≈ 2 * (fD - fN) rtol=1e-10
+    day   = apply_day_response(rate, R, eff; scale=S.day) .+ B.day .* BG
+    night = apply_night_response(night_rows, R, eff; scale=S.night) .+ B.night .* (BG' .* wB)
+    @test sum(day) + sum(night) ≈ sum(full) + sum(BG) rtol=1e-13     # each split sums to 1
+    for idx in (1, 2)
+        @test abs(dn_asymmetry(day, night, BG, idx, S, B)) < 1e-14
+        # the wrong split for either part fakes an asymmetry of several %
+        @test abs(dn_asymmetry(day, night, BG, idx, B, B)) > 0.05
+        @test abs(dn_asymmetry(day, night, BG, idx, S, S)) > 0.05
+    end
+    # raw counts would show a fake asymmetry of 2(f_day − f_night)/(f_day + f_night)
+    D, N = sum(day) - B.day * sum(BG), sum(night) - B.night * sum(BG)
+    @test 2 * (D - N) / (D + N) ≈ 2 * (S.day - S.night) rtol=1e-10
     # angular layout: day (cos θ, E), night (cos θ, E, cos z); energy is axis 2
     A = [0.25 0.5 0.4; 0.75 0.5 0.6]
     dayA   = A .* day'
     nightA = reshape(A, 2, 3, 1) .* reshape(night', 1, 3, 3)
-    @test abs(dn_asymmetry(dayA, nightA, BG, 1, fD, fN)) < 1e-14
+    @test abs(dn_asymmetry(dayA, nightA, BG, 1, S, B)) < 1e-14
     # with f = 0.5 it is the earlier 2(D − N)/(D + N) on raw counts
     @test dn_asymmetry(12.0, 10.0, 0.5, 0.5) == 2 * (12.0 - 10.0) / 22.0
-    @test dn_asymmetry(0.0, 0.0, fD, fN) == 0.0
+    @test dn_asymmetry(0.0, 0.0, S.day, S.night) == 0.0
 end

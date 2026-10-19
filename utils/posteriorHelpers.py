@@ -383,6 +383,14 @@ def load_bin_diagnostics(mcmc_chains, require_all=True, verbose=True, detector=N
         "derived_oscmap_8B_day",
         "derived_oscmap_8B_night",
         "derived_oscmap_Etrue_edges",
+        # exposure (SPEC 4.6): signal flux-weighted, backgrounds time-weighted; older files have one
+        # set (derived_exposure_weights, derived_day_fraction, derived_night_fraction) for both
+        "derived_exposure_weights_signal",
+        "derived_exposure_weights_bg",
+        "derived_signal_day_fraction",
+        "derived_signal_night_fraction",
+        "derived_bg_day_fraction",
+        "derived_bg_night_fraction",
         "derived_exposure_weights",
         "derived_day_fraction",
         "derived_night_fraction",

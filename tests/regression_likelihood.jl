@@ -13,8 +13,9 @@ variant: "night"  (default night calculation, NightOsc)
          "legacy" (3-flavour per-path NumOsc night calculation)
          "night_da", "night_bb", "night_da_indep" (night with the MC statistical uncertainty:
           Dembinski–Abdelmotteleb or Conway's Barlow–Beeston, shared or independent day/night)
-         "night_sym" (night with tests/fixtures/solarExposure_symmetric.csv: the shipped night
-          exposure mirrored onto the day side, f_day = f_night = 0.5 exactly, SPEC 4.6. Its
+         "night_sym" (night with tests/fixtures/solarExposure_symmetric.csv: the legacy night
+          exposure mirrored onto the day side, both weight columns equal, so signal and background
+          splits are 0.5 exactly, SPEC 4.6. Its
           reference was set to the "night" values of the hard-coded 0.5/0.5 split (bf9ffec) and
           reproduced to rtol 1e-12 when the split moved to the exposure file.)
 --update rewrites the reference for this variant instead of checking it.

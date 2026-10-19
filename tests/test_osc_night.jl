@@ -187,6 +187,27 @@ end
         @test check_exposure_normalisation(b, cz_edges, expo, 3.7 .* w) === nothing   # any common factor
         w_bad = copy(w); w_bad[2] *= 1.2
         @test_throws ErrorException check_exposure_normalisation(b, cz_edges, expo, w_bad)
+
+        # SPEC 4.6: the shipped two-weighting table on the regression fixture's cos z grid. The
+        # flux-weighted (signal) engine passes the guard (rtol 1e-2; its narrow peak at −cos(φ + ε)
+        # puts two bins 0.3 % off, so 1e-3 would fail); handing the signal the time weighting trips it.
+        rows = [parse.(Float64, split(l, ',')) for l in eachline(joinpath(@__DIR__, "..", "inputs", "solarExposure_v2.csv"))
+                if !startswith(l, "#") && !startswith(l, "cosz") && !isempty(strip(l))]
+        cz, wt, wf = getindex.(rows, 1), getindex.(rows, 2), getindex.(rows, 3)
+        flux = linear_interpolation(cz, wf; extrapolation_bc=Throw())
+        tcol = linear_interpolation(cz, wt; extrapolation_bc=Throw())
+        reg_edges = [-0.9341421976, -0.8854732856776645, -0.836804373755329, -0.7856040613442341,
+                     -0.7344037489331392, -0.6832034365220442, -0.6320031241109493, -0.5808028116998544,
+                     -0.5296024992887595, -0.4784021868776645, -0.4272018744665696, -0.37600156205547464,
+                     -0.32480124964437973, -0.27360093723328477, -0.22240062482218986, -0.17120031241109493,
+                     -0.12, -0.105, -0.09, -0.075, -0.06, -0.045, -0.03, -0.015, 0.0]
+        cell(f) = [quadgk(f, reg_edges[i], reg_edges[i+1])[1] for i in 1:length(reg_edges)-1]
+        bf = BinnedP1e(reg_edges, [5e-3, 6e-3], flux, earth_model; phase_const=_BN_PHASE)
+        @test check_exposure_normalisation(bf, reg_edges, flux, cell(flux)) === nothing
+        @test_throws ErrorException check_exposure_normalisation(bf, reg_edges, flux, cell(flux); rtol=1e-3)
+        @test_throws ErrorException check_exposure_normalisation(bf, reg_edges, flux, cell(tcol))
+        bt = BinnedP1e(reg_edges, [5e-3, 6e-3], tcol, earth_model; phase_const=_BN_PHASE)
+        @test_throws ErrorException check_exposure_normalisation(bt, reg_edges, tcol, cell(flux))
     end
 
     @testset "day-night factorisation error is small" begin

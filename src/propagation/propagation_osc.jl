@@ -23,8 +23,8 @@ const OSC = build_osc_setup(
     depth_km          = depth,
     cosz_edges        = COARSE_COSZ_EDGES,
     energy_edges      = calculate_bins(Etrue_bins)[1],
-    exposure          = exposure_intp,
-    exposure_weights  = exposure_weights,
+    exposure          = exposure_intp_signal,      # NightOsc integrates the signal over cos z: flux-weighted
+    exposure_weights  = exposure_weights_signal,
     n_E_calc          = length(E_calc),
     n_earth_norms     = isnothing(earth_normalisation_true) ? nothing : length(earth_normalisation_true),
     legacy_paths      = earth_paths,
@@ -162,16 +162,16 @@ function compute_oscillated_samples(unoscillatedSample, params, oscProbs, ::Val{
                 unoscillatedSample.ES_nue_hep .* oscProbs.nue_hep_day .* params.integrated_HEP_flux,
 
             nue_night =
-                (unoscillatedSample.ES_nue_8B'  .* (params.integrated_8B_flux' .* oscProbs.nue_8B_night  .* exposure_weights)) .+
-                (unoscillatedSample.ES_nue_hep' .* (params.integrated_HEP_flux  .* oscProbs.nue_hep_night .* exposure_weights)),
+                (unoscillatedSample.ES_nue_8B'  .* (params.integrated_8B_flux' .* oscProbs.nue_8B_night  .* exposure_weights_signal)) .+
+                (unoscillatedSample.ES_nue_hep' .* (params.integrated_HEP_flux  .* oscProbs.nue_hep_night .* exposure_weights_signal)),
 
             nuother_day =
                 unoscillatedSample.ES_nuother_8B  .* oscProbs.nuother_8B_day  .* params.integrated_8B_flux .+
                 unoscillatedSample.ES_nuother_hep .* oscProbs.nuother_hep_day .* params.integrated_HEP_flux,
 
             nuother_night =
-                (unoscillatedSample.ES_nuother_8B'  .* (params.integrated_8B_flux' .* oscProbs.nuother_8B_night  .* exposure_weights)) .+
-                (unoscillatedSample.ES_nuother_hep' .* (params.integrated_HEP_flux  .* oscProbs.nuother_hep_night .* exposure_weights)),
+                (unoscillatedSample.ES_nuother_8B'  .* (params.integrated_8B_flux' .* oscProbs.nuother_8B_night  .* exposure_weights_signal)) .+
+                (unoscillatedSample.ES_nuother_hep' .* (params.integrated_HEP_flux  .* oscProbs.nuother_hep_night .* exposure_weights_signal)),
         )
     end
 
@@ -194,8 +194,8 @@ function compute_oscillated_samples(unoscillatedSample, params, oscProbs, ::Val{
                 CC_hep_s .* oscProbs.nue_hep_day .* params.integrated_HEP_flux,
 
             night =
-                (CC_8B_s'  .* (params.integrated_8B_flux' .* oscProbs.nue_8B_night  .* exposure_weights)) .+
-                (CC_hep_s' .* (params.integrated_HEP_flux  .* oscProbs.nue_hep_night .* exposure_weights)),
+                (CC_8B_s'  .* (params.integrated_8B_flux' .* oscProbs.nue_8B_night  .* exposure_weights_signal)) .+
+                (CC_hep_s' .* (params.integrated_HEP_flux  .* oscProbs.nue_hep_night .* exposure_weights_signal)),
         )
     end
 

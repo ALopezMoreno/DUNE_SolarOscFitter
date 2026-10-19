@@ -50,7 +50,7 @@ best-fit oscillation map are shared by all detectors.
 Output (written into prevFile.jld2, replacing any earlier derived_* keys):
   derived_detectors           "VD,HD": active detectors, in config order
   derived_<DET>_<key>         per-detector quantities (keys as in the single-detector era)
-  derived_<key>               shared quantities (cosz_edges, oscmap_*, exposure_weights)
+  derived_<key>               shared quantities (cosz_edges, oscmap_*, exposure_weights_signal/_bg, signal_/bg_ day/night fractions)
 utils/posteriorHelpers.py selects a detector and strips the prefix, so the plotting code reads
 the same key names as before, and older single-detector files still load.
 =#
@@ -121,9 +121,9 @@ function DerivedDetector(dname)
                            Vector{Vector{Float64}}(), Vector{Vector{Float64}}())
 end
 
-# Day-night asymmetry of the signal above threshold, per unit exposure (background removed: it is
-# f_day·BG by day and f_night·BG over all night bins). dn_asymmetry is in propagation_core.jl (SPEC 4.6).
-dn_asymmetry(day, night, BG, idx) = dn_asymmetry(day, night, BG, idx, DAY_FRACTION, NIGHT_FRACTION)
+# Day-night asymmetry of the signal above threshold, per unit (flux-weighted) exposure; the background
+# is removed with its time-weighted split. dn_asymmetry is in propagation_core.jl (SPEC 4.6).
+dn_asymmetry(day, night, BG, idx) = dn_asymmetry(day, night, BG, idx, SIGNAL_FRACTIONS, BG_TOTAL_FACTORS)
 
 # One chain step for one detector. `thinned` steps also feed the diagnostics.
 function process_step!(dd::DerivedDetector, pars, osc, w, θ1, θ2, thinned::Bool)
@@ -149,12 +149,12 @@ function process_step!(dd::DerivedDetector, pars, osc, w, θ1, θ2, thinned::Boo
     # the posterior-mean background, so the bg-norm spread widens the quantile band.
     push!(dd.ESday_samples, dd.angular ? vec(sum(@view(r.ES_day[:, dd.iES:end]), dims=1)) :
                                          r.ES_day[dd.iES:end])
-    acc_add!(acc, :BGESday_m1, w .* (DAY_FRACTION .* r.BG_ES_tot))
-    acc_add!(acc, :BGESday_m2, w .* (DAY_FRACTION .* r.BG_ES_tot) .^ 2)
+    acc_add!(acc, :BGESday_m1, w .* (BG_DAY_FRACTION .* r.BG_ES_tot))
+    acc_add!(acc, :BGESday_m2, w .* (BG_DAY_FRACTION .* r.BG_ES_tot) .^ 2)
     if dd.has_CC
         push!(dd.CCday_samples, r.CC_day[dd.iCC:end])
-        acc_add!(acc, :BGCCday_m1, w .* (DAY_FRACTION .* r.BG_CC_tot))
-        acc_add!(acc, :BGCCday_m2, w .* (DAY_FRACTION .* r.BG_CC_tot) .^ 2)
+        acc_add!(acc, :BGCCday_m1, w .* (BG_DAY_FRACTION .* r.BG_CC_tot))
+        acc_add!(acc, :BGCCday_m2, w .* (BG_DAY_FRACTION .* r.BG_CC_tot) .^ 2)
     end
 
     # --- per-bin and total log-likelihood moments, centred on the Asimov reference ---
@@ -249,9 +249,9 @@ function finalize_detector(dd::DerivedDetector, N, mean_sin2, var_sin2, mean_dm2
         out[Symbol(ch, "night_pp_shape")] = collect(size(night_mean))
         out[Symbol("BG", ch, "day_pp_mean")] = bg_mean
         out[Symbol("BG", ch, "day_pp_var")]  = max.(acc[Symbol("BG", ch, "day_m2")] ./ N .- bg_mean .^ 2, 0.0)
-        # Night bg per (cosz, Ereco) = (f_night/f_day)·exposure_weights ⊗ day bg (day bg is f_day·BG,
-        # night bg f_night·BG·exposure_weights; SPEC 4.6).
-        out[Symbol("BG", ch, "night_pp_mean")] = (NIGHT_FRACTION / DAY_FRACTION) .* (exposure_weights .* bg_mean')
+        # Night bg per (cosz, Ereco) = (f_night^bg/f_day^bg)·exposure_weights_bg ⊗ day bg (day bg is
+        # f_day^bg·BG, night bg f_night^bg·BG·exposure_weights_bg; time-weighted, SPEC 4.6).
+        out[Symbol("BG", ch, "night_pp_mean")] = (BG_NIGHT_FRACTION / BG_DAY_FRACTION) .* (exposure_weights_bg .* bg_mean')
         n_E = ch == "ES" && dd.angular ? size(day_mean, 2) : length(day_mean)
         samples = ch == "ES" ? dd.ESday_samples : dd.CCday_samples
         for (k, v) in quantile_bands(samples, bg_mean, idx, n_E, sample_weights)
@@ -264,8 +264,8 @@ function finalize_detector(dd::DerivedDetector, N, mean_sin2, var_sin2, mean_dm2
         if ch == "ES" && dd.angular
             out[:signal_ESday], out[:signal_ESnight] = day_t, night_t
         else
-            out[Symbol("signal_", ch, "day")]   = day_t .- DAY_FRACTION .* BG
-            out[Symbol("signal_", ch, "night")] = night_t .- NIGHT_FRACTION .* (BG' .* exposure_weights)
+            out[Symbol("signal_", ch, "day")]   = day_t .- BG_DAY_FRACTION .* BG
+            out[Symbol("signal_", ch, "night")] = night_t .- BG_NIGHT_FRACTION .* (BG' .* exposure_weights_bg)
         end
         out[Symbol("data_", ch, "day")]   = getfield(li.nObserved, Symbol(ch, "_day"))
         out[Symbol("data_", ch, "night")] = getfield(li.nObserved, Symbol(ch, "_night"))
@@ -280,16 +280,16 @@ function finalize_detector(dd::DerivedDetector, N, mean_sin2, var_sin2, mean_dm2
     if dd.has_CC
         out[:CC_asymmetry] = dd.asym_CC
         # Per-component CC background day spectra at the Asimov truth, for stacked plots,
-        # mirroring normalize_backgrounds (f_day day factor, CC_conv × norm for free norms).
+        # mirroring normalize_backgrounds (f_day^bg day factor, CC_conv × norm for free norms).
         comps = Vector{Vector{Float64}}()
         ni = 1
         for (i, beh) in enumerate(li.BG.CC_par_counts)
             if beh != 0
                 nrm = dd.true_params[Symbol("$(dd.name)_CC_bg_norm_$ni")]
-                push!(comps, DAY_FRACTION .* li.BG.CC[i] .* (li.BG.CC_conv[i] * nrm))
+                push!(comps, BG_DAY_FRACTION .* li.BG.CC[i] .* (li.BG.CC_conv[i] * nrm))
                 ni += 1
             else
-                push!(comps, DAY_FRACTION .* li.BG.CC[i])
+                push!(comps, BG_DAY_FRACTION .* li.BG.CC[i])
             end
         end
         out[:CCbg_comp_day]   = isempty(comps) ? zeros(Float64, length(out[:signal_CCday]), 0) : reduce(hcat, comps)
@@ -359,11 +359,16 @@ shared = Dict{Symbol,Any}(
     :oscmap_8B_day      => collect(Float64.(_oscmap.nue_8B_day)),
     :oscmap_8B_night    => Matrix{Float64}(_oscmap.nue_8B_night),
     :oscmap_Etrue_edges => collect(range(Etrue_bins.min, Etrue_bins.max, length=Etrue_bins.bin_number + 1)) .* 1e3,
-    # per-cos z exposure fraction, to turn night signal into a day-night survival ratio
-    :exposure_weights   => collect(Float64.(vec(exposure_weights))),
-    # day/night exposure split (SPEC 4.6), for the plotting utils
-    :day_fraction       => DAY_FRACTION,
-    :night_fraction     => NIGHT_FRACTION,
+    # Exposure (SPEC 4.6), for the plotting utils: per-cos z night weights (Σ = 1) and day/night splits,
+    # signal (flux-weighted; turns night signal into a day-night survival ratio) and backgrounds
+    # (time-weighted). Older files have one set, derived_exposure_weights / derived_day_fraction /
+    # derived_night_fraction, which the readers take for both.
+    :exposure_weights_signal => collect(Float64.(vec(exposure_weights_signal))),
+    :exposure_weights_bg     => collect(Float64.(vec(exposure_weights_bg))),
+    :signal_day_fraction     => SIGNAL_DAY_FRACTION,
+    :signal_night_fraction   => SIGNAL_NIGHT_FRACTION,
+    :bg_day_fraction         => BG_DAY_FRACTION,
+    :bg_night_fraction       => BG_NIGHT_FRACTION,
 )
 
 println(" ")

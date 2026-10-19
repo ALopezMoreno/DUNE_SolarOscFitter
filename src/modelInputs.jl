@@ -45,27 +45,48 @@ function solar_flux_spectra(energies, flux8B, fluxHep, E_max; source::AbstractSt
 end
 
 """
-    load_exposure(path) -> TabulatedInput
+    load_exposure(path) -> (time = TabulatedInput, flux = TabulatedInput)
 
-Solar exposure vs cos z: a headerless CSV of (cos z, relative exposure); every row is a point.
-Evaluating outside the table is an error. (It used Flat() extrapolation before.) The integrals
-start at the lowest night cos z of this file (exposure.jl), and NightOsc clamps its zenith nodes to
-the bin range, which they can miss by 1 ulp (night/binning.jl). The table must reach both sides of
-cos z = 0: the day/night split of the exposure comes from it (exposure_day_night_fractions).
+Solar exposure vs cos z (SPEC 4.6): a CSV with the header row `cosz,time_weight,flux_weight` ('#'
+comment lines allowed), made by `utils/make_solar_exposure.py`; every row is a point, cos z < 0 is
+night (Sun below the horizon).
+- `time_weight`: fraction of time the Sun spends per unit cos z. Backgrounds (rates fixed in time).
+- `flux_weight`: the same weighted by the solar flux, (1 AU / r)². The signal.
+
+The two columns are read as two TabulatedInputs on the same nodes. Evaluating outside the table is
+an error. (It used Flat() extrapolation before.) The integrals start at the lowest night cos z of
+this file (exposure.jl), and NightOsc clamps its zenith nodes to the bin range, which they can miss by
+1 ulp (night/binning.jl). The table must reach both sides of cos z = 0: the day/night splits come from
+it (exposure_day_night_fractions). The legacy single-weight file (headerless `cos z, exposure`) is an
+error: one column for both would give the signal the wrong weighting.
 """
 function load_exposure(path::AbstractString)
-    cosz, w = read_numeric_table(path; name = "solar exposure", ncols = 2, header = false)
-    return TabulatedInput(cosz, w; name = "solar exposure", source = path, units = "cos z",
+    isfile(path) || error("solar exposure: table not found: $path")
+    lines = strip.(readlines(path))
+    first_row = findfirst(l -> !isempty(l) && !startswith(l, "#"), lines)
+    hdr = first_row === nothing ? "" : lines[first_row]
+    want = ["cosz", "time_weight", "flux_weight"]
+    if strip.(split(hdr, ',')) != want
+        legacy = all(f -> tryparse(Float64, strip(f)) !== nothing, split(hdr, ',')) && length(split(hdr, ',')) == 2
+        error("solar exposure $path: expected the header row \"$(join(want, ','))\" " *
+              (legacy ? "(this is a legacy two-column file: one weight for signal and backgrounds alike) " :
+                        "(found \"$hdr\") ") *
+              "; make the table with `python3 utils/make_solar_exposure.py -o <file>`")
+    end
+    cosz, wt, wf = read_numeric_table(path; name = "solar exposure", ncols = 3, header = true)
+    time = TabulatedInput(cosz, wt; name = "solar exposure (time)", source = path, units = "cos z",
                           extrapolation = :error, nonnegative = true)
+    flux = TabulatedInput(cosz, wf; name = "solar exposure (flux)", source = path, units = "cos z",
+                          extrapolation = :error, nonnegative = true)
+    return (time = time, flux = flux)
 end
 
 """
     exposure_day_night_fractions(expo::TabulatedInput) -> (day = f_day, night = f_night)
 
-Day/night split of the exposure (SPEC 4.6): f_night = ∫ exposure over cos z < 0 divided by ∫
-exposure over the whole table, f_day = 1 − f_night (night = Sun below the horizon, cos z < 0). The
-table is taken to be weighted by time (the fraction of time the Sun spends at each cos z), so f_night
-is also the night fraction of the live time, which is what the backgrounds use.
+Day/night split of one exposure column (SPEC 4.6): f_night = ∫ exposure over cos z < 0 divided by ∫
+exposure over the whole table, f_day = 1 − f_night (night = Sun below the horizon, cos z < 0). Applied
+to the flux-weighted column it gives the signal split, to the time-weighted one the background split.
 
 The integrals are exact for the linear interpolant: trapezoids on the nodes plus cos z = 0, each side
 summed outward from cos z = 0, so a table mirror-symmetric in cos z gives exactly 0.5. Errors if the
