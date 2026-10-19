@@ -1,3 +1,6 @@
+# DEPRECATED: superseded by utils/make_solar_model_inputs.jl (SF-III, SPEC 8.2). This script built
+# inputs/AGSS09_high_z.jld2 from B16-AGSS09met, which is the LOW-Z model despite the file name.
+# Do not run it: it would overwrite a file the regression fixture uses.
 import sys
 sys.path.append('../PEANUTS')
 

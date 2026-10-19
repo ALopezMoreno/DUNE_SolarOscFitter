@@ -1,29 +1,18 @@
 
-# Load solar model data (density profiles and production regions)
-if isfile(solarModelFile)
-    solarModel = jldopen(solarModelFile, "r") do file
-        # Load solar structure datasets
-        radii = file["radii"]                    # Solar radii (fraction of solar radius)
-        prodFractionBoron = file["prodFractionBoron"]  # 8B production fraction vs radius
-        prodFractionHep = file["prodFractionHep"]      # HEP production fraction vs radius
-        n_e = file["n_e"]                        # Electron density vs radius
-        
-        # Calculate production-weighted average electron densities
-        # These are used for fast oscillation probability calculations
-        avgNeBoron = sum(prodFractionBoron .* n_e) / sum(prodFractionBoron)
-        avgNeHep = sum(prodFractionHep .* n_e) / sum(prodFractionHep)
+include(joinpath(@__DIR__, "modelInputs.jl"))   # load_solar_model
 
-        # Return solar model as named tuple
-        return (radii=radii, 
-                prodFractionBoron=prodFractionBoron, 
-                prodFractionHep=prodFractionHep, 
-                n_e=n_e, 
-                avgNeBoron=avgNeBoron, 
-                avgNeHep=avgNeHep)
+# Solar model: density profile and 8B/hep production regions, validated (SPEC 8.2)
+solarModel, _solar_model_flux_hep = load_solar_model(solarModelFile)
+
+# The Asimov hep flux is set in the config, not taken from the file: warn if it differs from the
+# model's own prediction (SF-III files store it), e.g. after switching solar_model_file.
+@noinline function _warn_hep_flux_mismatch(file_flux, true_flux, path)
+    if file_flux !== nothing && abs(true_flux / file_flux - 1) > 0.01
+        @warn "true_integrated_HEP_flux = $true_flux differs from the hep flux of the solar model, " *
+              "$file_flux ($path). Intended?"
     end
-else
-    error("Solar model file not found: $solarModelFile")
 end
+_warn_hep_flux_mismatch(_solar_model_flux_hep, integrated_HEP_flux_true, solarModelFile)
 
 # Load solar neutrino flux data
 if isfile(flux_file_path)

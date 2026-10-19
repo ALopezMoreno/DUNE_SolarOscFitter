@@ -230,3 +230,54 @@ end
     end
 end
 
+
+@testset "SF-III solar-model files (high-Z GS98, low-Z AGSS09met)" begin
+    # Published SF-III fluxes at Earth [cm^-2 s^-1] (Zenodo 10822316 v1.2, fluxes_SF3_*.dat):
+    # guards against the files being swapped, as the B16 file names are.
+    expected = Dict("SF3_GS98" => (b8 = 5.025e6, hep = 7.950e3, z = "high-Z"),
+                    "SF3_AGSS09met" => (b8 = 4.135e6, hep = 8.216e3, z = "low-Z"))
+    for (name, ex) in expected
+        jldopen(joinpath(_TAB_INPUTS, name * ".jld2")) do f
+            r, ne = f["radii"], f["n_e"]
+            @test occursin(ex.z, f["model"])
+            @test f["flux_8B"] == ex.b8 && f["flux_hep"] == ex.hep
+            @test r[1] ≈ 5e-4 && r[end] ≈ 0.5 && all(diff(r) .≈ 5e-4)
+            @test all(>(0), ne) && issorted(ne; rev = true) && 99 < ne[1] < 102   # N_A/cm^3
+            for k in ("prodFractionBoron", "prodFractionHep")
+                w = f[k]
+                @test length(w) == length(r) && all(>=(0), w)
+                @test sum(w) * 5e-4 ≈ 1 rtol = 1e-3                  # dP/d(R/R_sun) on the grid
+            end
+            # 8B is produced deeper than hep
+            mean_r(w) = sum(w .* r) / sum(w)
+            @test mean_r(f["prodFractionBoron"]) < mean_r(f["prodFractionHep"])
+        end
+    end
+    # Composition from the profile data, not the metadata: each SF-III n_e profile is closer to the
+    # B16 model of the same composition (B16 files: AGSS09_high_z.jld2 is B16-AGSS09met, low-Z, and
+    # GS98_low_z.jld2 is B16-GS98, high-Z; the names are swapped).
+    ne(name) = jldopen(f -> f["n_e"], joinpath(_TAB_INPUTS, name * ".jld2"))
+    dist(a, b) = maximum(abs.(ne(a) ./ ne(b) .- 1))
+    @test dist("SF3_GS98", "GS98_low_z") < dist("SF3_GS98", "AGSS09_high_z")
+    @test dist("SF3_AGSS09met", "AGSS09_high_z") < dist("SF3_AGSS09met", "GS98_low_z")
+    # the high-Z model has the higher core electron density
+    @test ne("SF3_GS98")[1] > ne("SF3_AGSS09met")[1]
+end
+
+@testset "solar-model input contract (SPEC 8.2)" begin
+    for name in ("SF3_GS98", "SF3_AGSS09met", "AGSS09_high_z", "GS98_low_z")
+        m, fhep = load_solar_model(joinpath(_TAB_INPUTS, name * ".jld2"))
+        @test keys(m) == (:radii, :prodFractionBoron, :prodFractionHep, :n_e, :avgNeBoron, :avgNeHep)
+        @test m.avgNeBoron ≈ sum(m.prodFractionBoron .* m.n_e) / sum(m.prodFractionBoron)
+        @test (fhep === nothing) == startswith(name, "AGSS09_high_z") | startswith(name, "GS98_low_z")
+    end
+    r = collect(range(0.01, 0.5; length = 50)); ne = fill(50.0, 50); p = ones(50)
+    @test validate_solar_model(r, ne, p, p) === nothing
+    @test_throws ErrorException validate_solar_model(r, ne[1:49], p, p)              # lengths
+    @test_throws ErrorException validate_solar_model(reverse(r), ne, p, p)           # not increasing
+    @test_throws ErrorException validate_solar_model([0.0; r[2:end]], ne, p, p)      # r = 0
+    @test_throws ErrorException validate_solar_model(r, [0.0; ne[2:end]], p, p)      # n_e > 0
+    @test_throws ErrorException validate_solar_model(r, ne, [-1.0; p[2:end]], p)     # weights >= 0
+    @test_throws ErrorException validate_solar_model(r, ne, p, zeros(50))            # not all zero
+    @test_throws ErrorException validate_solar_model(r, [NaN; ne[2:end]], p, p)      # finite
+end

@@ -225,7 +225,7 @@ signal and each background component at the true parameters is written to
 
 The analysis requires several input files:
 
-- **Solar model**: `inputs/AGSS09_high_z.jld2`
+- **Solar model**: `inputs/SF3_GS98.jld2` (SF-III GS98, high-Z; `inputs/SF3_AGSS09met.jld2` is the low-Z alternative)
 - **Neutrino fluxes**: `inputs/fluxes.jld2`
 - **Earth model**: `inputs/EARTH_MODEL_PREM_DENSE.dat` (a PREM-like table without crust; the Earth
   modelling is being reworked)

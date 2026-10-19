@@ -6,6 +6,7 @@ in xsec.jl (read_cc_xsec_table). The NightOsc Earth model keeps its own reader a
 (src/oscillations/night/earth_model.jl), validated to the same contract.
 =#
 using QuadGK
+using JLD2
 include(joinpath(@__DIR__, "core.jl"))         # MATTER_POTENTIAL_CONST
 include(joinpath(@__DIR__, "tabulated.jl"))
 
@@ -42,6 +43,51 @@ function solar_flux_spectra(energies, flux8B, fluxHep, E_max; source::AbstractSt
         flux_8B = TabulatedInput(E, f8B / integral_8B; name = "8B spectrum", source, units = "GeV", nonnegative = true),
         flux_hep = TabulatedInput(E, fhep / integral_hep; name = "hep spectrum", source, units = "GeV", nonnegative = true),
     )
+end
+
+"""
+    validate_solar_model(radii, n_e, prod_8B, prod_hep; source) -> nothing
+
+Solar-model input contract (SPEC 8.2): `radii` [R/R_sun] finite, strictly increasing, in (0, 1];
+`n_e` [N_A/cm^3] finite and > 0; the production weights finite, >= 0, not all zero, one per radius.
+Weights are normalised by the fitter, so dP/dr or per-zone fractions both work. Errors name the file.
+"""
+function validate_solar_model(radii, n_e, prod_8B, prod_hep; source::AbstractString = "")
+    w = "solar model $(isempty(source) ? "" : "($source)")"
+    n = length(radii)
+    n >= 2 || error("$w: fewer than two radii")
+    for (name, v) in (("n_e", n_e), ("prodFractionBoron", prod_8B), ("prodFractionHep", prod_hep))
+        length(v) == n || error("$w: $name has $(length(v)) entries for $n radii")
+        all(isfinite, v) || error("$w: $name has non-finite values")
+    end
+    all(isfinite, radii) && all(>(0), diff(radii)) || error("$w: radii must be finite and strictly increasing")
+    (radii[1] > 0 && radii[end] <= 1) || error("$w: radii must lie in (0, 1] (fractions of the solar radius)")
+    all(>(0), n_e) || error("$w: n_e must be > 0")
+    for (name, v) in (("prodFractionBoron", prod_8B), ("prodFractionHep", prod_hep))
+        all(>=(0), v) || error("$w: $name has negative weights")
+        sum(v) > 0 || error("$w: $name is all zero")
+    end
+    return nothing
+end
+
+"""
+    load_solar_model(path) -> (model::NamedTuple, flux_hep)
+
+Reads a solar-model JLD2 file (keys `radii`, `n_e`, `prodFractionBoron`, `prodFractionHep`),
+validates it (`validate_solar_model`) and adds the production-weighted mean densities used by
+fastFit. `flux_hep` is the model's hep flux when the file stores it (SF-III files), else `nothing`;
+it is returned separately so the model tuple passed to the oscillation code keeps its type.
+"""
+function load_solar_model(path::AbstractString)
+    isfile(path) || error("Solar model file not found: $path")
+    jldopen(path, "r") do file
+        radii, n_e = file["radii"], file["n_e"]
+        pB, pH = file["prodFractionBoron"], file["prodFractionHep"]
+        validate_solar_model(radii, n_e, pB, pH; source = path)
+        model = (radii = radii, prodFractionBoron = pB, prodFractionHep = pH, n_e = n_e,
+                 avgNeBoron = sum(pB .* n_e) / sum(pB), avgNeHep = sum(pH .* n_e) / sum(pH))
+        return model, (haskey(file, "flux_hep") ? Float64(file["flux_hep"]) : nothing)
+    end
 end
 
 """

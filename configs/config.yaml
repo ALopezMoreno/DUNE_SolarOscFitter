@@ -22,7 +22,7 @@ singleChannel: CC  # Choose to run a single channel in the fit: false (both), CC
 true_sin2_th12: 0.307
 true_sin2_th13: 0.0224
 true_dm2_21: 6e-5 # PDG: 7.53e-5,  SNO: 5.113e-5
-true_integrated_HEP_flux: 8250.0 # as given by b16_agss09
+true_integrated_HEP_flux: 7950.0 # SF-III GS98 (high-Z)
 
 
 ###############################
@@ -121,7 +121,7 @@ earth_normalisation_prior_file: "inputs/earth_uncertainty_cov.jld2"
 # proposal_matrix: "outputs/posterior_covariance.jld2"
 
 # Matter potential and oscillation files
-solar_model_file: "inputs/AGSS09_high_z.jld2"
+solar_model_file: "inputs/SF3_GS98.jld2"
 flux_model_file: "inputs/fluxes.jld2"
 earth_model_file: "inputs/EARTH_MODEL_PREM_DENSE.dat"
 earth_uncertainty_file: "inputs/earth_uncertainty_4.5e-5.jld2"
