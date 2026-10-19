@@ -158,16 +158,20 @@ end
         @test _same(CC_xsec, old, _nodes_and_midpoints(E .* 1e-3))
     end
 
-    # Solar exposure (master: exposure.jl, CSV.File(header = false), Flat()): first row kept
-    expo_file = joinpath(_TAB_INPUTS, "solarExposure.csv")
-    df = CSV.File(expo_file, header = false) |> DataFrame
-    old_expo = linear_interpolation(df[:, 1], df[:, 2], extrapolation_bc = Flat())
-    expo = load_exposure(expo_file)
-    @test length(expo.x) == countlines(expo_file) == nrow(df)
-    @test expo.x[1] == parse(Float64, split(readline(expo_file), ',')[1])
-    @test _same(expo, old_expo, _nodes_and_midpoints(df[:, 1]))
-    @test expo.extrapolation === :error
-    @test_throws TabulatedDomainError expo(expo.x[1] - 1e-6)
+    # Solar exposure (SPEC 4.6): two weight columns on the same nodes, each the linear interpolant of
+    # its CSV column (read here with CSV.jl), never extrapolated. (The legacy single-column file is an
+    # error, tested with the fractions below.)
+    expo_file = joinpath(_TAB_INPUTS, "solarExposure_v2.csv")
+    df = CSV.File(expo_file; comment = "#") |> DataFrame
+    @test names(df) == ["cosz", "time_weight", "flux_weight"]
+    tabs = load_exposure(expo_file)
+    for (t, col) in ((tabs.time, :time_weight), (tabs.flux, :flux_weight))
+        ref = linear_interpolation(df.cosz, df[!, col], extrapolation_bc = Throw())
+        @test t.x == df.cosz && length(t.x) == nrow(df)
+        @test _same(t, ref, _nodes_and_midpoints(df.cosz))
+        @test t.extrapolation === :error
+        @test_throws TabulatedDomainError t(t.x[1] - 1e-6)
+    end
 
     # Earth potential (master: earthProfile.jl, readdlm, radii × 6371 × (1 + 1e-10), Throw())
     earth_file = joinpath(_TAB_INPUTS, "EARTH_MODEL_PREM_DENSE.dat")
@@ -190,6 +194,98 @@ end
     new_path = TabulatedInput(d, pot; name = "path", extrapolation = :error, nonnegative = true, register = false)
     nodes, _ = gauss(5, d[1], d[end])
     @test _same(new_path, old_path, vcat(nodes, _nodes_and_midpoints(d)))
+end
+
+# SPEC 4.6: day/night splits from the exposure table, signal flux-weighted, backgrounds time-weighted.
+_trap(x, y) = sum((x[2:end] .- x[1:end-1]) .* (y[2:end] .+ y[1:end-1]) ./ 2)
+# night fraction of a sampled column, independently of the fitter: trapezoids plus the linear value at 0
+function _night_fraction_ref(c, e)
+    k = findlast(<(0), c)
+    e0 = e[k] + (e[k+1] - e[k]) * (0 - c[k]) / (c[k+1] - c[k])
+    return _trap([c[1:k]; 0.0], [e[1:k]; e0]) / _trap(c, e)
+end
+_csv_rows(path) = [parse.(Float64, split(l, ',')) for l in eachline(path)
+                   if !isempty(strip(l)) && !startswith(strip(l), "#") && tryparse(Float64, split(l, ',')[1]) !== nothing]
+
+@testset "exposure day/night fractions (SPEC 4.6)" begin
+    v2 = joinpath(_TAB_INPUTS, "solarExposure_v2.csv")
+    rows = _csv_rows(v2)
+    c, et, ef = getindex.(rows, 1), getindex.(rows, 2), getindex.(rows, 3)
+    tabs = load_exposure(v2)
+    ft, ff = exposure_day_night_fractions(tabs.time), exposure_day_night_fractions(tabs.flux)
+    # the fractions match independent trapezoids on the CSV rows
+    @test ft.night ≈ _night_fraction_ref(c, et) rtol=1e-12
+    @test ff.night ≈ _night_fraction_ref(c, ef) rtol=1e-12
+    @test ft.day + ft.night == 1 && ff.day + ff.night == 1
+    @test ft.night ≈ quadgk(tabs.time, c[1], 0.0)[1] / quadgk(tabs.time, c[1], 0.0, c[end])[1] rtol=1e-7
+    # flux-weighted: uniform in solar longitude (Kepler's second law), so exactly half the year's flux
+    # arrives at night
+    @test ff.night ≈ 0.5 atol=1e-5
+    # time-weighted: reproduces the legacy (time-weighted) inputs/solarExposure.csv
+    lrows = _csv_rows(joinpath(_TAB_INPUTS, "solarExposure.csv"))
+    lc, le = first.(lrows), last.(lrows)
+    @test ft.night ≈ _night_fraction_ref(lc, le) atol=1e-4
+    @test ft.night ≈ 0.4978 atol=1e-4
+    # shape: ≤ 0.5 % node by node for |cos z| < 0.92, except within ±0.02 of ±cos(φ + ε) (φ = 44.35°,
+    # ε = 23.44°): there the density has an integrable (log) peak, the declination turning point, and
+    # node values depend on how each table sampled it; there the 0.02-wide bin integrals agree to 2 %.
+    lin(xq) = [le[searchsortedlast(lc, q)] + (le[searchsortedlast(lc, q)+1] - le[searchsortedlast(lc, q)]) *
+               (q - lc[searchsortedlast(lc, q)]) / (lc[searchsortedlast(lc, q)+1] - lc[searchsortedlast(lc, q)]) for q in xq]
+    cusp = cosd(44.35 + 23.44)
+    near_cusp = abs.(abs.(c) .- cusp) .< 0.02
+    m = (abs.(c) .< 0.92) .& .!near_cusp
+    @test maximum(abs.(et[m] ./ lin(c[m]) .- 1)) <= 5e-3
+    for s in (-1, 1)
+        a, b = s * cusp - 0.01, s * cusp + 0.01
+        g = collect(range(a, b; length = 401))
+        @test _trap(g, tabs.time(g)) / _trap(g, lin(g)) ≈ 1 atol=2e-2
+    end
+    # the two weightings really differ (by up to a few % at the cos z extremes), so a swap is visible
+    @test 0.02 < maximum(abs.(ef ./ et .- 1)) < 0.05
+
+    # a legacy two-column file is an error that points to the generator; so is a wrong header
+    mktempdir() do dir
+        legacy = joinpath(dir, "legacy.csv"); write(legacy, "-0.9,0.5\n0.0,0.5\n0.9,0.5\n")
+        err = try load_exposure(legacy); nothing catch e; e end
+        @test err isa ErrorException && occursin("make_solar_exposure.py", err.msg) && occursin("legacy", err.msg)
+        @test_throws ErrorException load_exposure(joinpath(_TAB_INPUTS, "solarExposure.csv"))
+        swapped = joinpath(dir, "swapped.csv"); write(swapped, "cosz,flux_weight,time_weight\n-0.9,1,1\n0.9,1,1\n")
+        @test_throws ErrorException load_exposure(swapped)
+    end
+
+    tab(x, y) = TabulatedInput(x, y; name = "exposure", register = false)
+    # a table mirror-symmetric in cos z gives exactly 0.5 (with or without a node at 0)
+    xs = [-0.9, -0.5, -0.37, -0.1, -0.002]; ys = [0.48, 0.45, 0.94, 0.5, 0.487]
+    for (x, y) in (([xs; -reverse(xs)], [ys; reverse(ys)]), ([xs; 0.0; -reverse(xs)], [ys; 0.4871; reverse(ys)]))
+        g = exposure_day_night_fractions(tab(x, y))
+        @test g.night === 0.5 && g.day === 0.5
+    end
+    # the symmetric fixture of the night_sym regression variant: both weightings, exactly 0.5
+    sym = load_exposure(joinpath(@__DIR__, "fixtures", "solarExposure_symmetric.csv"))
+    @test exposure_day_night_fractions(sym.time).night === 0.5
+    @test exposure_day_night_fractions(sym.flux).night === 0.5
+    @test sym.time.y == sym.flux.y
+    # flat exposure on [-0.8, 0.4]: f_night = 0.8 / 1.2
+    @test exposure_day_night_fractions(tab([-0.8, 0.4], [1.0, 1.0])).night ≈ 2 / 3 rtol=1e-15
+    # a night-only (or day-only) table cannot fix the split
+    @test_throws ErrorException exposure_day_night_fractions(tab([-0.9, 0.0], [1.0, 1.0]))
+    @test_throws ErrorException exposure_day_night_fractions(tab([0.0, 0.9], [1.0, 1.0]))
+    # reaches both sides but has no exposure on one of them
+    @test_throws ErrorException exposure_day_night_fractions(tab([-0.9, 0.0, 0.9], [1.0, 0.0, 0.0]))
+    @test_throws ErrorException exposure_day_night_fractions(tab([-0.9, 0.0, 0.9], [0.0, 0.0, 1.0]))
+end
+
+# Slow tier: the committed table is what utils/make_solar_exposure.py makes (~5 s, needs numpy).
+if (@isdefined(RUN_SLOW) && RUN_SLOW) && success(pipeline(`python3 -c "import numpy"`; stderr = devnull))
+    @testset "solar exposure table = generator output (SPEC 4.6)" begin
+        mktempdir() do dir
+            out = joinpath(dir, "expo.csv")
+            @test success(pipeline(`python3 $(joinpath(@__DIR__, "..", "utils", "make_solar_exposure.py")) -o $out`; stdout = devnull))
+            new, old = _csv_rows(out), _csv_rows(joinpath(_TAB_INPUTS, "solarExposure_v2.csv"))
+            @test length(new) == length(old)
+            @test all(isapprox.(reduce(vcat, new), reduce(vcat, old); rtol = 1e-8))
+        end
+    end
 end
 
 @testset "NightOsc Earth model – input table validation" begin

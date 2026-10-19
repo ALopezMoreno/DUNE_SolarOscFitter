@@ -97,7 +97,9 @@ end
 # Helper functions to fold oscillated spectra with response matrices and efficiencies
 # - Day:   scale * ((R' * osc_vec) .* eff)
 # - Night: stack over cosZ rows: scale * ((row' * R) .* eff')
-function apply_day_response(osc::AbstractVector, response::AbstractMatrix, eff::AbstractVector; scale::Real=0.5)
+# `scale` is the day or night share of the signal exposure (SIGNAL_DAY_FRACTION / SIGNAL_NIGHT_FRACTION,
+# flux-weighted, exposure.jl; SPEC 4.6). It has no default: every caller states which side it folds.
+function apply_day_response(osc::AbstractVector, response::AbstractMatrix, eff::AbstractVector; scale::Real)
     # scale .* ((response' * osc) .* eff), written as loops: the Adjoint wrapper of the
     # constant response next to the differentiable `osc` is rejected by Enzyme.
     n_true, n_reco = size(response)
@@ -114,7 +116,7 @@ function apply_day_response(osc::AbstractVector, response::AbstractMatrix, eff::
     return out
 end
 
-function apply_night_response(osc_rows::AbstractMatrix, response::AbstractMatrix, eff::AbstractVector; scale::Real=0.5)
+function apply_night_response(osc_rows::AbstractMatrix, response::AbstractMatrix, eff::AbstractVector; scale::Real)
     # Row k: scale * ((osc_rows[k, :]' * response) .* eff'), written as loops. The previous
     # vcat([...]...) splat was a dynamic call that Enzyme cannot differentiate.
     n_rows, n_true = size(osc_rows)
@@ -132,3 +134,38 @@ function apply_night_response(osc_rows::AbstractMatrix, response::AbstractMatrix
     return out
 end
 
+
+
+# Fraction of the CC background spectrum the CC prediction carries: f_below in semi-inclusive mode
+# (backward hemisphere, propagation_main.jl), all of it otherwise. Subtract this much for A_DN.
+cc_background_fraction(semi::Bool, R) = semi ? R.CC_split.below : 1.0
+
+"""
+    dn_asymmetry(D, N, f_day, f_night)
+
+Day-night asymmetry 2(d − n)/(d + n) of the day signal D and the night signal N (summed over all
+night bins), taken per unit exposure: d = D / f_day, n = N / f_night, with the signal's own split
+(flux-weighted; SPEC 4.6). With raw counts an unequal split would fake an asymmetry. 0 when d + n = 0.
+"""
+function dn_asymmetry(D::Real, N::Real, f_day::Real, f_night::Real)
+    d, n = D / f_day, N / f_night
+    return d + n == 0 ? 0.0 : 2 * (d - n) / (d + n)
+end
+
+"""
+    dn_asymmetry(day, night, BG, idx, signal_fractions, bg_fractions)
+
+Signal day-night asymmetry above threshold (E_reco bins idx:end) from the predicted day and night
+arrays, which include the background BG. The background is removed with its own (time-weighted)
+split: bg_fractions.day·BG by day and bg_fractions.night·BG over all night bins in total (pass the
+factors the predictions carry, BG_TOTAL_FACTORS: f_day^B and f_night^B·Σ_k w^B_k); the signal asymmetry is
+then taken per unit exposure with the signal (flux-weighted) split signal_fractions = (day, night). Energy is the last axis of `day` and axis 2 of every
+night array ((cos z, E) or (cos θ, E, cos z)).
+"""
+function dn_asymmetry(day::AbstractArray, night::AbstractArray, BG::AbstractVector, idx::Integer,
+                      signal_fractions, bg_fractions)
+    bg = sum(BG[idx:end])
+    N = sum(selectdim(night, 2, idx:size(night, 2))) - bg_fractions.night * bg
+    D = sum(selectdim(day, ndims(day), idx:size(day, ndims(day)))) - bg_fractions.day * bg
+    return dn_asymmetry(D, N, signal_fractions.day, signal_fractions.night)
+end

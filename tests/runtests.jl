@@ -39,7 +39,7 @@ end
 # End-to-end likelihood regression (full setup, one process per variant; a few minutes)
 if get(ENV, "JULIA_REGRESSION", "0") == "1"
     @testset "likelihood regression" begin
-        for variant in ("night", "legacy", "night_da", "night_bb", "night_da_indep")
+        for variant in ("night", "legacy", "night_da", "night_bb", "night_da_indep", "night_sym")
             cmd = `$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) $(joinpath(@__DIR__, "regression_likelihood.jl")) $variant`
             @test success(pipeline(cmd; stdout=stdout, stderr=stderr))
         end

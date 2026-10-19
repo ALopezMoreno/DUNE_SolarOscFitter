@@ -67,6 +67,10 @@ with h5py.File(args.infile, "r") as f:
     has_CC          = False
     has_CC_incl     = False
     cosz_edges_real = None   # real (possibly non-uniform) night bin edges, if saved
+    # day shares of the exposure (SPEC 4.6): signal flux-weighted, backgrounds time-weighted. Files with
+    # one meta/day_fraction use it for both; files before it used 0.5.
+    signal_day_fraction = 0.5
+    bg_day_fraction     = 0.5
 
     if full_data:
         Etrue_min       = float(f["meta/Etrue_min"][()])
@@ -87,6 +91,12 @@ with h5py.File(args.infile, "r") as f:
         has_angular     = bool(f["meta/has_angular"][()]) if "meta/has_angular" in f else False
         has_ES_mode     = bool(f["meta/has_ES_mode"][()]) if "meta/has_ES_mode" in f else True
         has_CC_separate = bool(f["meta/has_CC_separate"][()]) if "meta/has_CC_separate" in f else False
+        if "meta/day_fraction" in f:
+            signal_day_fraction = bg_day_fraction = float(f["meta/day_fraction"][()])
+        if "meta/signal_day_fraction" in f:
+            signal_day_fraction = float(f["meta/signal_day_fraction"][()])
+        if "meta/bg_day_fraction" in f:
+            bg_day_fraction = float(f["meta/bg_day_fraction"][()])
 
         # unoscillated
         u_ES_nue_8B     = f["unosc/ES_nue_8B"][:]
@@ -393,10 +403,12 @@ with PdfPages(out_pdf) as pdf:
 
         # 1D stacked spectrum (day only, above-threshold energy bins).
         # Zero out sub-threshold bins to match x-axis clip on PAGE 7 (Ereco_thr).
-        # CC_angular and BG_angular are day+night totals; multiply by 0.5 for day-only.
+        # CC_angular and BG_angular are day+night totals. The background's day share is bg_day_fraction
+        # (exact); CC is signal, so signal_day_fraction (approximate: its night rate differs by its
+        # day-night asymmetry).
         es_day_1d = (ES_angular_day * e_thresh_mask).sum(axis=0)
-        cc_day_1d = (CC_angular * e_thresh_mask).sum(axis=0) * 0.5
-        bg_day_1d = (BG_angular * e_thresh_mask).sum(axis=0) * 0.5
+        cc_day_1d = (CC_angular * e_thresh_mask).sum(axis=0) * signal_day_fraction
+        bg_day_1d = (BG_angular * e_thresh_mask).sum(axis=0) * bg_day_fraction
         ax = axes[1]
         filled_stairs(ax, E_edges_reco, bg_day_1d + cc_day_1d + es_day_1d, ES_FILL, ES_EDGE, label="ES day")
         filled_stairs(ax, E_edges_reco, bg_day_1d + cc_day_1d,              CC_FILL, CC_EDGE, label="CC")

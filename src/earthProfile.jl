@@ -35,7 +35,7 @@ end
 const _COSZ_EXP_MIN = let
     cosz_floor = cosz_bins.min
     if @isdefined(solarExposureFile) && isfile(solarExposureFile)
-        cz, _ = read_numeric_table(solarExposureFile; name = "solar exposure", ncols = 2, header = false)
+        cz = load_exposure(solarExposureFile).time.x   # both weightings share the cos z nodes
         night_cosz = filter(c -> c <= 0.0, cz)
         isempty(night_cosz) ? cosz_floor : minimum(night_cosz)
     else
