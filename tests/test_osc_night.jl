@@ -111,7 +111,8 @@ end
         @test maximum(abs.(g3c .- g3d)) < 1e-9 * maximum(abs.(g3d))
     end
 
-    @testset "Enzyme reverse rule equals ForwardDiff" begin
+    # Slow tier: the first Enzyme gradient compiles for about a minute.
+    RUN_SLOW && @testset "Enzyme reverse rule equals ForwardDiff" begin
         he(θ) = sum(W .* binned_p1e(b, θ[1] * 1e-5, θ[2], θ[3], (θ[4], θ[5], θ[6], θ[7], θ[8], θ[9])))
         θ0 = [4.0, 0.60, 0.149, 0.9, 1.1, 1.15, 0.85, 1.05, 1.0]
         ge = Enzyme.gradient(Enzyme.Reverse, Enzyme.Const(he), θ0)[1]
@@ -144,7 +145,7 @@ end
         @test NightOsc._p1e_vjp_manual(b, x1, W) == fresh
     end
 
-    @testset "Enzyme gradient with several NightOsc calls per evaluation" begin
+    RUN_SLOW && @testset "Enzyme gradient with several NightOsc calls per evaluation" begin
         d(θ) = θ .* [1.3, 1.02, 0.99, 1.1, 0.9, 1.05, 0.95, 1.0, 1.0]
         P(θ) = binned_p1e(b, θ[1] * 1e-5, θ[2], θ[3], (θ[4], θ[5], θ[6], θ[7], θ[8], θ[9]))
         g3(θ) = sum(W .* P(d(θ))) + 2 * sum(W .* P(θ)) + 3 * sum(W .* P(d(θ)))
