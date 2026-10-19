@@ -210,14 +210,15 @@ for (det_name, det) in detector_configs
     end
 
     # Asymmetries per unit exposure (d = D/f_day, n = N/f_night), so an unequal split does not fake
-    # one. The "effective" one keeps its earlier definition 2(D − N)/(D + N + 2·BG) at f = 0.5, i.e.
-    # 2(d − n)/(d + n + 4·BG).
+    # one. The "effective" one is diluted by the background: per unit exposure the totals are d + BG and
+    # n + BG (Σ exposure_weights = 1), so 2(d − n)/(d + n + 2·BG). (It used 2·BG at f = 0.5 before,
+    # i.e. 4·BG per unit exposure, which counted the background twice; log-only.)
     ES_d, ES_n = ES_Dtot / fD, ES_Ntot / fN
     CC_d, CC_n = CC_Dtot / fD, CC_Ntot / fN
     asymm_ES     = dn_asymmetry(ES_Dtot, ES_Ntot, fD, fN)
-    eff_asymm_ES = ES_d + ES_n == 0 ? 0.0 : 2 * (ES_d - ES_n) / (ES_d + ES_n + 4 * ES_bg_aboveThreshold)
+    eff_asymm_ES = ES_d + ES_n == 0 ? 0.0 : 2 * (ES_d - ES_n) / (ES_d + ES_n + 2 * ES_bg_aboveThreshold)
     asymm_CC     = dn_asymmetry(CC_Dtot, CC_Ntot, fD, fN)
-    eff_asymm_CC = CC_d + CC_n == 0 ? 0.0 : 2 * (CC_d - CC_n) / (CC_d + CC_n + 4 * CC_bg_aboveThreshold)
+    eff_asymm_CC = CC_d + CC_n == 0 ? 0.0 : 2 * (CC_d - CC_n) / (CC_d + CC_n + 2 * CC_bg_aboveThreshold)
 
     true_parameters_det[:ES_asymmetry] = asymm_ES
     true_parameters_det[:CC_asymmetry] = asymm_CC

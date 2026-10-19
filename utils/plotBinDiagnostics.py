@@ -480,7 +480,12 @@ def _night_day_exposure_ratio(ch):
     """f_night / f_day, the night-to-day exposure ratio (SPEC 4.6). The derive writes the night
     background as BG_night(c, e) = (f_night/f_day) · exposure_weights(c) · BG_day(e) with
     Σ_c exposure_weights = 1, so the ratio is Σ_c BG_night[e0, c] / BG_day[e0] at any e0 with
-    appreciable background. Without background arrays it falls back to 1 (a 50/50 split)."""
+    appreciable background. Read from derived_day_fraction / derived_night_fraction when saved;
+    otherwise recovered from the background arrays; without either it falls back to 1 (a 50/50 split)."""
+    fd = diagnostics.get("derived_day_fraction")
+    fn = diagnostics.get("derived_night_fraction")
+    if fd is not None and fn is not None:
+        return float(np.mean(fn)) / float(np.mean(fd))
     bn = diagnostics.get(f"derived_BG{ch}night_pp_mean")
     bd = diagnostics.get(f"derived_BG{ch}day_pp_mean")
     if bn is not None and bd is not None:

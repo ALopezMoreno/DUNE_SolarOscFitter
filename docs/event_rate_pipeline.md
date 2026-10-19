@@ -186,14 +186,15 @@ ES_Dtot = sum(ES_day[index_ES:end])      − f_day   × ES_bg_aboveThreshold
 d, n    = ES_Dtot / f_day, ES_Ntot / f_night          # per unit exposure
 
 A_ES     = 2 × (d − n) / (d + n)
-A_eff_ES = 2 × (d − n) / (d + n + 4 × ES_bg_aboveThreshold)
+A_eff_ES = 2 × (d − n) / (d + n + 2 × ES_bg_aboveThreshold)
 ```
 
 Subtracting `f_day × BG` and `f_night × BG` removes the background's day and night shares, so the
 asymmetry is signal-only; dividing by the fractions makes it a comparison of rates per unit exposure, so
 an unequal split (f_night = 0.4978 for the shipped file) does not fake an asymmetry of
-2(f_day − f_night) ≈ 0.9 %. At f = 0.5 these are the earlier 2(D − N)/(D + N) and
-2(D − N)/(D + N + 2·BG). Derived mode (`dn_asymmetry`, `propagation_core.jl`) uses the same definition per
+2(f_day − f_night) ≈ 0.9 %. A_eff is diluted by the background: per unit exposure the totals are
+d + BG and n + BG. At f = 0.5, A is the earlier 2(D − N)/(D + N); A_eff is 2(D − N)/(D + N + BG)
+(the earlier code had 2·BG, counting the background twice; A_eff is only logged). Derived mode (`dn_asymmetry`, `propagation_core.jl`) uses the same definition per
 chain step.
 
 ### Day/night split of the exposure (SPEC 4.6)

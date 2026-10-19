@@ -222,6 +222,9 @@ end
     # a night-only (or day-only) table cannot fix the split
     @test_throws ErrorException exposure_day_night_fractions(tab([-0.9, 0.0], [1.0, 1.0]))
     @test_throws ErrorException exposure_day_night_fractions(tab([0.0, 0.9], [1.0, 1.0]))
+    # reaches both sides but has no exposure on one of them
+    @test_throws ErrorException exposure_day_night_fractions(tab([-0.9, 0.0, 0.9], [1.0, 0.0, 0.0]))
+    @test_throws ErrorException exposure_day_night_fractions(tab([-0.9, 0.0, 0.9], [0.0, 0.0, 1.0]))
 end
 
 @testset "NightOsc Earth model – input table validation" begin

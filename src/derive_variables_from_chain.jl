@@ -361,6 +361,9 @@ shared = Dict{Symbol,Any}(
     :oscmap_Etrue_edges => collect(range(Etrue_bins.min, Etrue_bins.max, length=Etrue_bins.bin_number + 1)) .* 1e3,
     # per-cos z exposure fraction, to turn night signal into a day-night survival ratio
     :exposure_weights   => collect(Float64.(vec(exposure_weights))),
+    # day/night exposure split (SPEC 4.6), for the plotting utils
+    :day_fraction       => DAY_FRACTION,
+    :night_fraction     => NIGHT_FRACTION,
 )
 
 println(" ")

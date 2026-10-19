@@ -69,7 +69,8 @@ is also the night fraction of the live time, which is what the backgrounds use.
 
 The integrals are exact for the linear interpolant: trapezoids on the nodes plus cos z = 0, each side
 summed outward from cos z = 0, so a table mirror-symmetric in cos z gives exactly 0.5. Errors if the
-table does not reach both sides of the horizon (a night-only file cannot fix the split).
+table does not reach both sides of the horizon, or has no exposure on one side (a night-only file
+cannot fix the split).
 """
 function exposure_day_night_fractions(expo::TabulatedInput)
     x, y = expo.x, expo.y
@@ -91,8 +92,10 @@ function exposure_day_night_fractions(expo::TabulatedInput)
         day += (x[i] - xa) * (ya + y[i]) / 2
         xa, ya = x[i], y[i]
     end
+    (night > 0 && day > 0) ||
+        error("$w: the day/night exposure split needs exposure on both sides of cos z = 0 " *
+              "(night $night, day $day)")
     total = night + day
-    total > 0 || error("$w: zero total exposure")
     f_night = night / total
     return (day = 1 - f_night, night = f_night)
 end

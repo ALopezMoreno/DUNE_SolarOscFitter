@@ -384,6 +384,8 @@ def load_bin_diagnostics(mcmc_chains, require_all=True, verbose=True, detector=N
         "derived_oscmap_8B_night",
         "derived_oscmap_Etrue_edges",
         "derived_exposure_weights",
+        "derived_day_fraction",
+        "derived_night_fraction",
         "derived_BGCCday_pp_mean",
         "derived_BGESday_pp_mean",
     ]

@@ -200,6 +200,10 @@ end
 above(x, idx) = (y = copy(x); ndims(y) == 1 ? (y[1:idx-1] .= 0) : (y[:, 1:idx-1, (ndims(y) == 3 ? (:,) : ())...] .= 0); y)
 
 saved = jldopen(f -> Dict(k => f[k] for k in keys(f) if startswith(k, "derived_")), chain * ".jld2")
+@testset "day/night fractions saved (SPEC 4.6)" begin
+    @test saved["derived_day_fraction"] == fD
+    @test saved["derived_night_fraction"] == fN
+end
 
 @testset "derived mode, three detectors" begin
     dets = Base.invokelatest(() -> collect(keys(detector_outputs)))
@@ -344,7 +348,9 @@ saved = jldopen(f -> Dict(k => f[k] for k in keys(f) if startswith(k, "derived_"
             p = ph.load_posterior([chain], ['sin2_th12'], burnin=0, exclude_chains=[],
                                   test=[('derived_CC_asymmetry', 'A')], detector=det)
             assert np.allclose(p['derived_CC_asymmetry'], f['derived_' + det + '_CC_asymmetry'][()])
-        assert ph.load_bin_diagnostics([chain], verbose=False)['detector'] == 'FXA'
+        d = ph.load_bin_diagnostics([chain], verbose=False)
+        assert d['detector'] == 'FXA'
+        assert np.isclose(float(np.mean(d['derived_night_fraction'])), f['derived_night_fraction'][()])
         try:
             ph.load_bin_diagnostics([chain], detector='NOPE', verbose=False); raise SystemExit('no error')
         except ValueError:
