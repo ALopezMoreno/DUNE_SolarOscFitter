@@ -230,3 +230,27 @@ end
     end
 end
 
+
+@testset "SF-III solar-model files (high-Z GS98, low-Z AGSS09met)" begin
+    # Published SF-III fluxes at Earth [cm^-2 s^-1] (Zenodo 10822316 v1.2, fluxes_SF3_*.dat):
+    # guards against the files being swapped, as the B16 file names are.
+    expected = Dict("SF3_GS98" => (b8 = 5.025e6, hep = 7.950e3, z = "high-Z"),
+                    "SF3_AGSS09met" => (b8 = 4.135e6, hep = 8.216e3, z = "low-Z"))
+    for (name, ex) in expected
+        jldopen(joinpath(_TAB_INPUTS, name * ".jld2")) do f
+            r, ne = f["radii"], f["n_e"]
+            @test occursin(ex.z, f["model"])
+            @test f["flux_8B"] == ex.b8 && f["flux_hep"] == ex.hep
+            @test r[1] ≈ 5e-4 && r[end] ≈ 0.5 && all(diff(r) .≈ 5e-4)
+            @test all(>(0), ne) && issorted(ne; rev = true) && 99 < ne[1] < 102   # N_A/cm^3
+            for k in ("prodFractionBoron", "prodFractionHep")
+                w = f[k]
+                @test length(w) == length(r) && all(>=(0), w)
+                @test sum(w) * 5e-4 ≈ 1 rtol = 1e-3                  # dP/d(R/R_sun) on the grid
+            end
+            # 8B is produced deeper than hep
+            mean_r(w) = sum(w .* r) / sum(w)
+            @test mean_r(f["prodFractionBoron"]) < mean_r(f["prodFractionHep"])
+        end
+    end
+end

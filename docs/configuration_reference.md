@@ -150,7 +150,7 @@ Strings are evaluated as Julia `Distributions.jl` expressions.
 
 | Key | Type | Description |
 |-----|------|-------------|
-| `solar_model_file` | String | JLD2 file with solar density profile and ⁸B/HEP production fractions. |
+| `solar_model_file` | String | JLD2 file with solar density profile and ⁸B/HEP production fractions (keys `radii` [R☉], `n_e` [N_A/cm³], `prodFractionBoron`, `prodFractionHep`; the weights are normalised by the fitter). Shipped: `inputs/SF3_GS98.jld2` (SF-III GS98, high-Z) and `inputs/SF3_AGSS09met.jld2` (SF-III AGSS09met, low-Z), built by `utils/make_solar_model_inputs.jl` from Zenodo 10822316 and carrying the model's ⁸B/hep fluxes and the source hashes. The older `AGSS09_high_z.jld2` and `GS98_low_z.jld2` are B16-AGSS09met (low-Z) and B16-GS98 (high-Z): their names have the metallicity swapped. |
 | `flux_model_file` | String | JLD2 file with neutrino energy spectra (`energies` in GeV, `flux8B`, `fluxHep`). Validated (finite, strictly increasing energies, flux ≥ 0) and never extrapolated (SPEC 8.1). |
 | `earth_model_file` | String | PREM Earth density profile (plain text, no header: r/R⊕, density, electron fraction). Validated (finite, strictly increasing radii, values ≥ 0) and never extrapolated. |
 | `earth_uncertainty_file` | String | JLD2 file with Earth layer density uncertainties. |
