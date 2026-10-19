@@ -55,26 +55,27 @@ PYTHONPATH=/path/to/SolarOscFitter/utils python utils/plotOutput.py ...
 
 ### 1. Basic Usage
 
-Run the analysis with default configuration:
+Run the analysis with the default configuration (`config.yaml` in the repository root):
 
 ```bash
-julia -t auto src/readConfig.jl
+julia -t auto --project src/readConfig.jl
 ```
 
-Or specify a custom configuration file:
+Or specify a configuration file:
 
 ```bash
-julia -t 8 src/readConfig.jl path/to/your/config.yaml
+julia -t 8 --project src/readConfig.jl path/to/your/config.yaml
 ```
 
-The `-t` flag sets the number of threads for parallel processing.
+`--project` makes Julia use this repository's pinned environment (without it, Julia uses your
+default environment, which may not have the packages). `-t` sets the number of threads.
 
 ### 2. Configuration
 
 The analysis is controlled through YAML configuration files. The main `config.yaml` file contains:
 
-- **Analysis mode**: MCMC, LLH scanning, or derived quantities
-- **Data type**: Asimov (simulated) or real data
+- **Analysis mode**: MCMC, LLH scanning, derived quantities, profiling, or setup only
+- **Data type**: Asimov (simulated) data; fitting real data is not implemented yet
 - **Detector parameters**: Exposure, thresholds, binning
 - **Prior distributions**: Parameter constraints from external measurements
 - **File paths**: Input data and output locations
@@ -83,8 +84,8 @@ Key configuration options:
 
 ```yaml
 # Analysis mode
-RunMode: "MCMC"          # "MCMC", "LLH", "derived", or "PROFILE"
-Asimov: true             # true for simulated data, false for real data
+RunMode: "MCMC"          # "MCMC", "LLH", "derived", "PROFILE", or "SETUP" (build the likelihood and stop)
+Asimov: true             # the only data mode for now; Asimov: false stops with "not implemented"
 singleChannel: false     # false (both), "ES", or "CC"
 
 # MCMC settings
@@ -105,7 +106,12 @@ true_8B_flux: 5.53e6     # Asimov 8B flux; defaults to mean(prior_8B_flux) if om
                          # Set != prior centre to study bias from flux mis-expectation.
 ```
 
-Detector-level keys can also be grouped into named blocks under a `detectors:` section (with an optional `active_detectors` list) to fit several detector configurations simultaneously. See [docs/configuration_reference.md](docs/configuration_reference.md) for every key, and [docs/index.md](docs/index.md) for the developer documentation.
+The example above is a flat (single-detector) config. Detector-level keys (`singleChannel`,
+`CC_exposure`, binning, input samples, backgrounds, ...) can instead be grouped into named blocks
+under a `detectors:` section (with an optional `active_detectors` list) to fit several detector
+configurations simultaneously; the root `config.yaml` does this. With a `detectors:` section,
+detector-level keys must go inside each block: unknown or misplaced keys stop the run with a
+"did you mean" hint, so a typo cannot silently fall back to a default. See [docs/configuration_reference.md](docs/configuration_reference.md) for every key, and [docs/index.md](docs/index.md) for the developer documentation.
 
 ### 3. Output Visualization
 
@@ -154,10 +160,14 @@ SolarOscFitter/
 │   ├── plotOutput.py     # MCMC result visualization
 │   ├── compareOutput.py  # Compare two posteriors
 │   └── plotLLH.py        # Likelihood scan plots
+├── tests/                # Unit, end-to-end and regression tests
+├── docs/                 # Physics and code documentation
 ├── inputs/               # Input data files
 ├── outputs/              # Analysis results
 ├── configs/              # Configuration file examples
-└── config.yaml           # Main configuration file
+├── config.yaml           # Main configuration file
+├── SPEC.md               # Validation criteria (what the tests check)
+└── TODO.md               # Open work
 ```
 
 ## Analysis Modes
@@ -173,9 +183,16 @@ nSteps: 15000
 ```
 
 Outputs:
-- `outFile_mcmc.bin`: MCMC chains
-- `outFile_info.txt`: Analysis summary
-- `outFile_posterior.jld2`: Posterior samples
+- `{outFile}.jld2`: the chains, appended in batches (`batch_1`, `batch_2`, ...), plus the run record
+  (`run_config`)
+- `{outFile}_chainState.bin`: sampler state, for resuming with `prevFile`
+- `{outFile}_config.yaml`: the run record (resolved config, input-file hashes, git commit); an
+  existing one is moved to `_config.old<k>.yaml`, never overwritten
+- `{outFile}_configSettings.txt`: summary of the settings
+- `{outFile}_<DET>_<ES|CC>_breakdown.csv`: per-bin data, signal and backgrounds at the truth
+
+A new run stops if `{outFile}.jld2` already exists. To start from an earlier run's posterior
+(mass-matrix warm start, much faster mixing), set `warm_start_chain` to that run's `outFile`.
 
 ### Likelihood Scanning
 
@@ -192,8 +209,11 @@ Post-process existing MCMC chains to append the Day-Night asymmetry at each step
 
 ```yaml
 RunMode: "derived"
-prevFile: "path/to/previous/analysis"
+prevFile: "path/to/previous/analysis"   # chain prefix, without .jld2
 ```
+
+Results are written into `{prevFile}.jld2` (`outFile` is not used), and the run record to
+`{prevFile}_derived_config.yaml`.
 
 ## Input Data Requirements
 
@@ -208,10 +228,19 @@ The analysis requires several input files:
 
 - **Solar model**: `inputs/AGSS09_high_z.jld2`
 - **Neutrino fluxes**: `inputs/fluxes.jld2`
-- **Earth model**: `inputs/EARTH_MODEL_PREM_DENSE.dat`
+- **Earth model**: `inputs/EARTH_MODEL_PREM_DENSE.dat` (a PREM-like table without crust; the Earth
+  modelling is being reworked)
 - **CC ν_e–⁴⁰Ar cross section**: `inputs/CC_nue_40Ar_total_marley_v2.0.0.csv` (MARLEY 2.0.0, HF-CRPA + Bhattacharya 2009; config key `cc_xsec_file`)
-- **Detector response**: Monte Carlo samples with E_truth and E_reco for CC and ES channels (csv)
-- **Background samples**: Monte Carlo samples with E_reco for Neutron and gamma backgrounds (csv)
+- **Detector response**: event-level Monte Carlo samples for the CC and ES channels (csv, one row
+  per event: `Etrue`, `Ereco`, `weights`, `mask`)
+- **Background samples**: event-level Monte Carlo samples for the neutron and gamma backgrounds
+  (csv, one row per event: `Ereco`, `weights`, `mask`)
+
+> **Inputs must be event-level, never pre-binned histograms.** The fitter bins the events itself;
+> a histogram fed in as if it were events is re-binned onto the analysis grid and aliases (for a
+> 200 keV histogram on 0.67 MeV bins, a ±20% sawtooth). Setup warns about samples that look
+> pre-binned. All model tables (fluxes, cross section, exposure, Earth) are validated at load and
+> never extrapolated silently ([SPEC.md](SPEC.md) 8.1).
 
 ## Physics Parameters
 
@@ -227,9 +256,10 @@ The analysis fits the following parameters:
 - `HEP flux`: He3+p (HEP) neutrino flux
 
 ### Systematic Parameters
-- Earth matter density uncertainties
+- Earth matter density uncertainties (per-layer normalisations)
 - Background normalizations
-- Detector response uncertainties
+- MC statistical uncertainty of the predictions (optional, see below)
+- (Detector energy-scale and resolution uncertainties are not implemented yet.)
 - CC cross-section shape uncertainties (relative to the MARLEY 2.0.0 nominal table, `cc_xsec_file`):
   - `cc_xsec_norm` — overall scale; default `truncated(Normal(1.0, 0.1), 0.1, 2.0)`
   - `cc_xsec_tilt` — spectral slope, applied as `exp(tilt × p₁)` with `p₁ = L − ⟨L⟩`, `L = ln(E/E_pivot)`; default `Normal(0, 0.1)`
@@ -244,16 +274,25 @@ The analysis fits the following parameters:
 > which can lead to corrupted, partially overwritten, or unexpectedly appended data.
 >
 > To avoid inconsistent results, always remove old output files manually before running
-> a job that rewrites them.
+> a job that rewrites them. (A new MCMC run already refuses to start over an existing
+> `{outFile}.jld2`, and run records are never overwritten; other outputs, such as LLH scans and
+> breakdown CSVs, are.)
 
 
 ## Testing
 
-Run the unit tests (likelihood correctness and wiring) with the project environment:
+Run the unit tests (likelihood correctness and wiring) and the derived-mode end-to-end test:
 
 ```bash
-julia --project tests/runtests.jl
+julia --project tests/runtests.jl                              # ~2.5 min
+JULIA_REGRESSION=1 julia --project tests/runtests.jl           # + full-likelihood regression
+julia --project tests/regression_likelihood.jl night --grad    # Enzyme vs ForwardDiff gradient
 ```
+
+The regression compares the likelihood at fixed points with frozen values in
+`tests/regression_reference.toml`; any intended change to the likelihood value needs a deliberate
+`--update` of it. What each test checks, and against which tolerance, is listed in
+[SPEC.md](SPEC.md).
 
 Benchmarks and profiling runs are opt-in via `JULIA_LIKELIHOOD_BENCH=1` and `JULIA_PROFILE=1`.
 
@@ -268,9 +307,13 @@ reports the MC uncertainty per channel either way. Method and implementation:
 ## Performance Tips
 
 - Use multiple threads: `julia -t auto` or `julia -t N`
-- Enable fast mode: `fastFit: true` in config
+- Fast mode: `fastFit: true` uses the mean solar production density. It is accurate to ≤ 0.3% for
+  ⁸B, but the hep day survival probability can be off by up to 4.5%; use `fastFit: false` for hep
+  studies
+- Start from an earlier run's posterior with `warm_start_chain` (mass-matrix warm start; much higher
+  effective sample size per gradient than a cold start)
+- Resume an interrupted run with `prevFile` instead of re-tuning
 - Adjust MCMC parameters based on available compute time
-- Resume from a previous run (`prevFile`) instead of re-tuning
 
 
 ## Acknowledgments
