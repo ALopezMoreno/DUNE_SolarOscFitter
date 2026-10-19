@@ -32,8 +32,8 @@ true_sin2_th13:           0.022     # reactor mixing angle (δCP and θ₂₃ fi
 true_dm2_21:              6e-5      # solar Δm² (eV²)  [PDG: 7.53e-5, SNO: 5.11e-5]
 true_integrated_HEP_flux: 7950.0   # HEP flux (ν/cm²/s), SF-III GS98
 true_cc_xsec_norm:        1.0       # CC xsec scale relative to MARLEY
-true_8B_flux: 5.53e6              # override Asimov flux; default = mean(prior_8B_flux)
-                                    # set != prior centre to study bias from flux mis-expectation
+# true_8B_flux: 5.53e6            # Asimov ⁸B flux; unset = mean(prior_8B_flux), the prior centre.
+                                    # Set it off-centre only to study bias from a flux mis-expectation.
 
 
 # ── 3. PRIORS ───────────────────────────────────────────────────────────────
