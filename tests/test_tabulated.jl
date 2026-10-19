@@ -192,6 +192,38 @@ end
     @test _same(new_path, old_path, vcat(nodes, _nodes_and_midpoints(d)))
 end
 
+# SPEC 4.6: the day/night split of the exposure comes from the exposure table.
+@testset "exposure day/night fractions (SPEC 4.6)" begin
+    # independently of the fitter: trapezoid on the CSV rows, plus the linear value at cos z = 0
+    rows = [parse.(Float64, split(l, ',')) for l in eachline(joinpath(_TAB_INPUTS, "solarExposure.csv")) if !isempty(strip(l))]
+    c, e = first.(rows), last.(rows)
+    k = findlast(<(0), c)
+    e0 = e[k] + (e[k+1] - e[k]) * (0 - c[k]) / (c[k+1] - c[k])
+    trap(x, y) = sum((x[2:end] .- x[1:end-1]) .* (y[2:end] .+ y[1:end-1]) ./ 2)
+    fn_ref = trap([c[1:k]; 0.0], [e[1:k]; e0]) / trap(c, e)
+    f = exposure_day_night_fractions(load_exposure(joinpath(_TAB_INPUTS, "solarExposure.csv")))
+    @test f.night ≈ fn_ref rtol=1e-12
+    @test f.night ≈ 0.4978 atol=5e-5
+    @test f.day + f.night == 1
+    @test f.night ≈ quadgk(load_exposure(joinpath(_TAB_INPUTS, "solarExposure.csv")), c[1], 0.0)[1] / quadgk(load_exposure(joinpath(_TAB_INPUTS, "solarExposure.csv")), c[1], 0.0, c[end])[1] rtol=1e-7
+
+    tab(x, y) = TabulatedInput(x, y; name = "exposure", register = false)
+    # a table mirror-symmetric in cos z gives exactly 0.5 (with or without a node at 0)
+    xs = [-0.9, -0.5, -0.37, -0.1, -0.002]; ys = [0.48, 0.45, 0.94, 0.5, 0.487]
+    for (x, y) in (([xs; -reverse(xs)], [ys; reverse(ys)]), ([xs; 0.0; -reverse(xs)], [ys; 0.4871; reverse(ys)]))
+        g = exposure_day_night_fractions(tab(x, y))
+        @test g.night === 0.5 && g.day === 0.5
+    end
+    # the shipped symmetric fixture of the night_sym regression variant
+    sym = joinpath(@__DIR__, "fixtures", "solarExposure_symmetric.csv")
+    @test exposure_day_night_fractions(load_exposure(sym)).night === 0.5
+    # flat exposure on [-0.8, 0.4]: f_night = 0.8 / 1.2
+    @test exposure_day_night_fractions(tab([-0.8, 0.4], [1.0, 1.0])).night ≈ 2 / 3 rtol=1e-15
+    # a night-only (or day-only) table cannot fix the split
+    @test_throws ErrorException exposure_day_night_fractions(tab([-0.9, 0.0], [1.0, 1.0]))
+    @test_throws ErrorException exposure_day_night_fractions(tab([0.0, 0.9], [1.0, 1.0]))
+end
+
 @testset "NightOsc Earth model – input table validation" begin
     good = joinpath(_TAB_INPUTS, "EARTH_MODEL_PREM_DENSE.dat")
     @test NightOsc.EarthModel(good; potential_const = MATTER_POTENTIAL_CONST) isa NightOsc.EarthModel

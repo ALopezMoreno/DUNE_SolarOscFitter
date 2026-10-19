@@ -191,28 +191,33 @@ for (det_name, det) in detector_configs
                             0.0 : sum(BG_CC_tot_true[index_CC_det:end])
     ES_bg_aboveThreshold = sum(BG_ES_tot_true[index_ES_det:end])
 
-    CC_Ntot = sum(@view measuredRate_CC_night[:, index_CC_det:end]) - 0.5 * CC_bg_aboveThreshold
-    CC_Dtot = sum(measuredRate_CC_day[index_CC_det:end]) - 0.5 * CC_bg_aboveThreshold
+    # Signal counts above threshold: the background is f_day·BG by day and f_night·BG over all night
+    # bins (SPEC 4.6).
+    fD, fN = DAY_FRACTION, NIGHT_FRACTION
+    CC_Ntot = sum(@view measuredRate_CC_night[:, index_CC_det:end]) - fN * CC_bg_aboveThreshold
+    CC_Dtot = sum(measuredRate_CC_day[index_CC_det:end]) - fD * CC_bg_aboveThreshold
 
     if det.ES_mode
         if det.angular_reco
-            ES_Ntot = sum(@view measuredRate_ES_night[:, index_ES_det:end, :]) - 0.5 * ES_bg_aboveThreshold
-            ES_Dtot = sum(measuredRate_ES_day[:, index_ES_det:end]) - 0.5 * ES_bg_aboveThreshold
+            ES_Ntot = sum(@view measuredRate_ES_night[:, index_ES_det:end, :]) - fN * ES_bg_aboveThreshold
+            ES_Dtot = sum(measuredRate_ES_day[:, index_ES_det:end]) - fD * ES_bg_aboveThreshold
         else
-            ES_Ntot = sum(@view measuredRate_ES_night[:, index_ES_det:end]) - 0.5 * ES_bg_aboveThreshold
-            ES_Dtot = sum(measuredRate_ES_day[index_ES_det:end]) - 0.5 * ES_bg_aboveThreshold
+            ES_Ntot = sum(@view measuredRate_ES_night[:, index_ES_det:end]) - fN * ES_bg_aboveThreshold
+            ES_Dtot = sum(measuredRate_ES_day[index_ES_det:end]) - fD * ES_bg_aboveThreshold
         end
     else
         ES_Ntot = 0.0; ES_Dtot = 0.0
     end
 
-    ES_denom = ES_Dtot + ES_Ntot
-    CC_denom = CC_Dtot + CC_Ntot
-
-    asymm_ES     = ES_denom == 0 ? 0.0 : 2 * (ES_Dtot - ES_Ntot) / ES_denom
-    eff_asymm_ES = ES_denom == 0 ? 0.0 : 2 * (ES_Dtot - ES_Ntot) / (ES_denom + 2 * ES_bg_aboveThreshold)
-    asymm_CC     = CC_denom == 0 ? 0.0 : 2 * (CC_Dtot - CC_Ntot) / CC_denom
-    eff_asymm_CC = CC_denom == 0 ? 0.0 : 2 * (CC_Dtot - CC_Ntot) / (CC_denom + 2 * CC_bg_aboveThreshold)
+    # Asymmetries per unit exposure (d = D/f_day, n = N/f_night), so an unequal split does not fake
+    # one. The "effective" one keeps its earlier definition 2(D − N)/(D + N + 2·BG) at f = 0.5, i.e.
+    # 2(d − n)/(d + n + 4·BG).
+    ES_d, ES_n = ES_Dtot / fD, ES_Ntot / fN
+    CC_d, CC_n = CC_Dtot / fD, CC_Ntot / fN
+    asymm_ES     = dn_asymmetry(ES_Dtot, ES_Ntot, fD, fN)
+    eff_asymm_ES = ES_d + ES_n == 0 ? 0.0 : 2 * (ES_d - ES_n) / (ES_d + ES_n + 4 * ES_bg_aboveThreshold)
+    asymm_CC     = dn_asymmetry(CC_Dtot, CC_Ntot, fD, fN)
+    eff_asymm_CC = CC_d + CC_n == 0 ? 0.0 : 2 * (CC_d - CC_n) / (CC_d + CC_n + 4 * CC_bg_aboveThreshold)
 
     true_parameters_det[:ES_asymmetry] = asymm_ES
     true_parameters_det[:CC_asymmetry] = asymm_CC
@@ -254,11 +259,11 @@ for (det_name, det) in detector_configs
         det.ES_mode && @logmsg Setup "  Total ES data above threshold: $(sci_notation(sum(ES_combined[index_ES_det:end])))"
         if det.CC_mode && (!det.inclusive_analysis || det.semi_inclusive_analysis)
             CC_total_above = sum(CC_combined[index_CC_det:end])
-            # CC_combined uses 0.5×BG (day) + 0.5×BG×Σexp_weights (night).
+            # CC_combined uses f_day×BG (day) + f_night×BG×Σexp_weights (night).
             # Subtract the same factored BG so the signal printout is correct
             # even when Σexp_weights < 1 (e.g. when cosz grid clips at the
             # exposure support boundary rather than -1).
-            _cc_bg_factored = CC_bg_aboveThreshold * 0.5 * (1.0 + sum(exposure_weights))
+            _cc_bg_factored = CC_bg_aboveThreshold * (DAY_FRACTION + NIGHT_FRACTION * sum(exposure_weights))
             CC_sig_above    = CC_total_above - _cc_bg_factored
             @logmsg Setup "  Total CC data above threshold: $(sci_notation(CC_total_above))"
             @logmsg Setup "    of which signal: $(sci_notation(CC_sig_above))"
@@ -270,11 +275,12 @@ for (det_name, det) in detector_configs
                                                   compute_shared_osc_probs(true_params_det, solarModel),
                                                   Val(det.ES_mode), Val(det.CC_mode))
     mc_counts_det = mc_effective_counts(det, responseMatrices_det, backgrounds_det, osc_samples_true,
-                                        ES_bg_norms_true_det, CC_bg_norms_true_det, exposure_weights)
+                                        ES_bg_norms_true_det, CC_bg_norms_true_det, exposure_weights,
+                                        (day = DAY_FRACTION, night = NIGHT_FRACTION))
     log_mc_counts(det, mc_counts_det, index_ES_det, index_CC_det)
 
     # ── Per-bin data / signal / background breakdown at the truth ──────────
-    night_factor = 0.5 * (1.0 + sum(exposure_weights))   # day + night total of a background spectrum
+    night_factor = DAY_FRACTION + NIGHT_FRACTION * sum(exposure_weights)   # day + night total of a background spectrum
     if det.ES_mode
         save_rate_breakdown(outFile, det_name, "ES", Ereco_bins_ES_ext.bins, index_ES_det, ES_combined,
                             backgrounds_det.ES, backgrounds_det.ES_conv, backgrounds_det.ES_par_counts,

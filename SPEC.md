@@ -23,7 +23,7 @@ Two marks on one item (e.g. 🟢🟡) mean part of it is tested and part is not;
 | [1. Oscillation probabilities](#1-oscillation-probabilities) | 3 | 3 | 2 | – |
 | [2. Earth model](#2-earth-model) | 6 | 2 | – | – |
 | [3. Cross sections](#3-cross-sections) | 5 | – | – | – |
-| [4. Detector response and event rates](#4-detector-response-and-event-rates) | 9 | 1 | 2 | – |
+| [4. Detector response and event rates](#4-detector-response-and-event-rates) | 10 | 1 | 2 | – |
 | [5. Likelihood](#5-likelihood) | 7 | 3 | 1 | – |
 | [6. Gradients](#6-gradients) | 3 | – | – | – |
 | [7. Sampling and I/O](#7-sampling-and-io) | 2 | 3 | 1 | – |
@@ -66,6 +66,7 @@ Partly tested items count in both columns.
 | [4.4](#44) | 🟢 | `expected_rates` shapes |
 | [4.4a](#44a) | 🟢 | Input samples checked at setup |
 | [4.5](#45) | 🟡🟣⚠️ | Event-level inputs; invariance to order and re-binning |
+| [4.6](#46) | 🟢 | Day/night split from the exposure file; A_DN per unit exposure |
 | [5.1](#51) | 🟢 | Poisson log L |
 | [5.2](#52) | 🟢 | Barlow–Beeston → Poisson |
 | [5.3](#53) | 🟢🟡 | Total = ES + CC; LLH scan |
@@ -342,6 +343,26 @@ and to re-binning the analysis grid.
 > histograms), which alias into a ±20% sawtooth per analysis bin (input audit, 2026-10-18). Setup warns
 > (4.4a) and runs anyway. New productions are expected.
 
+<a id="46"></a>
+#### 🟢 4.6 · Day/night exposure split
+- Day and night predictions use **f_day** and **f_night** from the solar exposure file: f_night =
+  ∫ exposure over cos z < 0 / ∫ exposure over the whole table, **f_day + f_night = 1** (exact for the
+  linear interpolant). Setup logs both. The shipped `inputs/solarExposure.csv` gives
+  **f_night = 0.4978** (± 5e-5; 0.497836), checked against an independent trapezoid on the CSV rows
+  (**rtol 1e-12**). A table that does not reach both sides of cos z = 0 is an error.
+- Signal (⁸B, hep; ES, CC, inclusive and mis-ID) and backgrounds alike: day = f_day·(R_day + BG),
+  night bin k = f_night·w_k·(R_k + BG), Σ_k w_k = 1 (`exposure_weights`); **rtol 1e-12**. The file is
+  taken to be weighted by time, so f_night is also the live-time night fraction the backgrounds use.
+- Day-night asymmetries (setup, derived mode, plots) are computed per unit exposure,
+  A_DN = 2(d − n)/(d + n) with d = D/f_day, n = N/f_night: **|A_DN| < 1e-14** with no Earth effect and
+  an unequal split.
+- A table mirror-symmetric in cos z gives f_night = **0.5 exactly**, and with it the likelihood
+  equals the one of the earlier hard-coded 0.5/0.5 split (regression variant `night_sym`, set to the
+  bf9ffec `night` values and matched bit for bit).
+
+> ✅ `test_tabulated.jl` (fractions), `test_response_and_backgrounds.jl` (folding, A_DN),
+> `derived_mode.jl` (fixture totals, derived A_DN and arrays), `regression_likelihood.jl night_sym`
+
 ---
 
 ## 5. Likelihood
@@ -372,7 +393,8 @@ Asimov: at the true parameters the log L is at its maximum and the expected coun
 <a id="55"></a>
 #### 🟢 5.5 · Full-likelihood regression
 The full-likelihood value at fixed points matches `tests/regression_reference.toml` (**rtol 1e-9**).
-- Variants: `night`, `legacy`, `night_da`, `night_bb`, `night_da_indep`.
+- Variants: `night`, `legacy`, `night_da`, `night_bb`, `night_da_indep`, `night_sym` (symmetric
+  exposure, f_night = 0.5, 4.6).
 - Points: the Asimov truth, two displaced points (`near`, `slow`: oscillation parameters and Earth
   norms moved), and `xsec` (the CC cross-section nuisances moved, 3.3).
 - Frozen synthetic samples (`tests/fixtures/`): ES and CC, two detectors, fixed and free backgrounds,

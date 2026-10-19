@@ -121,14 +121,9 @@ function DerivedDetector(dname)
                            Vector{Vector{Float64}}(), Vector{Vector{Float64}}())
 end
 
-# Day-night asymmetry of the signal above threshold (background removed: it is the same
-# 0.5·BG by day and by night in total).
-function dn_asymmetry(day, night, BG, idx)
-    bg = sum(BG[idx:end])
-    N = sum(selectdim(night, 2, idx:size(night, 2))) - 0.5 * bg   # energy is axis 2 of every night array
-    D = sum(selectdim(day, ndims(day), idx:size(day, ndims(day)))) - 0.5 * bg
-    return D + N == 0 ? 0.0 : 2 * (D - N) / (D + N)
-end
+# Day-night asymmetry of the signal above threshold, per unit exposure (background removed: it is
+# f_day·BG by day and f_night·BG over all night bins). dn_asymmetry is in propagation_core.jl (SPEC 4.6).
+dn_asymmetry(day, night, BG, idx) = dn_asymmetry(day, night, BG, idx, DAY_FRACTION, NIGHT_FRACTION)
 
 # One chain step for one detector. `thinned` steps also feed the diagnostics.
 function process_step!(dd::DerivedDetector, pars, osc, w, θ1, θ2, thinned::Bool)
@@ -154,12 +149,12 @@ function process_step!(dd::DerivedDetector, pars, osc, w, θ1, θ2, thinned::Boo
     # the posterior-mean background, so the bg-norm spread widens the quantile band.
     push!(dd.ESday_samples, dd.angular ? vec(sum(@view(r.ES_day[:, dd.iES:end]), dims=1)) :
                                          r.ES_day[dd.iES:end])
-    acc_add!(acc, :BGESday_m1, w .* (0.5 .* r.BG_ES_tot))
-    acc_add!(acc, :BGESday_m2, w .* (0.5 .* r.BG_ES_tot) .^ 2)
+    acc_add!(acc, :BGESday_m1, w .* (DAY_FRACTION .* r.BG_ES_tot))
+    acc_add!(acc, :BGESday_m2, w .* (DAY_FRACTION .* r.BG_ES_tot) .^ 2)
     if dd.has_CC
         push!(dd.CCday_samples, r.CC_day[dd.iCC:end])
-        acc_add!(acc, :BGCCday_m1, w .* (0.5 .* r.BG_CC_tot))
-        acc_add!(acc, :BGCCday_m2, w .* (0.5 .* r.BG_CC_tot) .^ 2)
+        acc_add!(acc, :BGCCday_m1, w .* (DAY_FRACTION .* r.BG_CC_tot))
+        acc_add!(acc, :BGCCday_m2, w .* (DAY_FRACTION .* r.BG_CC_tot) .^ 2)
     end
 
     # --- per-bin and total log-likelihood moments, centred on the Asimov reference ---
@@ -254,8 +249,9 @@ function finalize_detector(dd::DerivedDetector, N, mean_sin2, var_sin2, mean_dm2
         out[Symbol(ch, "night_pp_shape")] = collect(size(night_mean))
         out[Symbol("BG", ch, "day_pp_mean")] = bg_mean
         out[Symbol("BG", ch, "day_pp_var")]  = max.(acc[Symbol("BG", ch, "day_m2")] ./ N .- bg_mean .^ 2, 0.0)
-        # Night bg per (cosz, Ereco) = exposure_weights ⊗ day bg (night bg is 0.5·BG·exposure_weights).
-        out[Symbol("BG", ch, "night_pp_mean")] = exposure_weights .* bg_mean'
+        # Night bg per (cosz, Ereco) = (f_night/f_day)·exposure_weights ⊗ day bg (day bg is f_day·BG,
+        # night bg f_night·BG·exposure_weights; SPEC 4.6).
+        out[Symbol("BG", ch, "night_pp_mean")] = (NIGHT_FRACTION / DAY_FRACTION) .* (exposure_weights .* bg_mean')
         n_E = ch == "ES" && dd.angular ? size(day_mean, 2) : length(day_mean)
         samples = ch == "ES" ? dd.ESday_samples : dd.CCday_samples
         for (k, v) in quantile_bands(samples, bg_mean, idx, n_E, sample_weights)
@@ -268,8 +264,8 @@ function finalize_detector(dd::DerivedDetector, N, mean_sin2, var_sin2, mean_dm2
         if ch == "ES" && dd.angular
             out[:signal_ESday], out[:signal_ESnight] = day_t, night_t
         else
-            out[Symbol("signal_", ch, "day")]   = day_t .- 0.5 .* BG
-            out[Symbol("signal_", ch, "night")] = night_t .- 0.5 .* (BG' .* exposure_weights)
+            out[Symbol("signal_", ch, "day")]   = day_t .- DAY_FRACTION .* BG
+            out[Symbol("signal_", ch, "night")] = night_t .- NIGHT_FRACTION .* (BG' .* exposure_weights)
         end
         out[Symbol("data_", ch, "day")]   = getfield(li.nObserved, Symbol(ch, "_day"))
         out[Symbol("data_", ch, "night")] = getfield(li.nObserved, Symbol(ch, "_night"))
@@ -284,16 +280,16 @@ function finalize_detector(dd::DerivedDetector, N, mean_sin2, var_sin2, mean_dm2
     if dd.has_CC
         out[:CC_asymmetry] = dd.asym_CC
         # Per-component CC background day spectra at the Asimov truth, for stacked plots,
-        # mirroring normalize_backgrounds (0.5 day factor, CC_conv × norm for free norms).
+        # mirroring normalize_backgrounds (f_day day factor, CC_conv × norm for free norms).
         comps = Vector{Vector{Float64}}()
         ni = 1
         for (i, beh) in enumerate(li.BG.CC_par_counts)
             if beh != 0
                 nrm = dd.true_params[Symbol("$(dd.name)_CC_bg_norm_$ni")]
-                push!(comps, 0.5 .* li.BG.CC[i] .* (li.BG.CC_conv[i] * nrm))
+                push!(comps, DAY_FRACTION .* li.BG.CC[i] .* (li.BG.CC_conv[i] * nrm))
                 ni += 1
             else
-                push!(comps, 0.5 .* li.BG.CC[i])
+                push!(comps, DAY_FRACTION .* li.BG.CC[i])
             end
         end
         out[:CCbg_comp_day]   = isempty(comps) ? zeros(Float64, length(out[:signal_CCday]), 0) : reduce(hcat, comps)

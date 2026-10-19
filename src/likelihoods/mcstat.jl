@@ -34,9 +34,10 @@ using Statistics: median
 
 # ── effective MC counts per E_reco bin, at setup ─────────────────────────────────────────────
 
-# True-energy rate entering the reco folding, day + all night bins (the 0.5 day/night split of
-# apply_day_response / apply_night_response).
-_true_total(day::AbstractVector, night::AbstractMatrix) = 0.5 .* (Float64.(day) .+ vec(sum(Float64.(night), dims=1)))
+# True-energy rate entering the reco folding, day + all night bins, with the day/night split of the
+# exposure that apply_day_response / apply_night_response use (fr = (day = f_day, night = f_night)).
+_true_total(day::AbstractVector, night::AbstractMatrix, fr) =
+    fr.day .* Float64.(day) .+ fr.night .* vec(sum(Float64.(night), dims=1))
 
 """
     signal_column(T, counts, eff, tot, g) -> (c, v)
@@ -82,16 +83,17 @@ effective_count(M, V) = [V[j] > 0 && M[j] > 0 ? M[j]^2 / V[j] : Inf for j in eac
 
 """
     mc_effective_counts(det, responseMatrices, backgrounds, osc_samples, ES_norms_true,
-                        CC_norms_true, exposure_weights) -> (ES = (a, M, V), CC = (a, M, V))
+                        CC_norms_true, exposure_weights, fractions) -> (ES = (a, M, V), CC = (a, M, V))
 
 Per E_reco bin: the predicted events M (day + night) at the truth, rebuilt from its signal and
 background components, their total MC variance V and the effective MC count a = M²/V (Inf when
 V = 0). Covers plain, angular (forward fraction), inclusive and semi-inclusive modes; the
 semi-inclusive mis-ID term enters M with no MC variance (its response is a product of two
-already-smoothed matrices).
+already-smoothed matrices). `fractions = (day = f_day, night = f_night)` is the day/night split of the
+exposure (SPEC 4.6).
 """
-function mc_effective_counts(det, R, bg, osc, ES_norms_true, CC_norms_true, expo)
-    nf  = 0.5 * (1 + sum(expo))
+function mc_effective_counts(det, R, bg, osc, ES_norms_true, CC_norms_true, expo, fr)
+    nf  = fr.day + fr.night * sum(expo)   # day + night total of a background spectrum
     mc  = R.mc
     semi, incl = det.semi_inclusive_analysis, det.inclusive_analysis
     f_above = semi ? R.CC_split.above : 1.0
@@ -102,13 +104,13 @@ function mc_effective_counts(det, R, bg, osc, ES_norms_true, CC_norms_true, expo
         n = R.bins.ES.bin_number
         g = det.angular_reco ? vec(sum(R.ES.angular[mc.ang_mask, :], dims=1)) : ones(n)
         M, V = zeros(n), zeros(n)
-        for (T, m, eff) in ((_true_total(osc.ES.nue_day, osc.ES.nue_night), mc.ES_nue, R.eff.ES_nue),
-                            (_true_total(osc.ES.nuother_day, osc.ES.nuother_night), mc.ES_nuother, R.eff.ES_nuother))
+        for (T, m, eff) in ((_true_total(osc.ES.nue_day, osc.ES.nue_night, fr), mc.ES_nue, R.eff.ES_nue),
+                            (_true_total(osc.ES.nuother_day, osc.ES.nuother_night, fr), mc.ES_nuother, R.eff.ES_nuother))
             c, v = signal_column(T, m.counts, eff, m.tot, g)
             M .+= c; V .+= v
         end
         if (incl || semi) && det.CC_mode
-            c, v = signal_column(_true_total(osc.CC.day, osc.CC.night), mc.CC_incl.counts, R.eff.CC_incl,
+            c, v = signal_column(_true_total(osc.CC.day, osc.CC.night, fr), mc.CC_incl.counts, R.eff.CC_incl,
                                  mc.CC_incl.tot, fill(f_above, n))
             M .+= c; V .+= v
         end
@@ -120,14 +122,14 @@ function mc_effective_counts(det, R, bg, osc, ES_norms_true, CC_norms_true, expo
     if det.CC_mode && (!incl || semi)
         n = R.bins.CC.bin_number
         M, V = zeros(n), zeros(n)
-        c, v = signal_column(_true_total(osc.CC.day, osc.CC.night), mc.CC.counts, R.eff.CC, mc.CC.tot, fill(f_below, n))
+        c, v = signal_column(_true_total(osc.CC.day, osc.CC.night, fr), mc.CC.counts, R.eff.CC, mc.CC.tot, fill(f_below, n))
         M .+= c; V .+= v
         for (c, rv) in zip(bg_components(bg.CC, bg.CC_conv, bg.CC_par_counts, CC_norms_true, nf * f_below), bg.CC_relvar)
             M .+= c; V .+= c .^ 2 .* rv
         end
         if semi && det.ES_mode   # backward ES mis-identified as CC (no MC variance attributed)
-            for (T, Rm) in ((_true_total(osc.ES.nue_day, osc.ES.nue_night), R.CC_misID_nue),
-                            (_true_total(osc.ES.nuother_day, osc.ES.nuother_night), R.CC_misID_nuother))
+            for (T, Rm) in ((_true_total(osc.ES.nue_day, osc.ES.nue_night, fr), R.CC_misID_nue),
+                            (_true_total(osc.ES.nuother_day, osc.ES.nuother_night, fr), R.CC_misID_nuother))
                 M .+= vec(sum(T .* Rm, dims=1)) .* R.eff.CC
             end
         end

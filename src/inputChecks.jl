@@ -114,7 +114,7 @@ end
 
 Write `<path_prefix>_<det>_<channel>_breakdown.csv`: per Ereco bin the Asimov data (day + all
 night bins), each background component at its true normalisation, their sum and the signal
-(data − backgrounds). Logs the in-window totals. `night_factor` = 0.5·(1 + Σ exposure_weights)
+(data − backgrounds). Logs the in-window totals. `night_factor` = f_day + f_night·Σ exposure_weights
 turns a background spectrum into its day + night total.
 """
 function save_rate_breakdown(path_prefix, det_name, channel, edges_GeV, index, data_total, BG_raw,

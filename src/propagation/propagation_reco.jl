@@ -5,7 +5,8 @@ Compute ES day and night event rates (including backgrounds), or zero arrays if
 `det_flags.ES_mode` is false or `oscSamplesES === nothing`.
 
 `responseMatrices` must carry `.eff.ES_nue`, `.eff.ES_nuother`, `.bins.ES`, `.bins.cos_scatter`.
-Uses shared constants: `N_COSZ_BINS`, `exposure_weights`.
+Uses shared constants: `N_COSZ_BINS`, `exposure_weights`, `DAY_FRACTION`, `NIGHT_FRACTION`
+(the day/night split of the exposure, SPEC 4.6; signal and background alike).
 """
 function compute_ES_event_rates(oscSamplesES, responseMatrices, BG_ES, det_flags)
     Ereco_bins_ES = responseMatrices.bins.ES
@@ -17,13 +18,13 @@ function compute_ES_event_rates(oscSamplesES, responseMatrices, BG_ES, det_flags
     ES_nue_eff    = responseMatrices.eff.ES_nue
     ES_nuother_eff = responseMatrices.eff.ES_nuother
 
-    eventRate_ES_nue_day     = apply_day_response(oscSamplesES.nue_day,     responseMatrices.ES.nue,     ES_nue_eff)
-    eventRate_ES_nue_night   = apply_night_response(oscSamplesES.nue_night, responseMatrices.ES.nue,     ES_nue_eff)
-    eventRate_ES_nuother_day   = apply_day_response(oscSamplesES.nuother_day,   responseMatrices.ES.nuother, ES_nuother_eff)
-    eventRate_ES_nuother_night = apply_night_response(oscSamplesES.nuother_night, responseMatrices.ES.nuother, ES_nuother_eff)
+    eventRate_ES_nue_day     = apply_day_response(oscSamplesES.nue_day,     responseMatrices.ES.nue,     ES_nue_eff; scale=DAY_FRACTION)
+    eventRate_ES_nue_night   = apply_night_response(oscSamplesES.nue_night, responseMatrices.ES.nue,     ES_nue_eff; scale=NIGHT_FRACTION)
+    eventRate_ES_nuother_day   = apply_day_response(oscSamplesES.nuother_day,   responseMatrices.ES.nuother, ES_nuother_eff; scale=DAY_FRACTION)
+    eventRate_ES_nuother_night = apply_night_response(oscSamplesES.nuother_night, responseMatrices.ES.nuother, ES_nuother_eff; scale=NIGHT_FRACTION)
 
-    eventRate_ES_day   = (eventRate_ES_nue_day   .+ eventRate_ES_nuother_day)   .+ 0.5 .* BG_ES
-    eventRate_ES_night = (eventRate_ES_nue_night .+ eventRate_ES_nuother_night) .+ 0.5 .* (BG_ES' .* exposure_weights)
+    eventRate_ES_day   = (eventRate_ES_nue_day   .+ eventRate_ES_nuother_day)   .+ DAY_FRACTION .* BG_ES
+    eventRate_ES_night = (eventRate_ES_nue_night .+ eventRate_ES_nuother_night) .+ NIGHT_FRACTION .* (BG_ES' .* exposure_weights)
 
     return eventRate_ES_day, eventRate_ES_night
 end
@@ -46,16 +47,16 @@ function compute_ES_angular_event_rates(oscSamplesES, responseMatrices, BG_ES, d
     ES_nue_eff    = responseMatrices.eff.ES_nue
     ES_nuother_eff = responseMatrices.eff.ES_nuother
 
-    eventRate_ES_nue_day     = apply_day_response(oscSamplesES.nue_day,     responseMatrices.ES.nue,     ES_nue_eff)
-    eventRate_ES_nue_night   = apply_night_response(oscSamplesES.nue_night, responseMatrices.ES.nue,     ES_nue_eff)
-    eventRate_ES_nuother_day   = apply_day_response(oscSamplesES.nuother_day,   responseMatrices.ES.nuother, ES_nuother_eff)
-    eventRate_ES_nuother_night = apply_night_response(oscSamplesES.nuother_night, responseMatrices.ES.nuother, ES_nuother_eff)
+    eventRate_ES_nue_day     = apply_day_response(oscSamplesES.nue_day,     responseMatrices.ES.nue,     ES_nue_eff; scale=DAY_FRACTION)
+    eventRate_ES_nue_night   = apply_night_response(oscSamplesES.nue_night, responseMatrices.ES.nue,     ES_nue_eff; scale=NIGHT_FRACTION)
+    eventRate_ES_nuother_day   = apply_day_response(oscSamplesES.nuother_day,   responseMatrices.ES.nuother, ES_nuother_eff; scale=DAY_FRACTION)
+    eventRate_ES_nuother_night = apply_night_response(oscSamplesES.nuother_night, responseMatrices.ES.nuother, ES_nuother_eff; scale=NIGHT_FRACTION)
 
     eventRate_ES_day   = eventRate_ES_nue_day   .+ eventRate_ES_nuother_day
     eventRate_ES_night = eventRate_ES_nue_night .+ eventRate_ES_nuother_night
 
     eventRate_ES_day_angular_signal     = responseMatrices.ES.angular .* vec(eventRate_ES_day)'
-    eventRate_ES_day_angular_background = responseMatrices.BG.angular .* vec(BG_ES)' .* 0.5
+    eventRate_ES_day_angular_background = responseMatrices.BG.angular .* vec(BG_ES)' .* DAY_FRACTION
     eventRate_ES_day_angular = eventRate_ES_day_angular_signal .+ eventRate_ES_day_angular_background
 
     ncos  = cos_scatter_bins.bin_number
@@ -65,7 +66,7 @@ function compute_ES_angular_event_rates(oscSamplesES, responseMatrices, BG_ES, d
                                             reshape(eventRate_ES_night', 1, nErec, ncosz)
     eventRate_ES_night_angular_background = reshape(responseMatrices.BG.angular, ncos, nErec, 1) .*
                                             reshape(reshape(BG_ES, nErec, 1) .* reshape(exposure_weights, 1, ncosz), 1, nErec, ncosz)
-    eventRate_ES_night_angular = eventRate_ES_night_angular_signal .+ eventRate_ES_night_angular_background .* 0.5
+    eventRate_ES_night_angular = eventRate_ES_night_angular_signal .+ eventRate_ES_night_angular_background .* NIGHT_FRACTION
 
     # Angular cut from det_flags
     cos_cut = det_flags.angular_cos_cut
@@ -95,8 +96,8 @@ function compute_CC_event_rates(oscSamplesCC, responseMatrices, BG_CC, det_flags
 
     CC_eff = responseMatrices.eff.CC
 
-    eventRate_CC_day   = apply_day_response(oscSamplesCC.day,   responseMatrices.CC, CC_eff) .+ 0.5 .* BG_CC
-    eventRate_CC_night = apply_night_response(oscSamplesCC.night, responseMatrices.CC, CC_eff) .+ 0.5 .* (BG_CC' .* exposure_weights)
+    eventRate_CC_day   = apply_day_response(oscSamplesCC.day,   responseMatrices.CC, CC_eff; scale=DAY_FRACTION) .+ DAY_FRACTION .* BG_CC
+    eventRate_CC_night = apply_night_response(oscSamplesCC.night, responseMatrices.CC, CC_eff; scale=NIGHT_FRACTION) .+ NIGHT_FRACTION .* (BG_CC' .* exposure_weights)
 
     return eventRate_CC_day, eventRate_CC_night
 end
@@ -123,8 +124,8 @@ function compute_CC_inclusive_event_rates(oscSamplesCC, responseMatrices, det_fl
     end
 
     CC_incl_eff = responseMatrices.eff.CC_incl
-    cc_day   = apply_day_response(oscSamplesCC.day,   responseMatrices.CC_inclusive, CC_incl_eff)
-    cc_night = apply_night_response(oscSamplesCC.night, responseMatrices.CC_inclusive, CC_incl_eff)
+    cc_day   = apply_day_response(oscSamplesCC.day,   responseMatrices.CC_inclusive, CC_incl_eff; scale=DAY_FRACTION)
+    cc_night = apply_night_response(oscSamplesCC.night, responseMatrices.CC_inclusive, CC_incl_eff; scale=NIGHT_FRACTION)
 
     if det_flags.angular_reco
         ncos  = cos_scatter_bins.bin_number
@@ -162,10 +163,10 @@ function compute_ES_misID_CC_event_rates(oscSamplesES, responseMatrices, det_fla
                fill(0.0, (N_COSZ_BINS, Ereco_bins_CC.bin_number))
     end
     CC_eff = responseMatrices.eff.CC
-    misID_nue_day     = apply_day_response(oscSamplesES.nue_day,       responseMatrices.CC_misID_nue,     CC_eff)
-    misID_nue_night   = apply_night_response(oscSamplesES.nue_night,   responseMatrices.CC_misID_nue,     CC_eff)
-    misID_nuoth_day   = apply_day_response(oscSamplesES.nuother_day,   responseMatrices.CC_misID_nuother, CC_eff)
-    misID_nuoth_night = apply_night_response(oscSamplesES.nuother_night, responseMatrices.CC_misID_nuother, CC_eff)
+    misID_nue_day     = apply_day_response(oscSamplesES.nue_day,       responseMatrices.CC_misID_nue,     CC_eff; scale=DAY_FRACTION)
+    misID_nue_night   = apply_night_response(oscSamplesES.nue_night,   responseMatrices.CC_misID_nue,     CC_eff; scale=NIGHT_FRACTION)
+    misID_nuoth_day   = apply_day_response(oscSamplesES.nuother_day,   responseMatrices.CC_misID_nuother, CC_eff; scale=DAY_FRACTION)
+    misID_nuoth_night = apply_night_response(oscSamplesES.nuother_night, responseMatrices.CC_misID_nuother, CC_eff; scale=NIGHT_FRACTION)
     return misID_nue_day .+ misID_nuoth_day,
            misID_nue_night .+ misID_nuoth_night
 end

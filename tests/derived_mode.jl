@@ -145,6 +145,31 @@ end
     end
 end
 
+# --- SPEC 4.6: the split of the shipped exposure file, and day/night totals built with it ---
+fD, fN = Base.invokelatest(() -> (DAY_FRACTION, NIGHT_FRACTION))   # used below too
+@testset "day/night exposure split (SPEC 4.6)" begin
+    @test fN ≈ 0.4978 atol=5e-5
+    @test fD + fN == 1
+    li = Base.invokelatest(() -> detector_outputs["FXA"].likelihood_inputs)
+    truth = Base.invokelatest(() -> true_params)
+    r = Base.invokelatest(expected_rates, li, truth)
+    probs = Base.invokelatest(compute_shared_osc_probs, truth, solarModel)
+    osc = Base.invokelatest(compute_oscillated_samples, li.MC_no_osc, truth, probs)
+    M = li.Mreco
+    # rates per unit (full) exposure, folded with scale 1
+    fold_d(x, R, e) = Base.invokelatest(apply_day_response, x, R, e; scale=1.0)
+    fold_n(x, R, e) = Base.invokelatest(apply_night_response, x, R, e; scale=1.0)
+    R_CC_day, R_CC_night = fold_d(osc.CC.day, M.CC, M.eff.CC), fold_n(osc.CC.night, M.CC, M.eff.CC)
+    R_ES_day = fold_d(osc.ES.nue_day, M.ES.nue, M.eff.ES_nue) .+ fold_d(osc.ES.nuother_day, M.ES.nuother, M.eff.ES_nuother)
+    R_ES_night = fold_n(osc.ES.nue_night, M.ES.nue, M.eff.ES_nue) .+ fold_n(osc.ES.nuother_night, M.ES.nuother, M.eff.ES_nuother)
+    for (day, night, Rd, Rn, BG) in ((r.CC_day, r.CC_night, R_CC_day, R_CC_night, r.BG_CC_tot),
+                                     (r.ES_day, r.ES_night, R_ES_day, R_ES_night, r.BG_ES_tot))
+        @test day ≈ fD .* (Rd .+ BG) rtol=1e-12
+        @test night ≈ fN .* (Rn .+ BG' .* exposure_weights) rtol=1e-12
+        @test day .+ vec(sum(night, dims=1)) ≈ fD .* Rd .+ fN .* vec(sum(Rn, dims=1)) .+ BG .* (fD + fN * sum(exposure_weights)) rtol=1e-12
+    end
+end
+
 # --- reference values, computed independently of the derived-mode aggregation ---
 pars = [Base.invokelatest(() -> merge(true_params, NamedTuple{Tuple(Symbol.(keys(s)))}(Tuple(values(s)))))
         for s in steps]
@@ -165,11 +190,12 @@ end
 
 chains_mc(has_CC) = has_CC ? (("ES", 0), ("CC", 0)) : (("ES", 0),)
 
+# A_DN per unit exposure (SPEC 4.6)
 function asym(day, night, bg, idx)
     b = sum(bg[idx:end])
-    D = sum(day[(ndims(day) == 1 ? (idx:length(day),) : (:, idx:size(day, 2)))...]) - 0.5b
-    N = sum(night[:, idx:end, (ndims(night) == 3 ? (:,) : ())...]) - 0.5b
-    return 2 * (D - N) / (D + N)
+    D = sum(day[(ndims(day) == 1 ? (idx:length(day),) : (:, idx:size(day, 2)))...]) - fD * b
+    N = sum(night[:, idx:end, (ndims(night) == 3 ? (:,) : ())...]) - fN * b
+    return 2 * (D / fD - N / fN) / (D / fD + N / fN)
 end
 above(x, idx) = (y = copy(x); ndims(y) == 1 ? (y[1:idx-1] .= 0) : (y[:, 1:idx-1, (ndims(y) == 3 ? (:,) : ())...] .= 0); y)
 
@@ -210,9 +236,9 @@ saved = jldopen(f -> Dict(k => f[k] for k in keys(f) if startswith(k, "derived_"
                     @test saved[key("$(ch)$(t)_pp_var")]  ≈ wvar(xs)  rtol=1e-6 atol=1e-6 * maximum(abs, wmean(xs))^2
                 end
                 BG = Symbol("BG_", ch, "_tot")
-                bg_mean = wmean([0.5 .* getfield(r, BG) for r in rates])
+                bg_mean = wmean([fD .* getfield(r, BG) for r in rates])
                 @test saved[key("BG$(ch)day_pp_mean")] ≈ bg_mean rtol=1e-10
-                @test saved[key("BG$(ch)night_pp_mean")] ≈ exposure_weights .* bg_mean' rtol=1e-10
+                @test saved[key("BG$(ch)night_pp_mean")] ≈ (fN / fD) .* exposure_weights .* bg_mean' rtol=1e-10
 
                 # 1/2/3σ bands of (total day rate − posterior-mean background), per bin above threshold
                 angular = ch == "ES" && cfgd.angular_reco
@@ -225,7 +251,8 @@ saved = jldopen(f -> Dict(k => f[k] for k in keys(f) if startswith(k, "derived_"
 
                 # signal-only rates at the truth (angular ES keeps the background by design)
                 if !angular
-                    @test saved[key("signal_$(ch)day")] ≈ getfield(r_true, Symbol(ch, "_day")) .- 0.5 .* getfield(r_true, BG) rtol=1e-10
+                    @test saved[key("signal_$(ch)day")] ≈ getfield(r_true, Symbol(ch, "_day")) .- fD .* getfield(r_true, BG) rtol=1e-10
+                    @test saved[key("signal_$(ch)night")] ≈ getfield(r_true, Symbol(ch, "_night")) .- fN .* (getfield(r_true, BG)' .* exposure_weights) rtol=1e-10
                 end
             end
 
@@ -244,14 +271,14 @@ saved = jldopen(f -> Dict(k => f[k] for k in keys(f) if startswith(k, "derived_"
             if has_CC
                 # the CC background components add up to the total CC background (day, truth)
                 comps = saved[key("CCbg_comp_day")]
-                @test vec(sum(comps, dims=2)) ≈ 0.5 .* r_true.BG_CC_tot rtol=1e-10
+                @test vec(sum(comps, dims=2)) ≈ fD .* r_true.BG_CC_tot rtol=1e-10
                 @test length(split(saved[key("CCbg_comp_names")], ",")) == size(comps, 2)
                 @test saved[key("data_CCday")] == li.nObserved.CC_day
             end
 
             # setup's per-bin breakdown CSVs (src/inputChecks.jl): components add up to the total
             # background at the truth (day + all night bins; CC × backward fraction if semi-inclusive)
-            nf = 0.5 * (1 + sum(exposure_weights))
+            nf = fD + fN * sum(exposure_weights)
             for (ch, _) in chans
                 bd = CSV.read(joinpath(tmp, "derived_$(dname)_$(ch)_breakdown.csv"), DataFrame)
                 bgcols = filter(c -> startswith(c, "bg_"), names(bd))

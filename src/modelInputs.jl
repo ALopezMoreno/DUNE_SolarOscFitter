@@ -50,13 +50,51 @@ end
 Solar exposure vs cos z: a headerless CSV of (cos z, relative exposure); every row is a point.
 Evaluating outside the table is an error. (It used Flat() extrapolation before.) The integrals
 start at the lowest night cos z of this file (exposure.jl), and NightOsc clamps its zenith nodes to
-the bin range, which they can miss by 1 ulp (night/binning.jl). The table must cover
-[lowest night cos z, 0]: a night-only file has to include cos z = 0.
+the bin range, which they can miss by 1 ulp (night/binning.jl). The table must reach both sides of
+cos z = 0: the day/night split of the exposure comes from it (exposure_day_night_fractions).
 """
 function load_exposure(path::AbstractString)
     cosz, w = read_numeric_table(path; name = "solar exposure", ncols = 2, header = false)
     return TabulatedInput(cosz, w; name = "solar exposure", source = path, units = "cos z",
                           extrapolation = :error, nonnegative = true)
+end
+
+"""
+    exposure_day_night_fractions(expo::TabulatedInput) -> (day = f_day, night = f_night)
+
+Day/night split of the exposure (SPEC 4.6): f_night = ∫ exposure over cos z < 0 divided by ∫
+exposure over the whole table, f_day = 1 − f_night (night = Sun below the horizon, cos z < 0). The
+table is taken to be weighted by time (the fraction of time the Sun spends at each cos z), so f_night
+is also the night fraction of the live time, which is what the backgrounds use.
+
+The integrals are exact for the linear interpolant: trapezoids on the nodes plus cos z = 0, each side
+summed outward from cos z = 0, so a table mirror-symmetric in cos z gives exactly 0.5. Errors if the
+table does not reach both sides of the horizon (a night-only file cannot fix the split).
+"""
+function exposure_day_night_fractions(expo::TabulatedInput)
+    x, y = expo.x, expo.y
+    w = _where(expo.name, expo.source)
+    (x[1] < 0 && x[end] > 0) ||
+        error("$w: the day/night exposure split needs a table on both sides of cos z = 0 " *
+              "(it covers [$(x[1]), $(x[end])])")
+    y0 = Float64(expo.itp(0.0))
+    k = searchsortedlast(x, 0.0)            # x[k] ≤ 0 < x[k+1]
+    night = 0.0                             # outward from 0: [x[k], 0], then [x[k-1], x[k]], …
+    xa, ya = 0.0, y0
+    for i in k:-1:1
+        night += (xa - x[i]) * (ya + y[i]) / 2
+        xa, ya = x[i], y[i]
+    end
+    day = 0.0
+    xa, ya = 0.0, y0
+    for i in k+1:length(x)
+        day += (x[i] - xa) * (ya + y[i]) / 2
+        xa, ya = x[i], y[i]
+    end
+    total = night + day
+    total > 0 || error("$w: zero total exposure")
+    f_night = night / total
+    return (day = 1 - f_night, night = f_night)
 end
 
 """

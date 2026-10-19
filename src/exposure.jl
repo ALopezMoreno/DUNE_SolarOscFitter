@@ -1,4 +1,5 @@
 using QuadGK          # For numerical integration
+using Printf
 include(joinpath(@__DIR__, "modelInputs.jl"))   # load_exposure
 
 # Solar exposure vs cos z (headerless CSV: cos(zenith), relative_exposure; every row is a point).
@@ -31,3 +32,16 @@ const exposure_weights = reshape(
     compute_integral.(bin_edges[1:end-1], bin_edges[2:end]) ./ exposure_intp_int,
     :, 1
 )
+
+# Day/night split of the exposure (SPEC 4.6), from the whole table: f_night = ∫_{cos z<0} / ∫_all,
+# f_day = 1 − f_night. Every day term (signal and background) carries DAY_FRACTION and every night
+# term NIGHT_FRACTION (the night rows are further split by exposure_weights, which sum to 1).
+# Assumption: the exposure file is weighted by time (fraction of time the Sun spends at each cos z,
+# no 1/r² seasonal flux weighting), so its night fraction is also the live-time night fraction that
+# the backgrounds use. Setup-time constants (const globals, like exposure_weights): the likelihood
+# reads them as constants, which keeps it type-stable for Enzyme.
+const DAY_FRACTION, NIGHT_FRACTION = let f = exposure_day_night_fractions(exposure_intp)
+    f.day, f.night
+end
+@logmsg Setup @sprintf("Exposure day/night split from %s: f_day = %.6f, f_night = %.6f",
+                       solarExposureFile, DAY_FRACTION, NIGHT_FRACTION)

@@ -13,6 +13,10 @@ variant: "night"  (default night calculation, NightOsc)
          "legacy" (3-flavour per-path NumOsc night calculation)
          "night_da", "night_bb", "night_da_indep" (night with the MC statistical uncertainty:
           Dembinski–Abdelmotteleb or Conway's Barlow–Beeston, shared or independent day/night)
+         "night_sym" (night with tests/fixtures/solarExposure_symmetric.csv: the shipped night
+          exposure mirrored onto the day side, f_day = f_night = 0.5 exactly, SPEC 4.6. Its
+          reference was set to the "night" values of the hard-coded 0.5/0.5 split (bf9ffec) and
+          reproduced to rtol 1e-12 when the split moved to the exposure file.)
 --update rewrites the reference for this variant instead of checking it.
 --grad   also checks the Enzyme reverse-mode gradient of the likelihood against ForwardDiff
          at the "near" point with the CC xsec nuisances moved (variant "night" only; the first Enzyme call compiles for minutes).
@@ -32,6 +36,9 @@ const VARIANTS  = Dict(
     "night_bb"       => Dict{String,Any}("nightOsc" => true, "mc_stat_likelihood" => "BarlowBeeston"),
     "night_da_indep" => Dict{String,Any}("nightOsc" => true, "mc_stat_likelihood" => "DembinskiAbdelmotteleb",
                                          "mc_stat_day_night" => "independent"),
+    # day/night split of 0.5 from a symmetric exposure file (SPEC 4.6)
+    "night_sym"      => Dict{String,Any}("nightOsc" => true,
+                                         "solar_exposure_file" => "tests/fixtures/solarExposure_symmetric.csv"),
 )
 const RTOL = 1e-9
 
@@ -125,7 +132,8 @@ for (name, v) in sort(collect(llh_values))
     r = ref[variant][name]
     ok = isapprox(v, r; rtol=RTOL, atol=1e-9)
     global failed |= !ok
-    @printf("%-7s %-6s  llh = %.12g  reference = %.12g  %s\n", variant, name, v, r, ok ? "ok" : "MISMATCH")
+    @printf("%-7s %-6s  llh = %.16g  reference = %.16g  rel. diff %.1e  %s\n", variant, name, v, r,
+            abs(v - r) / max(abs(r), 1e-300), ok ? "ok" : "MISMATCH")
 end
 if check_grad
     startswith(variant, "night") || error("--grad needs a night variant (legacy is not Enzyme-differentiable)")

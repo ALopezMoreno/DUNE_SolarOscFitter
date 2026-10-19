@@ -155,7 +155,7 @@ their first row; tables that need a header (the CC cross section) refuse a numer
 |---|---|---|---|
 | ⁸B, hep spectra | `flux_model_file` | `:error` | (0, 0) added, and (E_true max, 0) when `range_Etrue` ends above the table; normalised to unit integral |
 | CC cross section | `cc_xsec_file` | `:error` | used as given |
-| Solar exposure | `solar_exposure_file` | `:error` (was flat) | integrals start at the lowest night cos z of the file; NightOsc clamps its zenith nodes to the bins (1-ulp round trip); the file must cover [lowest night cos z, 0] |
+| Solar exposure | `solar_exposure_file` | `:error` (was flat) | integrals start at the lowest night cos z of the file; NightOsc clamps its zenith nodes to the bins (1-ulp round trip); the file must reach both sides of cos z = 0: it also fixes the day/night split (below) |
 | Earth potential | `earth_model_file` | `:error` | radii × (1 + 1e-10), so the surface stays inside |
 | Potential along a makePaths chord | (built per path) | `:error` (was flat) | evaluated at interior Gauss–Legendre nodes only |
 
@@ -181,14 +181,40 @@ If either returns `nothing`, an error is raised (the threshold exceeds all bins 
 **Day-night asymmetry** (computed at Asimov point, stored as `true_params`):
 
 ```
-ES_Ntot = sum(ES_night[:, index_ES:end]) − 0.5 × ES_bg_aboveThreshold
-ES_Dtot = sum(ES_day[index_ES:end])      − 0.5 × ES_bg_aboveThreshold
+ES_Ntot = sum(ES_night[:, index_ES:end]) − f_night × ES_bg_aboveThreshold
+ES_Dtot = sum(ES_day[index_ES:end])      − f_day   × ES_bg_aboveThreshold
+d, n    = ES_Dtot / f_day, ES_Ntot / f_night          # per unit exposure
 
-A_ES = 2 × (ES_Dtot − ES_Ntot) / (ES_Dtot + ES_Ntot)
-A_eff_ES = 2 × (ES_Dtot − ES_Ntot) / (ES_Dtot + ES_Ntot + 2 × ES_bg_aboveThreshold)
+A_ES     = 2 × (d − n) / (d + n)
+A_eff_ES = 2 × (d − n) / (d + n + 4 × ES_bg_aboveThreshold)
 ```
 
-The `0.5 × BG` subtracts the background's 50% day/50% night contribution so the asymmetry is signal-only.
+Subtracting `f_day × BG` and `f_night × BG` removes the background's day and night shares, so the
+asymmetry is signal-only; dividing by the fractions makes it a comparison of rates per unit exposure, so
+an unequal split (f_night = 0.4978 for the shipped file) does not fake an asymmetry of
+2(f_day − f_night) ≈ 0.9 %. At f = 0.5 these are the earlier 2(D − N)/(D + N) and
+2(D − N)/(D + N + 2·BG). Derived mode (`dn_asymmetry`, `propagation_core.jl`) uses the same definition per
+chain step.
+
+### Day/night split of the exposure (SPEC 4.6)
+
+`exposure.jl` computes, once at setup, from the solar exposure table E(cos z) (night = Sun below the
+horizon, cos z < 0):
+
+```
+f_night = ∫_{cos z_min}^{0} E dcos z / ∫_{cos z_min}^{cos z_max} E dcos z,     f_day = 1 − f_night
+```
+
+over the whole table (`exposure_day_night_fractions`, exact for the linear interpolant), and logs both
+(`DAY_FRACTION`, `NIGHT_FRACTION`). The shipped `inputs/solarExposure.csv` gives f_night = 0.497836. Every
+day term, signal and background, carries f_day; every night term carries f_night, split over the night
+bins by `exposure_weights` (which sum to 1). **Assumption:** the exposure file is weighted by time (the
+fraction of time the Sun spends at each cos z, no 1/r² seasonal flux weighting), so f_night is also the
+night fraction of the live time, which is what the backgrounds use. (A simple solar ephemeris at the
+Homestake latitude, time-weighted, gives 0.4975 and the same cos z shape to ~0.3 %; 1/r² weighting
+would give 0.4997.) Before this the split was a hard-coded 0.5/0.5, which made the night prediction
+0.44 % low and the day 0.44 % high; a file symmetric in cos z reproduces that likelihood exactly
+(regression variant `night_sym`).
 
 ---
 
@@ -222,7 +248,7 @@ ES.nue_night = (ES_nue_8B'  .* (flux_8B'  .* oscProbs.nue_8B_night  .* exposure_
 Shape of `ES.nue_day`: `(Etrue_bins,)`.  
 Shape of `ES.nue_night`: `(cosz_bins, Etrue_bins)` — one row per zenith-angle bin.
 
-`exposure_weights` (shape `(cosz_bins,)`) accounts for the actual fraction of sidereal time the Sun spends in each zenith band. The night-time broadcasting `flux' .* oscProbs.night .* exposure_weights` applies the correct weight to each cosz row.
+`exposure_weights` (shape `(cosz_bins,)`) accounts for the actual fraction of sidereal time the Sun spends in each zenith band; it is normalised over the night (Σ = 1), and the night share f_night of the total exposure is applied at the response folding (Stage 5). The night-time broadcasting `flux' .* oscProbs.night .* exposure_weights` applies the correct weight to each cosz row.
 
 ---
 
@@ -230,7 +256,7 @@ Shape of `ES.nue_night`: `(cosz_bins, Etrue_bins)` — one row per zenith-angle 
 
 ### Helper functions (`propagation_core.jl`)
 
-**`apply_day_response(osc, response, eff; scale=0.5)`** (`propagation_core.jl:73–75`):
+**`apply_day_response(osc, response, eff; scale)`** (`propagation_core.jl`):
 
 ```
 result = scale × (response' × osc) .× eff
@@ -239,11 +265,11 @@ result = scale × (response' × osc) .× eff
 - `response'` is `(Ereco × Etrue)` — transpose maps Etrue → Ereco
 - Matrix-vector product sums over Etrue: expected counts per Ereco bin
 - `.× eff` applies per-bin detection efficiency
-- `scale = 0.5` accounts for 50% day/night duty cycle
+- `scale = DAY_FRACTION` (f_day): the day share of the exposure. `scale` has no default; night calls pass `NIGHT_FRACTION`
 
 Output shape: `Vector(Ereco_bins)`.
 
-**`apply_night_response(osc_rows, response, eff; scale=0.5)`** (`propagation_core.jl:77–79`):
+**`apply_night_response(osc_rows, response, eff; scale)`** (`propagation_core.jl`, `scale = NIGHT_FRACTION`):
 
 For each cosz row of `osc_rows`:
 ```
@@ -258,11 +284,11 @@ Output shape: `Matrix(cosz_bins, Ereco_bins)`.
 ```
 rate_ES_day   = (apply_day_response(nue_day, R_nue, eff_nue)
                + apply_day_response(nuother_day, R_nuother, eff_nuother))
-               + 0.5 × BG_ES
+               + f_day × BG_ES
 
 rate_ES_night = (apply_night_response(nue_night, R_nue, eff_nue)
                + apply_night_response(nuother_night, R_nuother, eff_nuother))
-               + 0.5 × (BG_ES' .× exposure_weights)
+               + f_night × (BG_ES' .× exposure_weights)
 ```
 
 | Output | Shape | Description |
@@ -278,14 +304,14 @@ Used when `angular_reco: true`. Projects 1D event rates onto the cos(scatter ang
 ```
 rate_day_angular[cos_scatter, Ereco] =
     R_angular[cos_scatter, Ereco] × rate_ES_day[Ereco]
-  + R_BG_angular[cos_scatter, Ereco] × 0.5 × BG_ES[Ereco]
+  + R_BG_angular[cos_scatter, Ereco] × f_day × BG_ES[Ereco]
 ```
 
 **Night (3D):**
 ```
 rate_night_angular[cos_scatter, Ereco, cosz] =
     reshape(R_angular, Ncos, NEreco, 1) × reshape(rate_ES_night', 1, NEreco, Ncosz)
-  + reshape(R_BG_angular, Ncos, NEreco, 1) × reshape(exposure_weights' × BG_ES, 1, NEreco, Ncosz) × 0.5
+  + reshape(R_BG_angular, Ncos, NEreco, 1) × reshape(exposure_weights' × BG_ES, 1, NEreco, Ncosz) × f_night
 ```
 
 **Angular cut** applied after: `rate_day_angular .*= mask`, `rate_night_angular .*= reshape(mask, :, 1, 1)`.
@@ -300,8 +326,8 @@ rate_night_angular[cos_scatter, Ereco, cosz] =
 Identical structure to standard ES, using `CC_response` and `CC_eff`:
 
 ```
-rate_CC_day   = apply_day_response(CC.day, R_CC, eff_CC) + 0.5 × BG_CC
-rate_CC_night = apply_night_response(CC.night, R_CC, eff_CC) + 0.5 × (BG_CC' .× exposure_weights)
+rate_CC_day   = apply_day_response(CC.day, R_CC, eff_CC) + f_day × BG_CC
+rate_CC_night = apply_night_response(CC.night, R_CC, eff_CC) + f_night × (BG_CC' .× exposure_weights)
 ```
 
 | Output | Shape | Description |
