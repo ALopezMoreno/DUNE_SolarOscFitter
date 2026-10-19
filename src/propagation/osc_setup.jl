@@ -87,27 +87,38 @@ function check_layer_agreement(earth::NightOsc.EarthModel, legacy_path, depth_km
     return nothing
 end
 
-# The engine's per-bin exposure must equal exposure_weights up to one common factor.
-# rtol = 1e-2 (SPEC 4.6). The bin totals the likelihood uses are exposure_weights_signal, exact cell
-# integrals of the table; NightOsc's sampled weights only set the weighting inside a bin, and it
-# normalises its bin average by them. The flux-weighted table has a narrow integrable peak at the
-# declination turning point, cos z = −cos(φ + ε) ≈ −0.377, which NightOsc's zenith pieces sample
-# coarsely: on the regression grid the two bins next to it are off by −0.33 % and +0.16 % (all others
-# agree to 1e-6). Its effect on the bin-averaged P1e, against pieces 4× and 16× finer: ≤ 3.7e-4
-# relative (2.4e-4 absolute) at Δm²₂₁ = 2e-5 and ≤ 4.2e-5 at 6e-5 in those two bins, against ≤ 5.3e-5
-# elsewhere (NightOsc's own accuracy, SPEC 1.3). A wrong column (the time weighting given to the
-# signal) still trips the guard: its per-bin ratio to the flux weighting spreads by 3.9 %.
-function check_exposure_normalisation(engine::NightOsc.BinnedP1e, cosz_edges, exposure, exposure_weights; rtol=1e-2)
+# The engine's per-bin exposure must equal exposure_weights up to one common factor (SPEC 4.6).
+# The bin totals the likelihood uses are exposure_weights_signal, exact cell integrals of the table;
+# NightOsc's sampled weights only set the weighting inside a bin, and it normalises its bin average by
+# them. The flux-weighted table has a narrow integrable peak at the declination turning point,
+# cos z = −cos(φ + ε) ≈ −0.377, which NightOsc's zenith pieces sample coarsely: how far off the bins
+# next to it are depends on where an edge falls (0.33 % on the regression grid, 0.58 % on the
+# production one, 0.96 % with 60 + 20 bins). Elsewhere the two agree to ≤ 8e-5 on all those grids.
+# So the check is per bin: within peak_halfwidth of the table's night-side maximum, rtol_peak; elsewhere
+# rtol, against the median ratio of those bins. A wrong column (the time weighting given to the
+# signal) is off by ~3 % in the deep bins and still trips it. Effect of the peak bins on the bin-averaged
+# P1e, against pieces 16× finer: ≤ 1.2e-4 on the production grid, the same as with the time column
+# (NightOsc's own accuracy, SPEC 1.3).
+function check_exposure_normalisation(engine::NightOsc.BinnedP1e, cosz_edges, exposure, exposure_weights;
+                                      rtol=1e-3, rtol_peak=5e-2, peak_halfwidth=0.03)
     den = NightOsc._den(engine)
     w = vec(exposure_weights)
     exposed = findall(>(0), w)
     zero_bins = findall(i -> (w[i] > 0) != (den[i] > 0), eachindex(w))
     isempty(zero_bins) ||
         error("nightOsc: cos z bins $zero_bins are exposed in one of the engine and exposure_weights but not the other")
-    ratio = den[exposed] ./ w[exposed]
-    spread = (maximum(ratio) - minimum(ratio)) / maximum(ratio)
-    spread <= rtol ||
-        error("nightOsc: per-bin exposure differs from exposure_weights beyond a common normalisation " *
-              "(spread $(round(spread; sigdigits=3))); the engine and the likelihood use different exposures or grids")
+    grid = range(first(cosz_edges), last(cosz_edges); length=2001)
+    c_peak = grid[argmax(exposure.(grid))]
+    near(i) = cosz_edges[i] < c_peak + peak_halfwidth && cosz_edges[i+1] > c_peak - peak_halfwidth
+    far = filter(!near, exposed)
+    ratio = den ./ w
+    ref = sort(ratio[isempty(far) ? exposed : far])[cld(length(isempty(far) ? exposed : far), 2)]
+    for i in exposed
+        dev, tol = abs(ratio[i] / ref - 1), near(i) ? rtol_peak : rtol
+        dev <= tol ||
+            error("nightOsc: per-bin exposure of cos z bin $i [$(cosz_edges[i]), $(cosz_edges[i+1])] differs from " *
+                  "exposure_weights by $(round(dev; sigdigits=3)) beyond a common normalisation (tolerance $tol); " *
+                  "the engine and the likelihood use different exposures or grids")
+    end
     return nothing
 end

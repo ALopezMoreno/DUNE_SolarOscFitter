@@ -270,9 +270,22 @@ end
             # per-step asymmetries (every step, unweighted)
             @test saved[key("ES_asymmetry")] ≈ [asym(r.ES_day, r.ES_night, r.BG_ES_tot, li.index_ES) for r in rates] rtol=1e-10
             if has_CC
-                @test saved[key("CC_asymmetry")] ≈ [asym(r.CC_day, r.CC_night, r.BG_CC_tot, li.index_CC) for r in rates] rtol=1e-10
+                # semi-inclusive: the CC prediction carries the backward fraction of the background
+                fb = cfgd.semi_inclusive_analysis ? li.Mreco.CC_split.below : 1.0
+                @test saved[key("CC_asymmetry")] ≈ [asym(r.CC_day, r.CC_night, fb .* r.BG_CC_tot, li.index_CC) for r in rates] rtol=1e-10
             else
                 @test !any(k -> startswith(k, key("CC")), keys(saved))     # no CC channel, no CC keys
+            end
+
+            # SPEC 4.6: with no Earth matter effect (all earth_norm_i = 0) night P1e equals day P1e, so the
+            # signal A_DN is 0 whatever the two exposure splits; a background left over by the
+            # subtraction would show here (this exposure file makes the two splits differ strongly).
+            no_earth = merge(truth, (; (k => 0.0 for k in keys(truth) if startswith(String(k), "earth_norm_"))...))
+            r0 = Base.invokelatest(expected_rates, li, no_earth)
+            @test abs(Base.invokelatest(dn_asymmetry, r0.ES_day, r0.ES_night, r0.BG_ES_tot, li.index_ES)) < 1e-10
+            if has_CC
+                fb0 = Base.invokelatest(cc_background_fraction, cfgd.semi_inclusive_analysis, li.Mreco)
+                @test abs(Base.invokelatest(dn_asymmetry, r0.CC_day, r0.CC_night, fb0 .* r0.BG_CC_tot, li.index_CC)) < 1e-10
             end
 
             for (ch, idx) in chans

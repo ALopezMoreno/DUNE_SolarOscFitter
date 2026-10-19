@@ -136,6 +136,10 @@ end
 
 
 
+# Fraction of the CC background spectrum the CC prediction carries: f_below in semi-inclusive mode
+# (backward hemisphere, propagation_main.jl), all of it otherwise. Subtract this much for A_DN.
+cc_background_fraction(semi::Bool, R) = semi ? R.CC_split.below : 1.0
+
 """
     dn_asymmetry(D, N, f_day, f_night)
 

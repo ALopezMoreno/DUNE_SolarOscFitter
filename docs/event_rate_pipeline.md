@@ -191,7 +191,9 @@ A_eff_ES = 2 × (d − n) / (d + n + 2 × ES_bg_aboveThreshold)
 ```
 
 Subtracting `f_day^B × BG` and `f_night^B × BG` removes the background's day and night shares exactly,
-so the asymmetry is signal-only; dividing by the signal fractions makes it a comparison of signal rates
+so the asymmetry is signal-only (for CC in semi-inclusive mode the channel carries the backward
+fraction f_below of the background, so `CC_bg_aboveThreshold` is f_below × the CC background,
+`cc_background_fraction`); dividing by the signal fractions makes it a comparison of signal rates
 per unit exposure, so an unequal split does not fake an asymmetry. A_eff is diluted by the background:
 per unit of its own exposure the background rate is BG by day and by night (f_day^B·BG / f_day^B =
 f_night^B·BG / f_night^B = BG), just as d and n are full-exposure signal rates, so the day and night

@@ -176,7 +176,7 @@ By default (`nightOsc: true`) it is computed by NightOsc (7d), which returns P�
 
 The choice is made once, in `build_osc_setup` (`src/propagation/osc_setup.jl`), and stored in the type of the constant `OSC::OscSetup{Night, EarthUnc, FastSolar}`. `setup_earth_propagation` and `compute_oscillation_probabilities` dispatch on `OSC.night` (`NightOscNight` or `NumOscNight{Fast}`), so the likelihood stays type-stable. The builder also checks the configuration against the rest of the analysis, and fails at setup if any check fails:
 - the engine grid matches the analysis cos z and E_true bins, with two `E_calc` points per bin;
-- the engine's per-bin exposure matches `exposure_weights_signal` (flux-weighted, SPEC 4.6) up to one common factor, within rtol 1e-2 (the table's narrow peak at the declination turning point, cos z ≈ −0.377, is sampled coarsely by the zenith pieces; this moves the bin-averaged P₁ₑ by ≤ 3.7e-4 relative in the two bins next to it, see SPEC 4.6);
+- the engine's per-bin exposure matches `exposure_weights_signal` (flux-weighted, SPEC 4.6) up to one common factor, per bin within rtol 1e-3, and 5e-2 within ±0.03 of the table's night-side maximum (the narrow peak at the declination turning point, cos z ≈ −0.377, is sampled coarsely by the zenith pieces: 0.3–1 % off depending on the grid, moving the bin-averaged P₁ₑ by ≤ 3.7e-4 relative in the bins next to it, see SPEC 4.6);
 - the number of Earth layers matches the Earth-uncertainty prior;
 - makePaths and NightOsc cross the same layers in the same order (`check_layer_agreement`), so `earth_norm_i` scales the same layer in both calculations.
 

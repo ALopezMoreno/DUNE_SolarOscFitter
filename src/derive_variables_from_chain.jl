@@ -130,7 +130,8 @@ function process_step!(dd::DerivedDetector, pars, osc, w, θ1, θ2, thinned::Boo
     r = expected_rates(dd.li, pars; precomputed_osc=osc)
 
     push!(dd.asym_ES, dn_asymmetry(r.ES_day, r.ES_night, r.BG_ES_tot, dd.iES))
-    dd.has_CC && push!(dd.asym_CC, dn_asymmetry(r.CC_day, r.CC_night, r.BG_CC_tot, dd.iCC))
+    dd.has_CC && push!(dd.asym_CC, dn_asymmetry(r.CC_day, r.CC_night,
+        cc_background_fraction(dd.cfg.semi_inclusive_analysis, dd.li.Mreco) .* r.BG_CC_tot, dd.iCC))
     thinned || return
 
     acc = dd.acc

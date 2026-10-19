@@ -187,8 +187,11 @@ for (det_name, det) in detector_configs
     end
 
     # ── Day-night asymmetry logging ────────────────────────────────────────
+    # In semi-inclusive mode the CC prediction carries f_below·BG (propagation_main.jl), so that is
+    # what is subtracted; with BG_TOTAL_FACTORS.day ≠ .night an unscaled BG biases A_DN.
     CC_bg_aboveThreshold = ((det.inclusive_analysis && !det.semi_inclusive_analysis) || isempty(BG_CC_tot_true)) ?
-                            0.0 : sum(BG_CC_tot_true[index_CC_det:end])
+                            0.0 : cc_background_fraction(det.semi_inclusive_analysis, responseMatrices_det) *
+                                  sum(BG_CC_tot_true[index_CC_det:end])
     ES_bg_aboveThreshold = sum(BG_ES_tot_true[index_ES_det:end])
 
     # Signal counts above threshold: the background is removed with its own (time-weighted) split,

@@ -17,7 +17,8 @@ variant: "night"  (default night calculation, NightOsc)
           exposure mirrored onto the day side, both weight columns equal, so signal and background
           splits are 0.5 exactly, SPEC 4.6. Its
           reference was set to the "night" values of the hard-coded 0.5/0.5 split (bf9ffec) and
-          reproduced to rtol 1e-12 when the split moved to the exposure file.)
+          reproduced to rtol 1e-12 when the split moved to the exposure file; since the night
+          weights are normalised by their own sum it differs from them by ≤ 6e-9 relative.)
 --update rewrites the reference for this variant instead of checking it.
 --grad   also checks the Enzyme reverse-mode gradient of the likelihood against ForwardDiff
          at the "near" point with the CC xsec nuisances moved (variant "night" only; the first Enzyme call compiles for minutes).

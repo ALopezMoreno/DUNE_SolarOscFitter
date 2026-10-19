@@ -189,8 +189,9 @@ end
         @test_throws ErrorException check_exposure_normalisation(b, cz_edges, expo, w_bad)
 
         # SPEC 4.6: the shipped two-weighting table on the regression fixture's cos z grid. The
-        # flux-weighted (signal) engine passes the guard (rtol 1e-2; its narrow peak at −cos(φ + ε)
-        # puts two bins 0.3 % off, so 1e-3 would fail); handing the signal the time weighting trips it.
+        # flux-weighted (signal) engine passes the guard (its narrow peak at −cos(φ + ε) puts the bins
+        # next to it 0.3 % off, hence the looser rtol_peak there); handing the signal the time weighting
+        # trips it in the deep bins, far from the peak.
         rows = [parse.(Float64, split(l, ',')) for l in eachline(joinpath(@__DIR__, "..", "inputs", "solarExposure_v2.csv"))
                 if !startswith(l, "#") && !startswith(l, "cosz") && !isempty(strip(l))]
         cz, wt, wf = getindex.(rows, 1), getindex.(rows, 2), getindex.(rows, 3)
@@ -204,10 +205,16 @@ end
         cell(f) = [quadgk(f, reg_edges[i], reg_edges[i+1])[1] for i in 1:length(reg_edges)-1]
         bf = BinnedP1e(reg_edges, [5e-3, 6e-3], flux, earth_model; phase_const=_BN_PHASE)
         @test check_exposure_normalisation(bf, reg_edges, flux, cell(flux)) === nothing
-        @test_throws ErrorException check_exposure_normalisation(bf, reg_edges, flux, cell(flux); rtol=1e-3)
+        @test_throws ErrorException check_exposure_normalisation(bf, reg_edges, flux, cell(flux); rtol_peak=1e-3)
         @test_throws ErrorException check_exposure_normalisation(bf, reg_edges, flux, cell(tcol))
         bt = BinnedP1e(reg_edges, [5e-3, 6e-3], tcol, earth_model; phase_const=_BN_PHASE)
         @test_throws ErrorException check_exposure_normalisation(bt, reg_edges, tcol, cell(flux))
+        # a grid with an edge just above the peak puts that bin ~1 % off; a valid grid, so it passes
+        e60 = vcat(collect(range(reg_edges[1], -0.12; length=61)), collect(range(-0.12, 0.0; length=21))[2:end])
+        cell60(f) = [quadgk(f, e60[i], e60[i+1])[1] for i in 1:length(e60)-1]
+        b60 = BinnedP1e(e60, [5e-3, 6e-3], flux, earth_model; phase_const=_BN_PHASE)
+        @test check_exposure_normalisation(b60, e60, flux, cell60(flux)) === nothing
+        @test_throws ErrorException check_exposure_normalisation(b60, e60, flux, cell60(tcol))
     end
 
     @testset "day-night factorisation error is small" begin

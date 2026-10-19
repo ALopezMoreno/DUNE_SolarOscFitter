@@ -21,8 +21,12 @@ const exposure_intp_bg     = _exposure_tables.time
 # Integrating from cosz_bins.min would leave the table (an error now; with the old flat
 # extrapolation it put phantom exposure in the denominator, making Σ weights < 1).
 function night_cosz_weights(expo, edges, upper)
-    total, _ = quadgk(expo, edges[1], upper)
-    return reshape([quadgk(expo, edges[i], edges[i+1])[1] for i in 1:length(edges)-1] ./ total, :, 1)
+    # Normalised by the sum of the bin integrals, not by one more quadgk over the range: the two agree
+    # only to quadgk's tolerance (~1e-8 on the kinked interpolant), and a background 1e6 × the signal
+    # turns that into a fake night excess. This way Σ = 1 to rounding.
+    edges[end] == upper || error("night cos z edges end at $(edges[end]), not at $upper")
+    w = [quadgk(expo, edges[i], edges[i+1])[1] for i in 1:length(edges)-1]
+    return reshape(w ./ sum(w), :, 1)
 end
 const exposure_weights_signal = night_cosz_weights(exposure_intp_signal, COARSE_COSZ_EDGES, cosz_bins.max)
 const exposure_weights_bg     = night_cosz_weights(exposure_intp_bg,     COARSE_COSZ_EDGES, cosz_bins.max)
@@ -43,7 +47,7 @@ end
 const SIGNAL_FRACTIONS = (day = SIGNAL_DAY_FRACTION, night = SIGNAL_NIGHT_FRACTION)
 const BG_FRACTIONS     = (day = BG_DAY_FRACTION,     night = BG_NIGHT_FRACTION)
 # What the predictions actually carry of a background spectrum BG, by day and over all night bins:
-# f_day^B·BG and f_night^B·Σ_k w^B_k·BG. Σ_k w^B_k = 1 only to quadgk's tolerance (~1e-8 on the kinked
-# interpolant), and backgrounds can be 1e6 × the signal, so subtracting the background for the signal
-# asymmetry uses these exact factors, not f_night^B alone.
+# f_day^B·BG and f_night^B·Σ_k w^B_k·BG. Σ_k w^B_k = 1 to rounding (night_cosz_weights), but backgrounds
+# can be 1e6 × the signal, so subtracting the background for the signal asymmetry uses exactly the
+# factors the predictions carry.
 const BG_TOTAL_FACTORS = (day = BG_DAY_FRACTION, night = BG_NIGHT_FRACTION * sum(exposure_weights_bg))

@@ -366,28 +366,39 @@ and to re-binning the analysis grid.
   **2 %**. The two columns differ by up to ±3.3 %.
 - Predictions: day = f_day^S·R_day + f_day^B·BG; night bin k = f_night^S·R_k + f_night^B·w^B_k·BG,
   where the night signal rows R_k carry the signal weights w^S_k and Σ_k w^S_k = Σ_k w^B_k = 1
-  (**rtol 1e-12**; checked with weightings that differ strongly, so a swap fails).
+  (**rtol 1e-12**: the cell integrals are normalised by their own sum; checked with weightings that
+  differ strongly, so a swap fails). Both columns are per unit exposure: the year average of
+  (1 AU / r)², 1 + e²/2 ≈ 1.00014, is not applied, so fluxes are the ones at 1 AU.
 - A_DN is the signal asymmetry per unit (signal) exposure: the background is removed with exactly
-  the factors the predictions carry (f_day^B, and f_night^B·Σ_k w^B_k, since Σ_k w^B_k = 1 only to
-  quadgk's ~1e-8 and backgrounds can be 1e6 × the signal), then A_DN = 2(d − n)/(d + n), d = D/f_day^S, n = N/f_night^S. **|A_DN| < 1e-14** with no
-  Earth effect and unequal, different splits. The logged effective asymmetry is 2(d − n)/(d + n + 2·BG)
+  the factors the predictions carry (f_day^B·BG, and f_night^B·Σ_k w^B_k·BG; backgrounds can be
+  1e6 × the signal), where BG is the background the channel carries: in semi-inclusive mode the CC
+  channel carries f_below·BG, so f_below·BG is removed. Then A_DN = 2(d − n)/(d + n),
+  d = D/f_day^S, n = N/f_night^S. **|A_DN| < 1e-14** with no Earth effect and unequal, different
+  splits (hand-made weights); **< 1e-10** through the full pipeline with all earth_norm_i = 0, for
+  every detector kind (plain, semi-inclusive, inclusive) and channel. The logged effective asymmetry is 2(d − n)/(d + n + 2·BG)
   (per unit exposure the background rate is BG by day and by night, whatever its split).
-- NightOsc's per-bin exposure must match `exposure_weights_signal` up to a common factor within
-  **rtol 1e-2** (it was 1e-3). The bin totals come from `exposure_weights_signal`, an exact cell
-  integral of the table; NightOsc's sampled weights only set the weighting inside a bin, and it
-  normalises by them. The flux-weighted table's integrable peak at −cos(φ + ε) ≈ −0.377 puts the two
-  bins next to it 0.33 % and 0.16 % off on the regression grid; measured effect on the bin-averaged
-  P1e against 4× and 16× finer zenith pieces: **≤ 3.7e-4 relative (2.4e-4 absolute)** at Δm²₂₁ = 2e-5
-  and ≤ 4.2e-5 at 6e-5 in those bins (≤ 5.3e-5 elsewhere, NightOsc's own accuracy, 1.3). The time
-  column given to the signal (3.9 % per-bin spread) still trips the guard.
+- NightOsc's per-bin exposure must match `exposure_weights_signal` up to a common factor, per bin:
+  **rtol 1e-3** against the median ratio, and **rtol 5e-2** for bins within ±0.03 of the table's
+  night-side maximum. The bin totals come from `exposure_weights_signal`, an exact cell integral of
+  the table; NightOsc's sampled weights only set the weighting inside a bin, and it normalises by
+  them. The flux-weighted table's integrable peak at −cos(φ + ε) ≈ −0.377 puts the bins next to it off
+  by an amount that depends on where an edge falls: 0.33 % (regression grid), 0.58 % (production
+  grid), 0.96 % (60 + 20 uniform bins); elsewhere ≤ 8e-5 on all of them. Measured effect on the
+  bin-averaged P1e against 4× and 16× finer zenith pieces: **≤ 3.7e-4 relative (2.4e-4 absolute)** at
+  Δm²₂₁ = 2e-5 and ≤ 4.2e-5 at 6e-5 in the peak bins on the regression grid; ≤ 1.2e-4 on the
+  production grid, the same with the time column, i.e. NightOsc's own accuracy (1.3), which reaches
+  1.3–1.5e-4 next to the core boundary there too. The time column given to the signal (~3 % off in the
+  deep bins) trips the guard on every grid.
 - A table mirror-symmetric in cos z with equal columns gives both splits **0.5 exactly**, and with it
   the likelihood equals the one of the earlier hard-coded 0.5/0.5 split (regression variant
-  `night_sym`, set to the bf9ffec `night` values and matched bit for bit).
+  `night_sym`: matched the bf9ffec `night` values bit for bit at 68f5ac3; since the night weights are
+  normalised by their own sum, it differs from them by ≤ 6e-9 relative, the old Σ_k w_k − 1).
 
 > ✅ `test_tabulated.jl` (file format, fractions, generator vs legacy table; slow tier: the committed
 > table is the generator's output), `test_response_and_backgrounds.jl` (folding, A_DN, swapped splits),
 > `derived_mode.jl` (strongly different weightings: totals, derived A_DN, arrays and saved keys),
-> `test_osc_night.jl` (guard on the shipped table: passes at 1e-2, swapped column trips it),
+> `test_osc_night.jl` (guard on the shipped table, regression and 60 + 20 grids: passes, swapped column
+> trips it), `derived_mode.jl` (A_DN = 0 with no Earth effect, incl. semi-inclusive CC),
 > `regression_likelihood.jl night_sym`
 
 ---
