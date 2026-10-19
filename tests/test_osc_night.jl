@@ -187,6 +187,9 @@ end
         @test check_exposure_normalisation(b, cz_edges, expo, 3.7 .* w) === nothing   # any common factor
         w_bad = copy(w); w_bad[2] *= 1.2
         @test_throws ErrorException check_exposure_normalisation(b, cz_edges, expo, w_bad)
+        # no interior peak: the end bin gets the tight tolerance too
+        w_end = copy(w); w_end[end] *= 1.04
+        @test_throws ErrorException check_exposure_normalisation(b, cz_edges, expo, w_end)
 
         # SPEC 4.6: the shipped two-weighting table on the regression fixture's cos z grid. The
         # flux-weighted (signal) engine passes the guard (its narrow peak at −cos(φ + ε) puts the bins

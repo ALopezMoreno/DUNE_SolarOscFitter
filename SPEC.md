@@ -379,7 +379,8 @@ and to re-binning the analysis grid.
   (per unit exposure the background rate is BG by day and by night, whatever its split).
 - NightOsc's per-bin exposure must match `exposure_weights_signal` up to a common factor, per bin:
   **rtol 1e-3** against the median ratio, and **rtol 5e-2** for bins within ±0.03 of the table's
-  night-side maximum. The bin totals come from `exposure_weights_signal`, an exact cell integral of
+  night-side maximum when that maximum is interior (a table peaking at an end of the range, e.g.
+  monotone, gets rtol 1e-3 everywhere). A wrong column is seen only with ≥ 2 bins away from the peak. The bin totals come from `exposure_weights_signal`, an exact cell integral of
   the table; NightOsc's sampled weights only set the weighting inside a bin, and it normalises by
   them. The flux-weighted table's integrable peak at −cos(φ + ε) ≈ −0.377 puts the bins next to it off
   by an amount that depends on where an edge falls: 0.33 % (regression grid), 0.58 % (production

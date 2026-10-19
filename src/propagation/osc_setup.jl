@@ -95,7 +95,8 @@ end
 # next to it are depends on where an edge falls (0.33 % on the regression grid, 0.58 % on the
 # production one, 0.96 % with 60 + 20 bins). Elsewhere the two agree to ≤ 8e-5 on all those grids.
 # So the check is per bin: within peak_halfwidth of the table's night-side maximum, rtol_peak; elsewhere
-# rtol, against the median ratio of those bins. A wrong column (the time weighting given to the
+# rtol, against the median ratio of those bins. (It needs at least two bins away from the peak to
+# see a wrong column; analysis grids have ≥ 24.) A wrong column (the time weighting given to the
 # signal) is off by ~3 % in the deep bins and still trips it. Effect of the peak bins on the bin-averaged
 # P1e, against pieces 16× finer: ≤ 1.2e-4 on the production grid, the same as with the time column
 # (NightOsc's own accuracy, SPEC 1.3).
@@ -107,9 +108,13 @@ function check_exposure_normalisation(engine::NightOsc.BinnedP1e, cosz_edges, ex
     zero_bins = findall(i -> (w[i] > 0) != (den[i] > 0), eachindex(w))
     isempty(zero_bins) ||
         error("nightOsc: cos z bins $zero_bins are exposed in one of the engine and exposure_weights but not the other")
+    # The loose window only around an interior maximum: a table whose maximum is at an end of the
+    # range (e.g. monotone) has no turning-point peak, and every bin gets rtol.
     grid = range(first(cosz_edges), last(cosz_edges); length=2001)
-    c_peak = grid[argmax(exposure.(grid))]
-    near(i) = cosz_edges[i] < c_peak + peak_halfwidth && cosz_edges[i+1] > c_peak - peak_halfwidth
+    k_peak = argmax(exposure.(grid))
+    interior = 1 < k_peak < length(grid)
+    c_peak = grid[k_peak]
+    near(i) = interior && cosz_edges[i] < c_peak + peak_halfwidth && cosz_edges[i+1] > c_peak - peak_halfwidth
     far = filter(!near, exposed)
     ratio = den ./ w
     ref = sort(ratio[isempty(far) ? exposed : far])[cld(length(isempty(far) ? exposed : far), 2)]
