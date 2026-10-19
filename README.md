@@ -166,8 +166,7 @@ SolarOscFitter/
 ├── outputs/              # Analysis results
 ├── configs/              # Configuration file examples
 ├── config.yaml           # Main configuration file
-├── SPEC.md               # Validation criteria (what the tests check)
-└── TODO.md               # Open work
+└── SPEC.md               # Validation criteria (what the tests check)
 ```
 
 ## Analysis Modes

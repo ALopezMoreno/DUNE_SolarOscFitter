@@ -300,7 +300,7 @@ finite centre.
 
 <a id="43d"></a>
 #### 🟣 4.3d · Signal-sample weights
-Meaning not yet defined (TODO.md); non-unit weights are ignored with a warning.
+Meaning not yet defined (open question for the maintainer); non-unit weights are ignored with a warning.
 
 <a id="43e"></a>
 #### 🟢 4.3e · Target counts
