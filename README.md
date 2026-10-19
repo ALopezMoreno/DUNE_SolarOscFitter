@@ -281,13 +281,17 @@ The analysis fits the following parameters:
 
 ## Testing
 
-Run the unit tests (likelihood correctness and wiring) and the derived-mode end-to-end test:
+The tests come in tiers:
 
 ```bash
-julia --project tests/runtests.jl                              # ~2.5 min
-JULIA_REGRESSION=1 julia --project tests/runtests.jl           # + full-likelihood regression
-julia --project tests/regression_likelihood.jl night --grad    # Enzyme vs ForwardDiff gradient
+julia --project tests/runtests.jl                              # fast: unit tests, ~2 min
+JULIA_TESTS=slow julia --project tests/runtests.jl             # slow: + Enzyme, warm start, derived mode, ~5 min
+JULIA_REGRESSION=1 julia --project tests/runtests.jl           # + full-likelihood regression, ~5 min more
+julia --project tests/regression_likelihood.jl night --grad    # Enzyme vs ForwardDiff on the full likelihood
 ```
+
+Run the fast tier while working, the slow tier once before merging, and the regression and the
+gradient check only when a change can move the likelihood value or touches the Enzyme path.
 
 The regression compares the likelihood at fixed points with frozen values in
 `tests/regression_reference.toml`; any intended change to the likelihood value needs a deliberate
