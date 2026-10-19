@@ -82,6 +82,33 @@ end
 empty!(ARGS); push!(ARGS, cfg_file)
 main()
 
+# --- SPEC 3.3 on the real setup weights (unoscillated CC ⁸B rate per E_true bin) ---
+include(joinpath(@__DIR__, "cc_xsec_shape_checks.jl"))
+@testset "CC xsec shape basis on the setup weights (SPEC 3.3)" begin
+    E = Base.invokelatest(() -> calculate_bins(Etrue_bins)[2])
+    ncc = 0
+    for dname in Base.invokelatest(() -> collect(keys(detector_outputs)))
+        li = Base.invokelatest(() -> detector_outputs[dname].likelihood_inputs)
+        li.CC_mode || continue
+        ncc += 1
+        U = li.MC_no_osc
+        B = Base.invokelatest(check_cc_xsec_shape_spec, E, U.CC_8B)
+        @test U.xsec_p1 == B.p1 && U.xsec_p2 == B.p2           # the basis the likelihood uses
+        # and the propagation applies it to CC ⁸B and hep, day and night (unit oscillation probs)
+        nz = size(Base.invokelatest(() -> exposure_weights), 1)
+        o1, oN = ones(length(E)), ones(nz, length(E))
+        probs = (nue_8B_day = o1, nue_hep_day = o1, nue_8B_night = oN, nue_hep_night = oN)
+        par(t, c) = Base.invokelatest(() -> merge(true_params, (cc_xsec_norm = 1.0, cc_xsec_tilt = t, cc_xsec_curv = c)))
+        cc(t, c) = Base.invokelatest(compute_oscillated_samples, U, par(t, c), probs; es_mode=false, cc_mode=true).CC
+        c0, c1 = cc(0.0, 0.0), cc(0.15, -0.2)
+        shape = Base.invokelatest(cc_xsec_shape, 1.0, 0.15, -0.2, B.p1, B.p2)
+        nzb = c0.day .> 0
+        @test c1.day[nzb] ≈ (c0.day .* shape)[nzb] rtol=1e-12
+        @test c1.night ≈ c0.night .* shape' rtol=1e-12
+    end
+    @test ncc > 0
+end
+
 # --- the run record (src/runRecord.jl): the config used, defaults filled in, and provenance ---
 @testset "run record of the derived run" begin
     # derived mode writes into prevFile.jld2, so its record sits next to the chain

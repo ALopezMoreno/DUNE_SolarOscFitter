@@ -96,9 +96,14 @@ function build_unoscillated_sample(det)
     unosc_ES_nuother_8B = integrate_over_bins(unoscillatedRate_ES_nuother_8B, bin_edges) .* (detector_ne   * detection_time * ES_normalisation)
     unosc_CC_8B         = integrate_over_bins(unoscillatedRate_CC_8B,         bin_edges) .* (detector_nAr40 * detection_time * CC_normalisation)
 
-    # Flux-weighted pivot energy — makes cc_xsec_tilt orthogonal to cc_xsec_norm
-    E_pivot_CC = sum(unosc_CC_8B .* energies_GeV) / sum(unosc_CC_8B)
-    log_E_norm = log.(energies_GeV ./ E_pivot_CC)
+    # CC xsec shape basis, orthogonal under the unoscillated CC ⁸B rate (SPEC 3.3)
+    xsec_basis = cc_xsec_shape_basis(energies_GeV, unosc_CC_8B)
+    if det.CC_mode && !(sum(unosc_CC_8B) > 0)
+        @warn "CC channel on but its unoscillated ⁸B rate is zero (CC_exposure 0?): tilt/curv have no effect"
+    elseif det.CC_mode
+        @logmsg Setup @sprintf("  CC xsec shape basis: E_pivot = %.4f MeV, L = ln(E/E_pivot), p1 = L - (%.6g), p2 = L^2 - (%.6g) L - (%.6g)",
+                               xsec_basis.E_pivot * 1e3, xsec_basis.mean_L, xsec_basis.a, xsec_basis.b)
+    end
 
     unosc_ES_nue_hep     = integrate_over_bins(unoscillatedRate_ES_nue_hep,     bin_edges) .* (detector_ne   * detection_time * ES_normalisation)
     unosc_ES_nuother_hep = integrate_over_bins(unoscillatedRate_ES_nuother_hep, bin_edges) .* (detector_ne   * detection_time * ES_normalisation)
@@ -111,7 +116,8 @@ function build_unoscillated_sample(det)
         ES_nue_hep     = unosc_ES_nue_hep,
         ES_nuother_hep = unosc_ES_nuother_hep,
         CC_hep         = unosc_CC_hep,
-        log_E_norm     = log_E_norm,
+        xsec_p1        = xsec_basis.p1,
+        xsec_p2        = xsec_basis.p2,
     )
 
     return unoscillatedSample, bin_edges, energies_GeV
