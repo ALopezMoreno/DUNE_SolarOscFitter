@@ -253,4 +253,31 @@ end
             @test mean_r(f["prodFractionBoron"]) < mean_r(f["prodFractionHep"])
         end
     end
+    # Composition from the profile data, not the metadata: each SF-III n_e profile is closer to the
+    # B16 model of the same composition (B16 files: AGSS09_high_z.jld2 is B16-AGSS09met, low-Z, and
+    # GS98_low_z.jld2 is B16-GS98, high-Z; the names are swapped).
+    ne(name) = jldopen(f -> f["n_e"], joinpath(_TAB_INPUTS, name * ".jld2"))
+    dist(a, b) = maximum(abs.(ne(a) ./ ne(b) .- 1))
+    @test dist("SF3_GS98", "GS98_low_z") < dist("SF3_GS98", "AGSS09_high_z")
+    @test dist("SF3_AGSS09met", "AGSS09_high_z") < dist("SF3_AGSS09met", "GS98_low_z")
+    # the high-Z model has the higher core electron density
+    @test ne("SF3_GS98")[1] > ne("SF3_AGSS09met")[1]
+end
+
+@testset "solar-model input contract (SPEC 8.2)" begin
+    for name in ("SF3_GS98", "SF3_AGSS09met", "AGSS09_high_z", "GS98_low_z")
+        m, fhep = load_solar_model(joinpath(_TAB_INPUTS, name * ".jld2"))
+        @test keys(m) == (:radii, :prodFractionBoron, :prodFractionHep, :n_e, :avgNeBoron, :avgNeHep)
+        @test m.avgNeBoron ≈ sum(m.prodFractionBoron .* m.n_e) / sum(m.prodFractionBoron)
+        @test (fhep === nothing) == startswith(name, "AGSS09_high_z") | startswith(name, "GS98_low_z")
+    end
+    r = collect(range(0.01, 0.5; length = 50)); ne = fill(50.0, 50); p = ones(50)
+    @test validate_solar_model(r, ne, p, p) === nothing
+    @test_throws ErrorException validate_solar_model(r, ne[1:49], p, p)              # lengths
+    @test_throws ErrorException validate_solar_model(reverse(r), ne, p, p)           # not increasing
+    @test_throws ErrorException validate_solar_model([0.0; r[2:end]], ne, p, p)      # r = 0
+    @test_throws ErrorException validate_solar_model(r, [0.0; ne[2:end]], p, p)      # n_e > 0
+    @test_throws ErrorException validate_solar_model(r, ne, [-1.0; p[2:end]], p)     # weights >= 0
+    @test_throws ErrorException validate_solar_model(r, ne, p, zeros(50))            # not all zero
+    @test_throws ErrorException validate_solar_model(r, [NaN; ne[2:end]], p, p)      # finite
 end

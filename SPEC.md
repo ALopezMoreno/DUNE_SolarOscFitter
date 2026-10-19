@@ -27,7 +27,7 @@ Two marks on one item (e.g. 🟢🟡) mean part of it is tested and part is not;
 | [5. Likelihood](#5-likelihood) | 7 | 3 | 1 | – |
 | [6. Gradients](#6-gradients) | 3 | – | – | – |
 | [7. Sampling and I/O](#7-sampling-and-io) | 2 | 3 | 1 | – |
-| [8. Model inputs](#8-model-inputs) | 1 | – | – | – |
+| [8. Model inputs](#8-model-inputs) | 2 | – | – | – |
 
 Partly tested items count in both columns.
 
@@ -83,6 +83,7 @@ Partly tested items count in both columns.
 | [7.3](#73) | 🟡 | Coverage of credible intervals |
 | [7.4](#74) | 🟢🟣 | Warm start |
 | [8.1](#81) | 🟢 | Input-table contract |
+| [8.2](#82) | 🟢 | Solar-model inputs |
 
 </details>
 
@@ -530,6 +531,31 @@ Further:
   previous implementation; the likelihood regression is unchanged).
 
 > ✅ `test_tabulated.jl` (and `test_cc_xsec.jl` for the CC table)
+
+<a id="82"></a>
+#### 🟢 8.2 · Solar-model inputs
+A solar-model file (`solar_model_file`, JLD2) holds `radii` [R/R☉], `n_e` [N_A/cm³] and the ⁸B and hep
+production weights `prodFractionBoron`, `prodFractionHep`, one per radius. At load (`load_solar_model`):
+- **validated:** radii finite, strictly increasing, in (0, 1]; n_e finite and > 0; weights finite,
+  ≥ 0, not all zero, lengths matching; errors name the file;
+- **normalised by the fitter:** the weights may be dP/dr or per-zone fractions; every use divides by
+  their sum;
+- **hep flux:** the Asimov hep flux is the config's `true_integrated_HEP_flux`; when the file stores the
+  model's own prediction (`flux_hep`) and the two differ by more than 1%, setup warns.
+
+Shipped files and their content, checked against the profile data (not only metadata):
+
+| File | Model | Composition |
+|---|---|---|
+| `SF3_GS98.jld2` (default) | SF-III / B23, GS98 (Zenodo 10822316) | high-Z |
+| `SF3_AGSS09met.jld2` | SF-III / B23, AGSS09met | low-Z |
+| `GS98_low_z.jld2` (legacy) | B16-GS98 | **high-Z** (name swapped) |
+| `AGSS09_high_z.jld2` (legacy, regression fixture) | B16-AGSS09met | **low-Z** (name swapped) |
+
+The SF-III files are built by `utils/make_solar_model_inputs.jl` from the source tables, whose SHA-256
+they store, and equal the source columns (n_e = 10^log_ne, nu_8B, nu_hep) on (0, 0.5] R☉.
+
+> ✅ `test_tabulated.jl` ("SF-III solar-model files", "solar-model input contract")
 
 ---
 
