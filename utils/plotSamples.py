@@ -113,7 +113,7 @@ def solar_surface_probs(params, E_true, solar_model, process="8B"):
     return prob_nue
 
 
-solar_model_file = "inputs/AGSS09_high_z.jld2"
+solar_model_file = "inputs/SF3_GS98.jld2"
 with h5py.File(solar_model_file, "r") as file:
     # Load the necessary datasets from the file
     radii = file["radii"][:]

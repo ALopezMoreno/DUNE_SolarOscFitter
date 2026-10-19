@@ -28,7 +28,7 @@ use_scattering_info: true
 true_sin2_th12: 0.307    # Solar mixing angle
 true_sin2_th13: 0.0224   # Reactor mixing angle
 true_dm2_21: 6e-5        # Solar mass-squared difference
-true_integrated_HEP_flux: 8250.0  # HEP neutrino flux (B16-AGSS09 prediction)
+true_integrated_HEP_flux: 7950.0  # HEP neutrino flux (SF-III GS98 prediction)
 
 
 prior_sin2_th12: Uniform(0.15, 0.5)
@@ -65,7 +65,7 @@ Ereco_min_ES: 3         # ES threshold in MeV
 Ereco_min_CC: 5         # CC threshold in MeV
 
 earth_normalisation_prior_file: "inputs/earth_uncertainty_cov.jld2"
-solar_model_file: "inputs/AGSS09_high_z.jld2"     # Solar structure and neutrino production regions
+solar_model_file: "inputs/SF3_GS98.jld2"     # Solar structure and neutrino production regions
 flux_model_file: "inputs/fluxes.jld2"             # Solar neutrino energy spectra
 earth_model_file: "inputs/EARTH_MODEL_PREM_DENSE.dat"  # PREM Earth density profile
 earth_uncertainty_file: "inputs/earth_uncertainty_4.5e-5.jld2"  # Earth matter uncertainties

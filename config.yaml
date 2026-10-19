@@ -30,7 +30,7 @@ ad_backend: "Enzyme"       # HMC gradients: "Enzyme" (reverse mode: cost indepen
 true_sin2_th12:           0.307     # solar mixing angle
 true_sin2_th13:           0.022     # reactor mixing angle (δCP and θ₂₃ fixed)
 true_dm2_21:              6e-5      # solar Δm² (eV²)  [PDG: 7.53e-5, SNO: 5.11e-5]
-true_integrated_HEP_flux: 8250.0   # HEP flux (ν/cm²/s)
+true_integrated_HEP_flux: 7950.0   # HEP flux (ν/cm²/s), SF-III GS98
 true_cc_xsec_norm:        1.0       # CC xsec scale relative to MARLEY
 true_8B_flux: 5.53e6              # override Asimov flux; default = mean(prior_8B_flux)
                                     # set != prior centre to study bias from flux mis-expectation
@@ -99,7 +99,7 @@ cosz_fine_edge:  -0.15
 
 # ── 7. INPUT FILES ───────────────────────────────────────────────────────────
 
-solar_model_file:               "inputs/AGSS09_high_z.jld2"
+solar_model_file:               "inputs/SF3_GS98.jld2"
 flux_model_file:                "inputs/fluxes.jld2"
 earth_model_file:               "inputs/EARTH_MODEL_PREM_DENSE.dat"
 earth_uncertainty_file:         "inputs/earth_uncertainty_4.5e-5.jld2"
