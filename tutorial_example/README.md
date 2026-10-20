@@ -36,13 +36,15 @@ tutorial_example/
 │   ├── sampler.yaml            section 4: chains and steps (shortened)
 │   ├── model_inputs.yaml       sections 6 and 7: E_true / cos z binning, solar, flux and Earth models
 │   ├── detectors/VD.yaml       section 8: the idealised VD module
+│   ├── oscillation_fast.yaml   approximate oscillation settings for test fits (not in tutorial.yaml)
 │   └── tutorial.yaml           base: all of the above; a complete config on its own
 ├── 01_setup.yaml             base: configs/tutorial.yaml, RunMode SETUP
 ├── 02_mcmc.yaml              base: configs/tutorial.yaml, the joint ES + CC fit
 ├── 03_mcmc_ES_only.yaml      base: 02_mcmc.yaml, singleChannel ES
 ├── 04_mcmc_CC_only.yaml      base: 02_mcmc.yaml, singleChannel CC
 ├── 05_llh_scan.yaml          base: configs/tutorial.yaml, RunMode LLH
-└── 06_derived.yaml           base: 02_mcmc.yaml, RunMode derived on the step-2 chain
+├── 06_derived.yaml           base: 02_mcmc.yaml, RunMode derived on the step-2 chain
+└── 07_mcmc_fast.yaml         base: [02_mcmc.yaml, configs/oscillation_fast.yaml], a quick test fit
 ```
 
 ### How `base:` works
@@ -128,6 +130,22 @@ python3 utils/plotLLH.py outputs/tutorial/scan
 ```bash
 julia -t auto --project src/readConfig.jl tutorial_example/06_derived.yaml
 ```
+
+**Fast test fits.** `07_mcmc_fast.yaml` is the joint fit with an approximate oscillation
+calculation, for checking a setup before a real run (about 15 minutes on 4 threads, 2 GB of memory, half the time of step 2):
+
+```bash
+julia -t 4 --project src/readConfig.jl tutorial_example/07_mcmc_fast.yaml
+```
+
+`configs/oscillation_fast.yaml` swaps NightOsc for the legacy per-path night calculation. That
+calculation samples one or two paths per cos z bin and two energies per E_true bin instead of
+averaging over each bin. It also uses 20 cos z bins with no fine zone, and ForwardDiff gradients.
+At the truth, every E_reco bin is within 4e-4 of the default, and the day-night asymmetries are
+within 1% of their value. On this tutorial its posteriors for sin²θ₁₂ and Δm²₂₁ agree with step 2
+within a quarter of a standard deviation, which is the sampling noise of chains this short. Use it
+for test fits only. Add `configs/oscillation_fast.yaml` to the
+`base:` list of any other run config to make it fast too.
 
 Outputs are not overwritten cleanly. Delete a run's files (`outputs/tutorial/<name>*`) before
 running it again.
