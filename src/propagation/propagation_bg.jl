@@ -1,5 +1,5 @@
-# out .+= x .* factor as a plain loop: a fused broadcast would hold the constant template
-# `x` and the differentiable `factor` in one object, which Enzyme's activity analysis rejects.
+# out .+= x .* factor as a loop: Enzyme rejects a broadcast holding the constant `x` and the active
+# `factor` together.
 function _add_scaled!(out::AbstractVector, x::AbstractVector, factor)
     @inbounds for k in eachindex(out, x)
         out[k] += x[k] * factor
@@ -10,26 +10,14 @@ end
 """
     normalize_backgrounds(raw_backgrounds, params, det_name::String)
 
-Compute the summed ES and CC background vectors by applying nuisance-parameter
-scale factors on-the-fly, without copying the raw arrays.
-
-`det_name` is used to construct the parameter-name prefix, e.g. `"VD"` →
-looks up `:VD_ES_bg_norm_1`, `:VD_ES_bg_norm_2`, … in `params`.
-
-`raw_backgrounds` must carry `ES_par_counts`, `CC_par_counts` and the per-background
-conversion factors `ES_conv` (face area, cm²) and `CC_conv` (1 / reference flux), all set
-by `build_backgrounds`. The i-th background with a free normalisation uses the i-th
-`*_bg_norm_` parameter.
-
-Returns:
-- BG_ES :: Vector{Float64}
-- BG_CC :: Vector{Float64}
+Summed ES and CC background spectra (BG_ES, BG_CC), each free background scaled by its norm
+parameter (`:<det>_ES_bg_norm_i`, …) and conversion factor (build_backgrounds).
 """
 normalize_backgrounds(raw_backgrounds, params, det_name::String) =
     normalize_backgrounds(raw_backgrounds, params, Val(Symbol(det_name, "_ES_bg_norm_")),
                           Val(Symbol(det_name, "_CC_bg_norm_")))
 
-# Type-stable form: the prefixes are known at compile time (see bg_norm_prefixes).
+# Type-stable form: prefixes known at compile time (bg_norm_prefixes)
 normalize_backgrounds(raw_backgrounds, params, det_flags::DetFlags) =
     normalize_backgrounds(raw_backgrounds, params, bg_norm_prefixes(det_flags)...)
 
@@ -40,7 +28,6 @@ function normalize_backgrounds(raw_backgrounds, params, es_prefix::Val, cc_prefi
     ES_bg_par_counts = raw_backgrounds.ES_par_counts
     CC_bg_par_counts = raw_backgrounds.CC_par_counts
 
-    # ES backgrounds
     if isempty(raw_backgrounds.ES)
         BG_ES = Float64[]
     else
@@ -53,12 +40,11 @@ function normalize_backgrounds(raw_backgrounds, params, es_prefix::Val, cc_prefi
                 _add_scaled!(BG_ES, raw_backgrounds.ES[i], factor)
                 norm_index += 1
             else
-                _add_scaled!(BG_ES, raw_backgrounds.ES[i], 1.0)   # not .+= (Enzyme, see _add_scaled!)
+                _add_scaled!(BG_ES, raw_backgrounds.ES[i], 1.0)
             end
         end
     end
 
-    # CC backgrounds
     if isempty(raw_backgrounds.CC)
         BG_CC = Float64[]
     else

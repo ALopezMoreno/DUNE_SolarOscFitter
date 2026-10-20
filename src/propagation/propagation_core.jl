@@ -5,10 +5,8 @@ using LinearAlgebra
     DetFlags(; ES_mode, CC_mode, angular_reco, inclusive_analysis, semi_inclusive_analysis,
                angular_cos_cut, det_name)
 
-Per-detector mode flags. The five Bool modes are type parameters and `getproperty` returns
-them as compile-time constants, so `if det_flags.ES_mode … end` is resolved at compile time.
-That keeps propagateSamples type-stable (a runtime Bool there makes ES rates `nothing` or
-arrays depending on a value), which Enzyme requires. Field access is unchanged for callers.
+Per-detector mode flags. The Bool modes are type parameters, so `if det_flags.ES_mode` is resolved
+at compile time and propagateSamples stays type-stable (required by Enzyme).
 """
 struct DetFlags{ES,CC,ANG,INCL,SEMI,NAME}
     angular_cos_cut::Float64
@@ -38,16 +36,11 @@ end
 Base.propertynames(::DetFlags) = (:ES_mode, :CC_mode, :angular_reco, :inclusive_analysis,
                                   :semi_inclusive_analysis, :angular_cos_cut, :det_name)
 
-# Block averaging utilities for energy binning
-# These functions reduce high-resolution calculations to analysis binning
-
-# Block averaging for 2D matrices (e.g., zenith vs energy oscillation probabilities)
+# Averages over rectangular blocks (fine calculation grid → analysis bins)
 function block_average(mat::AbstractMatrix, block_dims::Tuple{Int,Int}=(5, 3))
-    """Average matrix elements over rectangular blocks"""
     block_rows, block_cols = block_dims
     n_rows, n_cols = size(mat)
     
-    # Ensure that matrix dimensions are multiples of block dimensions
     if n_rows % block_rows != 0 || n_cols % block_cols != 0
         error("Matrix dimensions must be multiples of block dimensions: got $(n_rows)x$(n_cols) for blocks of size $(block_rows)x$(block_cols)")
     end
@@ -61,7 +54,6 @@ function block_average(mat::AbstractMatrix, block_dims::Tuple{Int,Int}=(5, 3))
             rows_range = ((i - 1) * block_rows + 1):(i * block_rows)
             cols_range = ((j - 1) * block_cols + 1):(j * block_cols)
             block = view(mat, rows_range, cols_range)
-            # Calculate average over the block
             result[i, j] = sum(block) / (block_rows * block_cols)
         end
     end
@@ -69,12 +61,9 @@ function block_average(mat::AbstractMatrix, block_dims::Tuple{Int,Int}=(5, 3))
     return result
 end
 
-# Block averaging for 1D vectors (e.g., energy-dependent oscillation probabilities)
 function block_average(vec::AbstractVector, block_size::Int=5)
-    """Average vector elements over consecutive blocks"""
     n = length(vec)
     
-    # Ensure that vector length is a multiple of block size
     if n % block_size != 0
         error("Vector length must be a multiple of block size: got length $(n) for blocks of size $(block_size)")
     end
@@ -91,17 +80,11 @@ function block_average(vec::AbstractVector, block_size::Int=5)
     return result
 end
 
-# Generic wrapper function for block averaging
 
-
-# Helper functions to fold oscillated spectra with response matrices and efficiencies
-# - Day:   scale * ((R' * osc_vec) .* eff)
-# - Night: stack over cosZ rows: scale * ((row' * R) .* eff')
-# `scale` is the day or night share of the signal exposure (SIGNAL_DAY_FRACTION / SIGNAL_NIGHT_FRACTION,
-# flux-weighted, exposure.jl; SPEC 4.6). It has no default: every caller states which side it folds.
+# Fold oscillated spectra with the response and efficiency: day scale·((R'·osc) .* eff), night the
+# same per cos z row. `scale` is the signal's day or night exposure share (SPEC 4.6), never defaulted.
 function apply_day_response(osc::AbstractVector, response::AbstractMatrix, eff::AbstractVector; scale::Real)
-    # scale .* ((response' * osc) .* eff), written as loops: the Adjoint wrapper of the
-    # constant response next to the differentiable `osc` is rejected by Enzyme.
+    # loops: Enzyme rejects the Adjoint of the constant response next to the active `osc`
     n_true, n_reco = size(response)
     length(osc) == n_true || throw(DimensionMismatch("osc has $(length(osc)) true bins, response has $n_true"))
     T = promote_type(eltype(osc), eltype(response), eltype(eff), typeof(scale))
@@ -117,8 +100,7 @@ function apply_day_response(osc::AbstractVector, response::AbstractMatrix, eff::
 end
 
 function apply_night_response(osc_rows::AbstractMatrix, response::AbstractMatrix, eff::AbstractVector; scale::Real)
-    # Row k: scale * ((osc_rows[k, :]' * response) .* eff'), written as loops. The previous
-    # vcat([...]...) splat was a dynamic call that Enzyme cannot differentiate.
+    # loops: a vcat splat would be a dynamic call Enzyme cannot differentiate
     n_rows, n_true = size(osc_rows)
     n_reco = size(response, 2)
     size(response, 1) == n_true || throw(DimensionMismatch("osc rows have $n_true true bins, response has $(size(response, 1))"))
@@ -136,16 +118,14 @@ end
 
 
 
-# Fraction of the CC background spectrum the CC prediction carries: f_below in semi-inclusive mode
-# (backward hemisphere, propagation_main.jl), all of it otherwise. Subtract this much for A_DN.
+# Fraction of the CC background the CC prediction carries: f_below in semi-inclusive mode, else 1.
 cc_background_fraction(semi::Bool, R) = semi ? R.CC_split.below : 1.0
 
 """
     dn_asymmetry(D, N, f_day, f_night)
 
-Day-night asymmetry 2(d − n)/(d + n) of the day signal D and the night signal N (summed over all
-night bins), taken per unit exposure: d = D / f_day, n = N / f_night, with the signal's own split
-(flux-weighted; SPEC 4.6). With raw counts an unequal split would fake an asymmetry. 0 when d + n = 0.
+Day-night asymmetry 2(d − n)/(d + n) per unit exposure, d = D/f_day and n = N/f_night with the
+signal's split (SPEC 4.6); 0 when d + n = 0.
 """
 function dn_asymmetry(D::Real, N::Real, f_day::Real, f_night::Real)
     d, n = D / f_day, N / f_night
@@ -155,12 +135,10 @@ end
 """
     dn_asymmetry(day, night, BG, idx, signal_fractions, bg_fractions)
 
-Signal day-night asymmetry above threshold (E_reco bins idx:end) from the predicted day and night
-arrays, which include the background BG. The background is removed with its own (time-weighted)
-split: bg_fractions.day·BG by day and bg_fractions.night·BG over all night bins in total (pass the
-factors the predictions carry, BG_TOTAL_FACTORS: f_day^B and f_night^B·Σ_k w^B_k); the signal asymmetry is
-then taken per unit exposure with the signal (flux-weighted) split signal_fractions = (day, night). Energy is the last axis of `day` and axis 2 of every
-night array ((cos z, E) or (cos θ, E, cos z)).
+Signal day-night asymmetry over E_reco bins idx:end of predicted arrays that include the background
+BG. The background is removed with the factors the predictions carry (`bg_fractions`, i.e.
+BG_TOTAL_FACTORS), the asymmetry taken with the signal split. Energy is the last axis of `day` and
+axis 2 of `night`.
 """
 function dn_asymmetry(day::AbstractArray, night::AbstractArray, BG::AbstractVector, idx::Integer,
                       signal_fractions, bg_fractions)

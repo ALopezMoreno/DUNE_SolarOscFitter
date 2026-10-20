@@ -12,34 +12,21 @@ create_response_matrix(data, bin_info_x, bin_info_y) = _response_matrix(data, bi
 
 function _response_matrix(data, bin_info_x, bin_info_y; normalise::Bool)
     """
-    Create a detector response matrix from Monte Carlo simulation data.
-    
-    The response matrix R[i,j] gives the probability that a neutrino with
-    true energy in bin i will be reconstructed with energy in bin j.
-    
-    Arguments:
-    - data: Named tuple with x and y vectors
-    - bin_info_x: x-axis binning specification
-    - bin_info_y: y-axis binning specification
-    
-    Returns:
-    - contribution_matrix: Normalized response matrix (rows sum to 1)
+    Response matrix R[i, j] = P(reco bin j | true bin i) from MC events `data` (x = true, y = reco);
+    rows sum to 1.
     """
-    # Replace zero energies with small values to avoid binning issues
+    # zero energies would fall below the first edge
     x = ifelse.(data.x .== 0, 1e-9, data.x)
     y = ifelse.(data.y .== 0, 1e-9, data.y)
 
-    # Extract true energy binning parameters
     bin_number_x = bin_info_x.bin_number
     min_val_x = bin_info_x.min
     max_val_x = bin_info_x.max
 
-    # Extract reconstructed energy binning parameters
     bin_number_y = bin_info_y.bin_number
     min_val_y = bin_info_y.min
     max_val_y = bin_info_y.max
 
-    # Create/get bin edges
     bins_x = hasproperty(bin_info_x, :bins) ?
          bin_info_x.bins :
          range(min_val_x, stop = max_val_x, length = bin_number_x + 1)
@@ -48,30 +35,22 @@ function _response_matrix(data, bin_info_x, bin_info_y; normalise::Bool)
          bin_info_y.bins :
          range(min_val_y, stop = max_val_y, length = bin_number_y + 1)
 
-    # Initialize the response matrix
     contribution_matrix = zeros(Float64, bin_number_x, bin_number_y)
 
-    # Fill the response matrix by binning MC events. The range check uses the bin edges, not
-    # min/max: with extended (±Inf) edges, out-of-window events belong in the first/last bin.
-    # Checking min/max dropped them and the row normalisation then pushed their probability
-    # into the in-window bins (ES rates 15–50 % too high).
+    # Range check on the bin edges: with ±Inf outer edges, out-of-window events go in the end bins.
     lo_x, hi_x = first(bins_x), last(bins_x)
     lo_y, hi_y = first(bins_y), last(bins_y)
     @inbounds for (x_val, y_val) in zip(x, y)
         if lo_x <= x_val <= hi_x && lo_y <= y_val <= hi_y
-            # Find appropriate bins (searchsortedlast gives left-inclusive bin index)
             true_bin = min(searchsortedlast(bins_x, x_val), bin_number_x)
             reco_bin = min(searchsortedlast(bins_y, y_val), bin_number_y)
 
-            # Increment the response matrix element
             contribution_matrix[true_bin, reco_bin] += 1
         end
     end
 
     normalise || return contribution_matrix
 
-    # Normalize each row to create probability matrix
-    # Each row represents P(y | x) e.g. P(E_reco | E_true) for a given true energy bin
     for i in 1:bin_number_x
         row_sum = sum(contribution_matrix[i, :])
         if row_sum > 0
@@ -82,9 +61,8 @@ function _response_matrix(data, bin_info_x, bin_info_y; normalise::Bool)
     return contribution_matrix
 end
 
-# Signal response matrices and efficiencies are built from unweighted event counts. What a
-# non-unit `weights` column means in a signal sample (e.g. a cross-section weight, which the
-# fitter applies itself) is not yet fixed, so such weights are ignored, loudly.
+# Signal responses use unweighted counts: the meaning of signal `weights` is not defined yet, so
+# non-unit weights are ignored with a warning.
 function warn_if_signal_weights_ignored(label, df, path)
     "weights" in names(df) || return nothing
     w = skipmissing(df.weights)
@@ -98,9 +76,8 @@ end
 """
     build_response_matrices(det) -> (responseMatrices, Ereco_bins_ES_extended, Ereco_bins_CC_extended)
 
-Build detector response matrices for detector `det`. Uses shared global `Etrue_bins`.
-`responseMatrices` includes `.eff` (selection×reco efficiencies) and `.bins`
-(Ereco/cos-scatter bin specs) so propagation functions need no separate globals.
+Response matrices of detector `det`, with `.eff` (selection × reco efficiencies), `.bins` and the
+MC counts `.mc` (likelihoods/mcstat.jl).
 """
 function build_response_matrices(det)
     Ereco_bins_ES           = det.Ereco_bins_ES
@@ -118,7 +95,6 @@ function build_response_matrices(det)
     warn_if_signal_weights_ignored("ES nuother", df_nuother, det.other_filepath)
     warn_if_signal_weights_ignored("CC",         df_CC,      det.CC_filepath)
 
-    # Extend ereco bins from -Inf to +Inf
     bins_ES = ereco_edges(Ereco_bins_ES)
     bins_CC = ereco_edges(Ereco_bins_CC)
     bins_ES[1] = -Inf;  bins_ES[end] = Inf
@@ -165,8 +141,7 @@ function build_response_matrices(det)
 
     eff_tuple = (ES_nue=ES_nue_eff, ES_nuother=ES_nuother_eff, CC=CC_eff)
 
-    # MC statistics of the signal predictions: response counts n[i, j] (row sums = MC events per
-    # E_true bin) and the per-E_reco total counts behind each efficiency (src/likelihoods/mcstat.jl).
+    # MC counts behind the responses and efficiencies (likelihoods/mcstat.jl)
     mc_tuple = (
         ES_nue     = (counts = create_response_counts(nue_ES_sample,   Etrue_bins, Ereco_bins_ES_extended), tot = Float64.(ES_nue_tot)),
         ES_nuother = (counts = create_response_counts(other_ES_sample, Etrue_bins, Ereco_bins_ES_extended), tot = Float64.(ES_nuoth_tot)),
@@ -176,7 +151,7 @@ function build_response_matrices(det)
     bins_tuple = (ES=Ereco_bins_ES_extended, CC=Ereco_bins_CC_extended, cos_scatter=cos_scatter_bins)
 
     if inclusive_analysis || semi_inclusive_analysis
-        # CC mapped to ES bins — used for the forward inclusive hemisphere in both modes
+        # CC in ES reco bins: the forward inclusive hemisphere
         CC_inclusive_response = create_response_matrix(CC_sample, Etrue_bins, Ereco_bins_ES_extended)
         CC_incl_sel, _ = create_histogram(df_CC.Ereco[df_CC.mask], Ereco_bins_ES_extended,
                                           normalise=false)
@@ -189,27 +164,20 @@ function build_response_matrices(det)
                                                 tot = Float64.(CC_incl_tot)),))
 
         if semi_inclusive_analysis
-            # ── CC angular split fractions (uniform-CC assumption) ────────────
-            # ang_mask selects FORWARD bins (centers >= angular_cos_cut), already computed above.
+            # CC forward/backward split, CC assumed uniform in cos θ (ang_mask = forward bins)
             Ncos       = cos_scatter_bins.bin_number
-            f_CC_above = count(ang_mask) / Ncos   # fraction of CC in forward hemisphere
-            f_CC_below = 1.0 - f_CC_above         # fraction of CC in backward hemisphere
+            f_CC_above = count(ang_mask) / Ncos
+            f_CC_below = 1.0 - f_CC_above
 
-            # ── Mis-ID response: two-step ES→CC chain ────────────────────────
-            # Step 1: nue/nuother_ES_response (normalised, NO efficiency) encodes the
-            #   100%-efficiency ES reco pass.  ES_nue_eff is deliberately NOT applied here.
-            # Step 2: CC_response reindexed to ES reco bin centres encodes the CC reco pass
-            #   treating e_reco_ES as pseudo-true energy (the stated approximation).
-            # Backward fraction (per Ereco_ES bin) selects only backward-scattered ES events.
+            # Mis-ID response, ES → CC in two steps: the ES response (no efficiency), then the CC
+            # response with the ES reco energy as pseudo-true energy, for backward ES events only.
             N_ES        = Ereco_bins_ES.bin_number
-            # Centres of the finite edges: bins_ES has ±Inf outer edges, which gave ±Inf centres
-            # (the lowest bin was dropped, the highest mapped to the top Etrue bin).
+            # centres of the finite edges (bins_ES has ±Inf outer edges)
             ES_edges    = ereco_edges(Ereco_bins_ES)
             ES_centers  = 0.5 .* (ES_edges[1:end-1] .+ ES_edges[2:end])
             Etrue_edges = collect(range(Etrue_bins.min, Etrue_bins.max,
                                         length = Etrue_bins.bin_number + 1))
 
-            # Reindex CC response rows by ES reco bin centres
             CC_response_as_ereco = zeros(N_ES, Ereco_bins_CC.bin_number)
             for j in 1:N_ES
                 etrue_bin = min(searchsortedlast(Etrue_edges, ES_centers[j]),
@@ -219,11 +187,9 @@ function build_response_matrices(det)
                 end
             end
 
-            # Backward angular fraction per Ereco_ES bin
             backward_frac = vec(sum(angular_ES_response[.!ang_mask, :], dims=1))  # (N_Ereco_ES,)
 
-            # Scale ES response columns by backward fraction, then fold with CC_response_as_ereco.
-            # Result: (N_Etrue × N_Ereco_CC) matrix encoding the full backward mis-ID chain.
+            # (N_Etrue × N_Ereco_CC) backward mis-ID response
             nue_ES_backward     = nue_ES_response    .* backward_frac'
             nuother_ES_backward = nuother_ES_response .* backward_frac'
             CC_misID_nue_response     = nue_ES_backward    * CC_response_as_ereco
@@ -237,7 +203,7 @@ function build_response_matrices(det)
                                 BG=(angular=angular_BG_response,),
                                 eff=eff_tuple, bins=bins_tuple)
         else
-            # Pure inclusive (existing path unchanged)
+            # pure inclusive
             responseMatrices = (ES=ES_response, CC=CC_response,
                                 CC_inclusive=CC_inclusive_response,
                                 BG=(angular=angular_BG_response,),

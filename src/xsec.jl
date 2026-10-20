@@ -1,19 +1,11 @@
-using CSV, DataFrames # not used here any more; kept so scripts that include this file still get them
-using QuadGK: gauss   # Gauss-Legendre nodes for the ES recoil integral
+using CSV, DataFrames # for scripts that include this file
+using QuadGK: gauss
 
-# Load physics constants and detector parameters
 include(joinpath(@__DIR__, "core.jl"))
 include(joinpath(@__DIR__, "tabulated.jl"))   # TabulatedInput, read_numeric_table
 
-# ---------------------------------------------------------------------------------------------
-# CC ν_e + ⁴⁰Ar total cross section, tabulated (config key `cc_xsec_file`, default
-# DEFAULT_CC_XSEC_FILE in core.jl: MARLEY 2.0.0, HF-CRPA + Bhattacharya 2009).
-#
-# File format: '#' comment lines (provenance), then one header row, then rows
-# `E_nu [MeV], sigma [1e-42 cm^2 per 40Ar]`. The table is used as given: no point is added,
-# dropped, sorted or deduplicated, and it is never extrapolated (evaluating CC_xsec outside the
-# tabulated energies is an error). Only build_unoscillated_sample() evaluates it, at setup.
-# ---------------------------------------------------------------------------------------------
+# CC ν_e + ⁴⁰Ar total cross section from `cc_xsec_file` (default MARLEY 2.0.0): '#' lines, a
+# header row, then `E_nu [MeV], sigma [1e-42 cm^2 per 40Ar]`. Used as given, never extrapolated.
 
 """
     resolve_cc_xsec_path(path) -> String
@@ -44,8 +36,7 @@ end
 CC_XSEC_PATH = resolve_cc_xsec_path(@isdefined(cc_xsec_file) ? cc_xsec_file : DEFAULT_CC_XSEC_FILE)
 CC_XSEC_E_MEV, CC_XSEC_SIGMA_1E42 = read_cc_xsec_table(CC_XSEC_PATH)
 
-# σ_CC(E_ν) [cm² per ⁴⁰Ar], E_ν in GeV: linear interpolation, a TabulatedDomainError outside the
-# table (never extrapolated). CC_xsec_scale is a fixed overall factor (1 = the table as given).
+# σ_CC(E_ν) [cm² per ⁴⁰Ar], E_ν in GeV, times the fixed factor CC_xsec_scale.
 CC_xsec = TabulatedInput(CC_XSEC_E_MEV .* 1e-3, CC_XSEC_SIGMA_1E42 .* 1e-42 .* CC_xsec_scale;
                          name = "CC cross section", source = CC_XSEC_PATH, units = "GeV",
                          extrapolation = :error, nonnegative = true)
@@ -62,10 +53,8 @@ function check_cc_xsec_covers(bin_edges; xsec = CC_xsec)
     check_covers(xsec, bin_edges[1], bin_edges[end]; what = "range_Etrue (GeV)")
 end
 
-# Elastic scattering cross-section calculations
-# Neutrino-electron scattering with the BKS95 electroweak radiative corrections
-# (constants and references in core.jl). kappa depends on the recoil energy T,
-# so the recoil integral is done by Gauss-Legendre quadrature.
+# ν–e elastic scattering with the BKS95 radiative corrections (constants in core.jl). κ depends on
+# the recoil energy T, so the recoil integral is done by Gauss–Legendre quadrature.
 
 const ES_T_NODES, ES_T_WEIGHTS = gauss(16)
 
@@ -102,12 +91,10 @@ function ES_xsec(enu, kappa, cc)
 
     with cc = 1 for ν_e (charged-current contribution) and 0 for ν_μ,τ.
     """
-    Emin = tpc_threshold  # true TPC detection threshold (GeV); set in config, must match MC
+    Emin = tpc_threshold
 
-    # Maximum kinematically allowed electron recoil energy
     T_max = 2 * enu^2 / (m_e + 2 * enu)
 
-    # No recoil above threshold
     if T_max <= Emin
         return 0.0
     end
@@ -129,18 +116,9 @@ ES_xsec_nue(enu) = ES_xsec(enu, kappa_nue, 1.0)
 # Other neutrino flavors (μ, τ): NC only
 ES_xsec_nuother(enu) = ES_xsec(enu, kappa_nuother, 0.0)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# CC cross-section shape nuisances (SPEC 3.3)
-#
-#   σ(E) = σ_nominal(E) · norm · exp(tilt·p₁(L) + curv·p₂(L)),   L = ln(E/E_pivot)
-#
-# p₁, p₂ are monic polynomials in L orthogonal, under the weight w_i (unoscillated CC ⁸B rate in
-# E_true bin i), to 1 and to each other:
-#   p₁ = L − ⟨L⟩,   p₂ = L² − a·L − b,   ⟨p₁⟩ = ⟨p₂⟩ = ⟨p₁p₂⟩ = 0   (⟨f⟩ = Σ w f / Σ w).
-# Hence at tilt = curv = 0, ∂ln N/∂tilt = ⟨p₁⟩ = 0 and ∂ln N/∂curv = ⟨p₂⟩ = 0 for N = Σ w·shape
-# (first order only: ∂²ln N/∂tilt² = ⟨p₁²⟩ ≠ 0). Monic, so curv is the coefficient of L². The slope
-# d ln σ/d ln E = tilt + curv·(2L − a) equals tilt only where L = a/2, or everywhere when curv = 0.
-# ─────────────────────────────────────────────────────────────────────────────
+# CC cross-section shape nuisances (SPEC 3.3): σ(E) = σ_nominal(E) · norm · exp(tilt·p₁ + curv·p₂),
+# with p₁ = L − ⟨L⟩ and p₂ = L² − a·L − b (L = ln E) orthogonal to 1 and to each other under the
+# unoscillated CC ⁸B rate, so tilt and curv do not move the total rate to first order.
 
 """
     cc_xsec_shape_basis(energies_GeV, w) -> (; p1, p2, E_pivot, mean_L, a, b)

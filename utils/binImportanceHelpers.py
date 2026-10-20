@@ -30,14 +30,8 @@ def _night_to_plot_layout(Z):
     return Z
 
 def _reshape_julia_matrix(arr, shape, name=""):
-    """
-    Recover a Julia-saved array in its Julia (column-major) logical shape.
-
-    JLD2/HDF5 stores Julia arrays column-major; h5py reports the dims reversed,
-    so a 2D Julia (n_cosz, n_Ereco) array is read as (n_Ereco, n_cosz). Transpose
-    it back rather than reshaping: an order="F" reshape scrambles the data whenever
-    n_cosz != n_Ereco (which happens with the adaptive cosz grid).
-    """
+    """Array in its Julia shape: h5py reverses the dims, so transpose (an order="F" reshape
+    scrambles the data whenever n_cosz != n_Ereco)."""
     a = _A(arr)
     shape = tuple(shape)
 
@@ -54,13 +48,7 @@ def _reshape_julia_matrix(arr, shape, name=""):
     raise ValueError(f"{name}: cannot reshape array of shape {a.shape} to {shape}")
 
 def compute_bin_score(var_llh, corr_llh, var_eps=1e-12, use_abs=True):
-    """
-    Per-bin proxy used in your script:
-        score = sqrt(Var(llh_bin)) * |Corr(llh_bin, theta)|
-
-    Returns:
-      score (same shape as var_llh), mask used, plus signed_corr (for debugging).
-    """
+    """Per-bin score sqrt(Var(llh_bin)) * |Corr(llh_bin, θ)|; returns (score, mask, signed_corr)."""
     var_llh = np.maximum(_A(var_llh), 0.0)
     corr_llh = _A(corr_llh)
 
@@ -184,9 +172,7 @@ def build_llh_bin_maps(diagnostics, var_eps=1e-12, transpose_night=False):
     es_c_sin2 = _Znight(es_c_sin2, transpose_night)
     es_c_dm2  = _Znight(es_c_dm2,  transpose_night)
 
-    # When angular_reco=true the array is (n_cos, n_Ereco, n_night_bins).
-    # Collapse the night-time axis to (n_cos, n_Ereco) for 2D plotting:
-    #   intensive quantities (correlations) → mean; extensive (mean/var) → sum.
+    # angular: collapse the night axis (correlations by mean, means and variances by sum)
     if es_mean.ndim == 3:
         es_mean   = es_mean.sum(axis=-1)
         es_var    = es_var.sum(axis=-1)
@@ -220,9 +206,7 @@ def build_llh_bin_maps(diagnostics, var_eps=1e-12, transpose_night=False):
     esday_c_sin2 = _A(diagnostics["derived_ESday_corr_llh_sin2_th12"])
     esday_c_dm2  = _A(diagnostics["derived_ESday_corr_llh_dm2_21"])
 
-    # Collapse scatter-angle axis when angular_reco=true (2D → 1D energy spectrum).
-    # Julia stores (n_cos, n_E) column-major; h5py reverses dims → Python sees (n_E, n_cos).
-    # axis=0 = n_E (energy), axis=1 = n_cos (scatter angle). Sum over axis=1 to collapse angles.
+    # angular: sum over the scatter angle (axis 1 as h5py reads Julia's (n_cos, n_E))
     if esday_mean.ndim == 2:
         esday_mean = esday_mean.sum(axis=1)
         esday_var  = esday_var.sum(axis=1)

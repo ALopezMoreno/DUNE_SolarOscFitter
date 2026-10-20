@@ -59,9 +59,7 @@ if not mcmc_chains:
     sys.exit(1)
 
 
-#####################################################################
-################ ----- Begin default execution ----- ################
-#####################################################################
+# ── Default execution ──
 
 start_time = time.time()
 
@@ -70,13 +68,6 @@ variables = [r'$\sin^2\theta_{12}$', r'$\sin^2\theta_{13}$', r'$\Delta m^2_{21}$
 
 data = posteriorHelpers.load_posterior(mcmc_chains, parameters, burnin=burnin, exclude_chains=exclude, detector=args.detector)
 
-##### Some useful colours #####
-#----------------------------------------------#
-#    -- Muted dark blue/turquoise: '#006c94'   #
-#    -- T2K-NOvA blue: '#0894bc'               #
-#    -- ChatGPT bluish green: '#009E73'        #
-#    -- ChatGPT blue: '#332288'                #
-#----------------------------------------------#
 
 
 # Define parameter sets based on diagnostics flag
@@ -162,9 +153,7 @@ end_time = time.time()
 elapsed_time = end_time - start_time
 print(f"Execution time: {elapsed_time:.2f} seconds")
 
-###################################################################
-################ ----- Begin execution cases ----- ################
-###################################################################
+# ── Execution cases ──
 
 if customParameters is not None:
     print(f"Generating corner plot with custom parameters: {customParameters}")

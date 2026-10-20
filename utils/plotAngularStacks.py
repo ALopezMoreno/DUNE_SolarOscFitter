@@ -40,10 +40,7 @@ NUE_COL  = "#0894bc";  NUOTHER_COL = "#a41007"
 LW      = 1.5
 LW_HIST = 3.5   # thicker lines for dedicated histogram page
 
-# ── Load data ─────────────────────────────────────────────────────────────────
-# JLD2 is HDF5-compatible.  Julia stores arrays in column-major order; HDF5 +
-# h5py reverse the dimension order, so a Julia (m, n) matrix arrives in Python
-# as (n, m).  We call .T on all multi-dimensional arrays after loading.
+# ── Load data (h5py reverses Julia's dimension order: .T on every multi-dimensional array) ──
 with h5py.File(args.infile, "r") as f:
 
     # backward-compat top-level keys
@@ -162,9 +159,7 @@ else:
     E_centers_reco = 0.5 * (E_edges_reco[:-1] + E_edges_reco[1:])
     cos_edges      = np.linspace(cos_min, cos_max, n_cos + 1)
 
-# Mask for energy bins at or above the analysis threshold.
-# Bins below this threshold contain huge backgrounds not used in the fit, which swamp
-# the angular plots when summed over energy.
+# Energy bins at or above the threshold (below it the backgrounds swamp the angular plots)
 e_thresh_mask = E_centers_reco >= Ereco_thr
 e_5mev_mask   = E_centers_reco >= 5.0
 e_10mev_mask  = E_centers_reco >= 10.0
@@ -193,9 +188,7 @@ def heatmap(ax, Z, x_edges, y_edges, xlabel, ylabel, title, cmap="cividis", dens
 # ── Main PDF ──────────────────────────────────────────────────────────────────
 with PdfPages(out_pdf) as pdf:
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # PAGE 1: Unoscillated spectra (true energy, flux × cross-section)
-    # ══════════════════════════════════════════════════════════════════════════
+    # ── PAGE 1: Unoscillated spectra (true energy, flux × cross-section) ──
     if full_data and args.stages == "all":
         E_edges_true   = np.linspace(Etrue_min, Etrue_max, Etrue_n + 1)
 
@@ -217,9 +210,7 @@ with PdfPages(out_pdf) as pdf:
         pdf.savefig(fig, dpi=300, bbox_inches="tight")
         plt.close(fig)
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # PAGE 2: Response matrices
-    # ══════════════════════════════════════════════════════════════════════════
+    # ── PAGE 2: Response matrices ──
     if full_data and args.stages == "all":
         E_edges_true  = np.linspace(Etrue_min, Etrue_max, Etrue_n + 1)
         E_edges_ES    = np.linspace(Ereco_ES_min, Ereco_ES_max, Ereco_ES_n + 1)
@@ -254,9 +245,7 @@ with PdfPages(out_pdf) as pdf:
         pdf.savefig(fig, dpi=300, bbox_inches="tight")
         plt.close(fig)
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # PAGE 3: Oscillation probabilities
-    # ══════════════════════════════════════════════════════════════════════════
+    # ── PAGE 3: Oscillation probabilities ──
     if full_data and args.stages == "all":
         E_edges_true = np.linspace(Etrue_min, Etrue_max, Etrue_n + 1)
         cosz_edges   = cosz_edges_real if cosz_edges_real is not None else np.linspace(cosz_min, cosz_max, cosz_n + 1)
@@ -287,9 +276,7 @@ with PdfPages(out_pdf) as pdf:
         pdf.savefig(fig, dpi=300, bbox_inches="tight")
         plt.close(fig)
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # PAGE 4: Oscillated spectra (true energy, before detector response)
-    # ══════════════════════════════════════════════════════════════════════════
+    # ── PAGE 4: Oscillated spectra (true energy, before detector response) ──
     if full_data and args.stages == "all":
         E_edges_true = np.linspace(Etrue_min, Etrue_max, Etrue_n + 1)
         cosz_edges   = cosz_edges_real if cosz_edges_real is not None else np.linspace(cosz_min, cosz_max, cosz_n + 1)
@@ -327,9 +314,7 @@ with PdfPages(out_pdf) as pdf:
         pdf.savefig(fig, dpi=300, bbox_inches="tight")
         plt.close(fig)
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # PAGE 5a: Reco-space spectra (day step + night heatmap, ES and CC)
-    # ══════════════════════════════════════════════════════════════════════════
+    # ── PAGE 5a: Reco-space spectra (day step + night heatmap, ES and CC) ──
     if full_data and args.stages == "all":
         cosz_edges   = cosz_edges_real if cosz_edges_real is not None else np.linspace(cosz_min, cosz_max, cosz_n + 1)
         E_edges_ES   = np.linspace(Ereco_ES_min, Ereco_ES_max, Ereco_ES_n + 1)
@@ -385,9 +370,7 @@ with PdfPages(out_pdf) as pdf:
         pdf.savefig(fig, dpi=300, bbox_inches="tight")
         plt.close(fig)
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # PAGE 5: Angular distribution — day (cos_scatter × Ereco heatmap + 1D)
-    # ══════════════════════════════════════════════════════════════════════════
+    # ── PAGE 5: Angular distribution — day (cos_scatter × Ereco heatmap + 1D) ──
     if full_data and has_angular and args.stages == "all":
         E_edges_ES   = np.linspace(Ereco_ES_min, Ereco_ES_max, Ereco_ES_n + 1)
         cos_sc_edges = np.linspace(cos_scatter_min, cos_scatter_max, cos_scatter_n + 1)
@@ -401,11 +384,8 @@ with PdfPages(out_pdf) as pdf:
                 r"ES day angular distribution",
                 cmap="cividis")
 
-        # 1D stacked spectrum (day only, above-threshold energy bins).
-        # Zero out sub-threshold bins to match x-axis clip on PAGE 7 (Ereco_thr).
-        # CC_angular and BG_angular are day+night totals. The background's day share is bg_day_fraction
-        # (exact); CC is signal, so signal_day_fraction (approximate: its night rate differs by its
-        # day-night asymmetry).
+        # Day stack above threshold. CC_angular and BG_angular are day + night totals: the background's
+        # day share is bg_day_fraction, CC's approximately signal_day_fraction.
         es_day_1d = (ES_angular_day * e_thresh_mask).sum(axis=0)
         cc_day_1d = (CC_angular * e_thresh_mask).sum(axis=0) * signal_day_fraction
         bg_day_1d = (BG_angular * e_thresh_mask).sum(axis=0) * bg_day_fraction
@@ -424,10 +404,7 @@ with PdfPages(out_pdf) as pdf:
         pdf.savefig(fig, dpi=300, bbox_inches="tight")
         plt.close(fig)
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # PAGE 6: Angular distribution — night by zenith slice
-    #   For each selected cosz bin: 1D cos_scatter distribution (summed over E)
-    # ══════════════════════════════════════════════════════════════════════════
+    # ── PAGE 6: Angular distribution — night by zenith slice ──
     if full_data and has_angular and args.stages == "all":
         n_z     = ES_angular_night_3d.shape[2]
         n_slices = args.n_cosz_slices
@@ -472,11 +449,7 @@ with PdfPages(out_pdf) as pdf:
         pdf.savefig(fig, dpi=300, bbox_inches="tight")
         plt.close(fig)
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # PAGE 7 (or only page when --stages angular): Combined stacks
-    #   Stacked spectrum (lin + log) + N angular-slice panels + >5 MeV panel
-    # Emitted only when angular_reco=true (angular arrays are meaningful)
-    # ══════════════════════════════════════════════════════════════════════════
+    # ── PAGE 7 (or only page when --stages angular): Combined stacks ──
     if has_angular or (args.stages == "angular"):
         n_panels  = args.n_panels
         step_e    = max(1, n_E // n_panels)
@@ -581,10 +554,7 @@ with PdfPages(out_pdf) as pdf:
         pdf.savefig(fig, dpi=300, bbox_inches="tight")
         plt.close(fig)
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # PAGE 8: Dedicated energy histograms — thicker lines, two panels
-    #   Left: stacked linear  |  Right: components log scale
-    # ══════════════════════════════════════════════════════════════════════════
+    # ── PAGE 8: Dedicated energy histograms — thicker lines, two panels ──
     if has_angular or (args.stages == "angular"):
         es_1d = ES_angular.sum(axis=0)
         cc_1d = CC_angular.sum(axis=0)

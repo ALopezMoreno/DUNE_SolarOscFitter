@@ -1,51 +1,32 @@
 #=
-setup.jl
-
-Initializes the analysis environment: loads shared physics inputs (solar model,
-Earth profile, oscillation paths), then loops over all detectors in `detector_configs`
-to build per-detector unoscillated samples, response matrices, backgrounds, Asimov data,
-and LikelihoodInputs.  Results are collected in the global `detector_outputs` dict.
+setup.jl — loads the shared inputs (solar model, Earth, exposure), then builds each detector's
+samples, response, backgrounds, Asimov data and LikelihoodInputs into `detector_outputs`.
 =#
-
-######################################
-######## IMPORTS AND INCLUDES ########
-######################################
 
 using JLD2, CSV, DataFrames, Plots
 
 include(joinpath(@__DIR__, "core.jl"))
 
-#############################################
-######## SHARED INITIALIZATION (once) ########
-#############################################
-
-# Load solar production region and flux shapes
 include(joinpath(@__DIR__, "solarModel.jl"))
 
-# Load Earth model and build neutrino propagation paths
 include(joinpath(@__DIR__, "earthProfile.jl"))
 include(joinpath(@__DIR__, "oscillations", "makePaths.jl"))
 
-# Load exposure vs. zenith angle (shared across detectors)
 include(joinpath(@__DIR__, "exposure.jl"))
 
-# Include function-definition files (no top-level computation here)
+# Function definitions only
 include(joinpath(@__DIR__, "unoscillatedSample.jl"))
 include(joinpath(@__DIR__, "response.jl"))
 include(joinpath(@__DIR__, "backgrounds.jl"))
 include(joinpath(@__DIR__, "inputChecks.jl"))
 
-# Build Earth propagation paths (shared; the legacy NumOsc night calculation uses
-# them, and osc_setup.jl checks NightOsc's Earth layers against them)
+# Earth paths for the legacy NumOsc night calculation; osc_setup.jl checks NightOsc against them
 global earth_paths  = [make_potential_for_integrand(z, earth) for z in cosz_calc]
 global earth_lookup = let
     base    = get_avg_densities(earth_paths)
     n_exp   = isnothing(earth_normalisation_true) ? length(base) : length(earth_normalisation_true)
     if length(base) < n_exp
-        # Some innermost layers (e.g. inner core) lie outside the exposure support
-        # and are not traversed by any path in cosz_calc.  Get their nominal
-        # densities from the vertical reference path (layers are indexed
-        # outermost→innermost, so missing ones are always at the high end).
+        # Innermost layers no path in cosz_calc crosses: nominal densities from the vertical path
         ref = get_avg_densities([make_potential_for_integrand(-1.0, earth)])
         [base; ref[length(base)+1:n_exp]]
     else
@@ -53,31 +34,25 @@ global earth_lookup = let
     end
 end
 
-# Compute shared Etrue bin edges needed by propagation_osc.jl
-# (E_calc is set as a global inside propagation_osc.jl when propagation_main.jl is included)
+# Etrue bin edges for propagation_osc.jl
 global bin_edges_calc, energies_calc = calculate_bins(
     (max=Etrue_bins.max, min=Etrue_bins.min, bin_number=Etrue_bins.bin_number * 2)
 )
 
 include(joinpath(@__DIR__, "propagation", "propagation_main.jl"))
 
-# Likelihood struct and function definitions — must precede the detector loop
+# Must precede the detector loop
 include(joinpath(@__DIR__, "likelihoods", "likelihood_core.jl"))
 include(joinpath(@__DIR__, "likelihoods", "likelihood_debug.jl"))
 include(joinpath(@__DIR__, "likelihoods", "likelihood_statistical.jl"))
 include(joinpath(@__DIR__, "likelihoods", "likelihood_builder.jl"))
 include(joinpath(@__DIR__, "likelihoods", "mcstat.jl"))
 
-#############################################
-######## PER-DETECTOR LOOP ########
-#############################################
-
 # Shared Asimov oscillation parameters (detector-independent)
 global sin2_th12_true, sin2_th13_true, dm2_21_true
 global integrated_8B_flux_true, integrated_HEP_flux_true
 
-# Collect outputs for every detector
-global detector_outputs = OrderedDict{String, NamedTuple}()   # same order as detector_configs
+global detector_outputs = OrderedDict{String, NamedTuple}()
 
 @logmsg Setup "Running fit with detector(s): $(join(keys(detector_configs), ", "))"
 
@@ -154,8 +129,7 @@ for (det_name, det) in detector_configs
         det_name                = det_name,
     )
 
-    # ── Propagation closure (captures det_flags) ───────────────────────────
-    # This is stored in LikelihoodInputs.f so expected_rates needs no extra args.
+    # ── Propagation closure (captures det_flags), stored in LikelihoodInputs.f ──
     prop_fn = let df = det_flags
         (unosc, resp, pars, ssm, edges, bg; precomputed_osc=nothing) ->
             propagateSamples(unosc, resp, pars, ssm, edges, bg, df;
@@ -171,9 +145,7 @@ for (det_name, det) in detector_configs
         bin_edges_det, backgrounds_det, det_flags; verbose=true
     )
 
-    # ── Energy threshold indices ───────────────────────────────────────────
-    # First fitted bin: the one whose lower edge is the threshold. threshold_binning and
-    # ereco_edges make that edge exactly the threshold, so this is bin 2 (checked below).
+    # ── Energy threshold indices: the first fitted bin starts at the threshold (bin 2) ──
     index_ES_det = findfirst(x -> x >= det.E_threshold.ES, Ereco_bins_ES_ext.bins)
     index_CC_det = findfirst(x -> x >= det.E_threshold.CC, Ereco_bins_CC_ext.bins)
     if isnothing(index_ES_det)
@@ -187,17 +159,15 @@ for (det_name, det) in detector_configs
     end
 
     # ── Day-night asymmetry logging ────────────────────────────────────────
-    # In semi-inclusive mode the CC prediction carries f_below·BG (propagation_main.jl), so that is
-    # what is subtracted; with BG_TOTAL_FACTORS.day ≠ .night an unscaled BG biases A_DN.
+    # The background the CC prediction carries (f_below·BG in semi-inclusive mode)
     CC_bg_aboveThreshold = ((det.inclusive_analysis && !det.semi_inclusive_analysis) || isempty(BG_CC_tot_true)) ?
                             0.0 : cc_background_fraction(det.semi_inclusive_analysis, responseMatrices_det) *
                                   sum(BG_CC_tot_true[index_CC_det:end])
     ES_bg_aboveThreshold = sum(BG_ES_tot_true[index_ES_det:end])
 
-    # Signal counts above threshold: the background is removed with its own (time-weighted) split,
-    # f_day^bg·BG by day and f_night^bg·BG over all night bins (SPEC 4.6).
-    fD, fN = SIGNAL_DAY_FRACTION, SIGNAL_NIGHT_FRACTION   # signal (flux-weighted) split
-    bD, bN = BG_TOTAL_FACTORS.day, BG_TOTAL_FACTORS.night  # background (time-weighted) day / night-total factors
+    # Signal above threshold: the background is removed with its own (time-weighted) split (SPEC 4.6)
+    fD, fN = SIGNAL_DAY_FRACTION, SIGNAL_NIGHT_FRACTION
+    bD, bN = BG_TOTAL_FACTORS.day, BG_TOTAL_FACTORS.night
     CC_Ntot = sum(@view measuredRate_CC_night[:, index_CC_det:end]) - bN * CC_bg_aboveThreshold
     CC_Dtot = sum(measuredRate_CC_day[index_CC_det:end]) - bD * CC_bg_aboveThreshold
 
@@ -213,14 +183,8 @@ for (det_name, det) in detector_configs
         ES_Ntot = 0.0; ES_Dtot = 0.0
     end
 
-    # Asymmetries of the signal per unit exposure (d = D/f_day, n = N/f_night with the signal split),
-    # so an unequal split does not fake one. The "effective" one is diluted by the background. Per unit
-    # of its own exposure the background rate is the same by day and by night, BG (the full-exposure
-    # background: f_day^bg·BG / f_day^bg = f_night^bg·BG / f_night^bg = BG, Σ exposure_weights_bg = 1),
-    # just as d and n are full-exposure signal rates; so the day and night totals per unit exposure are
-    # d + BG and n + BG whatever the two splits, and A_eff = 2(d − n)/(d + n + 2·BG). The background
-    # drops out of the numerator exactly. (It used 2·BG at f = 0.5 before, i.e. 4·BG per unit
-    # exposure, which counted the background twice; log-only.)
+    # Signal asymmetries per unit exposure (d = D/f_day, n = N/f_night). Per unit of its own exposure
+    # the background is BG by day and by night, so the effective asymmetry is 2(d − n)/(d + n + 2·BG).
     ES_d, ES_n = ES_Dtot / fD, ES_Ntot / fN
     CC_d, CC_n = CC_Dtot / fD, CC_Ntot / fN
     asymm_ES     = dn_asymmetry(ES_Dtot, ES_Ntot, fD, fN)
@@ -268,10 +232,7 @@ for (det_name, det) in detector_configs
         det.ES_mode && @logmsg Setup "  Total ES data above threshold: $(sci_notation(sum(ES_combined[index_ES_det:end])))"
         if det.CC_mode && (!det.inclusive_analysis || det.semi_inclusive_analysis)
             CC_total_above = sum(CC_combined[index_CC_det:end])
-            # CC_combined uses f_day^bg×BG (day) + f_night^bg×BG×Σexposure_weights_bg (night).
-            # Subtract the same factored BG so the signal printout is correct
-            # even when Σexp_weights < 1 (e.g. when cosz grid clips at the
-            # exposure support boundary rather than -1).
+            # the background as CC_combined carries it
             _cc_bg_factored = CC_bg_aboveThreshold * (BG_DAY_FRACTION + BG_NIGHT_FRACTION * sum(exposure_weights_bg))
             CC_sig_above    = CC_total_above - _cc_bg_factored
             @logmsg Setup "  Total CC data above threshold: $(sci_notation(CC_total_above))"
@@ -289,7 +250,7 @@ for (det_name, det) in detector_configs
     log_mc_counts(det, mc_counts_det, index_ES_det, index_CC_det)
 
     # ── Per-bin data / signal / background breakdown at the truth ──────────
-    night_factor = BG_DAY_FRACTION + BG_NIGHT_FRACTION * sum(exposure_weights_bg)   # day + night total of a background spectrum
+    night_factor = BG_DAY_FRACTION + BG_NIGHT_FRACTION * sum(exposure_weights_bg)   # day + night
     if det.ES_mode
         save_rate_breakdown(outFile, det_name, "ES", Ereco_bins_ES_ext.bins, index_ES_det, ES_combined,
                             backgrounds_det.ES, backgrounds_det.ES_conv, backgrounds_det.ES_par_counts,
@@ -341,22 +302,16 @@ for (det_name, det) in detector_configs
         CC_bg_norms_pars   = CC_bg_norms_pars_det,
         det_flags          = det_flags,
     )
-end  # detector loop
+end
 
-# Tabulated inputs: domain vs the range setup queried (every interpolant is evaluated by now)
+# Domain vs used range of every tabulated input
 log_tabulated_inputs()
 
 println(" ")
 
-# Load likelihood-building functions
 include(joinpath(@__DIR__, "likelihoods", "likelihood_main.jl"))
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Backward-compatibility globals for llhScan.jl / derive_variables_from_chain.jl
-# These scripts predate the multi-detector refactor and reference detector
-# properties as bare globals.  Expose the first detector's values so they
-# continue to work unchanged in the single-detector case.
-# ─────────────────────────────────────────────────────────────────────────────
+# Single-detector globals for llhScan.jl and derive_variables_from_chain.jl (the first detector)
 let _det  = first(values(detector_configs)),
     _out  = first(values(detector_outputs))
     global angular_reco            = _det.angular_reco
@@ -370,10 +325,8 @@ let _det  = first(values(detector_configs)),
     global Ereco_bins_ES      = _det.Ereco_bins_ES
     global Ereco_bins_CC      = _det.Ereco_bins_CC
     global cos_scatter_bins   = _det.cos_scatter_bins
-    # True (Asimov) values of ALL fit parameters: shared ones plus every detector's background
-    # norms. (Taking only the first detector's left the others' norms out, so total_llh at
-    # true_params failed for more than one detector.) Per-detector diagnostics such as
-    # :ES_asymmetry are kept from the first detector.
+    # Asimov values of all fit parameters (every detector's background norms); per-detector
+    # diagnostics such as :ES_asymmetry are the first detector's.
     global true_params        = foldl((a, o) -> merge(o.true_params, a), values(detector_outputs);
                                       init = NamedTuple())
     global true_parameters    = Dict{Symbol,Any}(pairs(true_params)...)

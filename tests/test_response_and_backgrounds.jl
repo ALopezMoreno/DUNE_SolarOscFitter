@@ -1,8 +1,8 @@
 using Test
 using CSV, DataFrames, StatsBase, Distributions, LinearAlgebra
 
-# Regression tests for the October 2026 bug fixes (SPEC.md 2.7, 4.1–4.3, 7.1). Each test
-# states the physical requirement, not the current output of the code.
+# Response, backgrounds and exposure folding (SPEC 2.7, 4.1–4.3, 4.6, 7.1). Each test states the
+# physical requirement, not the current output of the code.
 include(joinpath(@__DIR__, "..", "src", "core.jl"))
 include(joinpath(@__DIR__, "..", "src", "response.jl"))
 include(joinpath(@__DIR__, "..", "src", "backgrounds.jl"))

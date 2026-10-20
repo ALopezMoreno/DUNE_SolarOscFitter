@@ -1,19 +1,10 @@
-################################################################################
-# Global Constants and Imports
-################################################################################
+using Statistics
+using StaticArrays
+include(joinpath(@__DIR__, "..", "tabulated.jl"))
+using QuadGK: gauss
 
-using Statistics      # For statistical calculations
-using StaticArrays    # For efficient static arrays
-include(joinpath(@__DIR__, "..", "tabulated.jl"))   # TabulatedInput
-using QuadGK: gauss   # Gauss-Legendre nodes/weights for segment-average density
-
-# Earth model parameters
-global EARTH_RADIUS = 6371  # Earth radius in km
-global RESOLUTION = 12000   # Number of points along neutrino path
-
-################################################################################
-# Struct Definitions
-################################################################################
+global EARTH_RADIUS = 6371  # km
+global RESOLUTION = 12000   # points along a path
 
 # Represents a discontinuous jump in Earth's density profile
 struct Jump
@@ -39,15 +30,9 @@ struct Path
     segments::Vector{Segment}   # Continuous path segments for integration
 end
 
-# Detector depth below sea level (km) - essentially at surface
-global depth = 0.001 # basically sea level
-
-################################################################################
-# Track Computation Functions
-################################################################################
+global depth = 0.001  # detector depth below sea level (km)
 
 function find_jumps(x, f; threshold_factor::Float64=5.0)
-    # Convert inputs to arrays and check length consistency.
     if length(x) != length(f)
         throw(ArgumentError("x and f must have the same length"))
     end
@@ -55,23 +40,19 @@ function find_jumps(x, f; threshold_factor::Float64=5.0)
         throw(ArgumentError("x must have more than 1 point"))
     end
 
-    # Compute differences and absolute differences between consecutive f values.
     diff_f = diff(f)
     abs_diff = abs.(diff_f)
     median_diff = median(abs_diff)
     threshold = threshold_factor * median_diff
 
-    # Find indices where the jump coressponding to diff exceeds the threshold.
-    # Note: jump_indices are with respect to the diff array (1-indexed, covering elements 1 to length(f)-1).
+    # indices into diff(f) where the step exceeds the threshold
     jump_indices = findall(x_val -> x_val > threshold, abs_diff)
 
-    # If there are no jumps, return a default set of dictionaries.
     if isempty(jump_indices)
         return [Dict("x" => x[1], "b" => 0, "a" => f[end]),
             Dict("x" => x[end], "b" => f[1], "a" => f[1])]
     end
 
-    # Group consecutive indices.
     groups = []
     current_group = [jump_indices[1]]
     for idx in jump_indices[2:end]
@@ -84,14 +65,10 @@ function find_jumps(x, f; threshold_factor::Float64=5.0)
     end
     push!(groups, current_group)
 
-    # Initialize the jumps list with an initial jump dictionary.
     jumps = [Dict("x" => x[1], "b" => 0, "a" => f[end])]
 
-    # Process each group to determine the jump position and corresponding function values.
     for group in groups
-        start_idx = group[1]      # jump from f[start_idx] -> f[start_idx+1]
-        end_idx = group[end]    # last index in this group
-        # The jump happens between f[end_idx] and f[end_idx+1]
+        start_idx, end_idx = group[1], group[end]   # the jump lies between f[end_idx] and f[end_idx+1]
         x_start = x[start_idx]
         x_end = x[end_idx+1]
         x_pos = (x_start + x_end) / 2
@@ -100,8 +77,6 @@ function find_jumps(x, f; threshold_factor::Float64=5.0)
         push!(jumps, Dict("x" => x_pos, "b" => before, "a" => after))
     end
 
-    # Append a final dictionary entry using the x[end] value,
-    # with "b" and "a" set to the last jump's output value.
     push!(jumps, Dict("x" => x[end], "b" => jumps[end]["a"], "a" => jumps[end]["a"]))
     return jumps
 end
@@ -112,35 +87,27 @@ function get_track_length(cosz)
 end
 
 function get_track(cosz)
-    # Track begins (ends) at detector and stops when it reaches its path length.
-    # Track equation is therefore y = y_detector + x*cot(z) if sin(z) =/= 0. Otherwise it is just a vertical trajectory
+    # Straight track from the detector, y = y_det + x cot z (vertical when sin z = 0)
     track_length = get_track_length(cosz)
 
     if cosz != -1
-        # Calculate track slope
         sinz = sqrt(1 .- cosz .^ 2)
         cotz = cosz / sinz
 
-        # x-position when the track reaches the surface
         x_end = track_length / sqrt(1 .+ cotz .^ 2)
 
-        # divide x into the resolution and log the points.
         x_coords = collect(range(0, stop=x_end, length=RESOLUTION))
 
-        # calculate the corresponding y-coordinates
         y_coords = (EARTH_RADIUS - depth) .+ x_coords .* cotz
 
-        # calculate distances
         distances = x_coords * sqrt(1 .+ cotz^2)
 
     else
-        # Track is just a vertical line
         x_coords = zeros(RESOLUTION)
         y_coords = collect(range(EARTH_RADIUS - depth, stop=-EARTH_RADIUS, length=RESOLUTION))
         distances = EARTH_RADIUS - depth .- y_coords
     end
 
-    # We now get the distances to the centre of the earth at every point in the track
     r_x = sqrt.(x_coords .^ 2 + y_coords .^ 2)
     return r_x, distances
 end
@@ -158,12 +125,10 @@ function get_potential(cosz, earth_potential_function)
         jump_depth = jump["x"]
         for i in 1:length(track_depths)-1
             if (track_depths[i] <= jump_depth && track_depths[i+1] >= jump_depth)
-                # Linear interpolation to find the exact intersection distance
                 t = (jump_depth - track_depths[i]) / (track_depths[i+1] - track_depths[i])
                 intersection_distance = distances[i] + t * (distances[i+1] - distances[i])
                 push!(track_jumps, Jump(intersection_distance, jump["a"], jump["b"]))
             elseif (track_depths[i] >= jump_depth && track_depths[i+1] <= jump_depth)
-                # Linear interpolation to find the exact intersection distance
                 t = (jump_depth - track_depths[i]) / (track_depths[i+1] - track_depths[i])
                 intersection_distance = distances[i] + t * (distances[i+1] - distances[i])
                 push!(track_jumps, Jump(intersection_distance, jump["b"], jump["a"]))
@@ -179,23 +144,19 @@ end
 
 
 function make_potential_for_integrand(cosz, earth_potential_function, n=3)
-    # generate a vertical (reference) path to identify layers
+    # Layers from the vertical path: the first half of its jumps (rounded up)
     _, _, ref_jumps = get_potential(-1, earth_potential_function)
 
-    # generate a list of which jump values correspond to each layer
-    # Take the first half of the ref_jumps (rounded up)
     half_count = ceil(Int, length(ref_jumps) / 2)
     collected_jumps = ref_jumps[1:half_count]
     
-    # Generate a layers array where each element is a tuple of (previous_jump, following_jump)
+    # Each layer is (previous jump, following jump); the innermost reflects its jump
     layers = Vector{Tuple{typeof(collected_jumps[1]), typeof(collected_jumps[1])}}(undef, length(collected_jumps))
     for i in 1:length(collected_jumps)-1
         layers[i] = (collected_jumps[i], collected_jumps[i+1])
     end
-    # For the final layer (near the core) we reflect the final jump
     layers[end] = (collected_jumps[end], collected_jumps[end])
 
-    # Check if the number of layers is equal to the length of the earth normalisation vector
     if !isnothing(earth_normalisation_true) && length(layers) != length(earth_normalisation_true)
         error("Mismatch in length: layers has ", length(layers), " elements, but earth_normalisation_true has ", length(earth_normalisation_true), " elements. Check your earth matter potential uncertainties prior covariance file")
     end
@@ -203,9 +164,8 @@ function make_potential_for_integrand(cosz, earth_potential_function, n=3)
     distances, matter_potential, jumps = get_potential(cosz, earth_potential_function)
     jump_positions = [jump.x for jump in jumps]
 
-    # Potential along the path, for the integration points. The Gauss-Legendre nodes below lie
-    # strictly inside [0, distances[end]], so the table is never left (it used Flat() before,
-    # which no node reached); not registered for the setup log (one table per path).
+    # Potential along the path; the Gauss–Legendre nodes lie strictly inside it (not registered for
+    # the setup log: one table per path).
     f = TabulatedInput(distances, matter_potential; name = "Earth potential along a path (cos z = $cosz)",
                        units = "km", extrapolation = :error, nonnegative = true, register = false)
 
@@ -215,31 +175,22 @@ function make_potential_for_integrand(cosz, earth_potential_function, n=3)
         a = jump_positions[i]
         b = jump_positions[i+1]
 
-        # Gauss-Legendre quadrature for the length-weighted average density across
-        # the segment. This runs once at path-construction time (not per fit step,
-        # see setup.jl), so the extra accuracy is free at fit time. GL nodes are
-        # strictly interior to (a,b), so unlike a uniform grid they never land on
-        # the jump discontinuity and need no endpoint override.
+        # Segment-average density by Gauss–Legendre (interior nodes never land on a jump)
         nodes, gl_weights = gauss(n + 2, a, b)
         values = f(nodes)
         avgRho = sum(gl_weights .* values) / (b - a)
 
-        # Create a candidate pair from the segment boundaries.
-        # Using the left jump's "b" and the right jump's "a".
+        # Match the segment's boundary densities (left jump's b, right jump's a) to a layer
         candidate = sort([jumps[i].b, jumps[i+1].a])
         
-        # Find a matching layer in the layers array.
-        seg_index = 0  # default value if no matching layer is found
+        seg_index = 0
         for (layer_idx, layer) in enumerate(layers)
             if isapprox(candidate[1], candidate[2]; atol=1e-7)
-                # Only search for a match on the beginning value (left jump's b)
                 if isapprox(candidate[1], layer[1].b; atol=1e-7)
                     seg_index = layer_idx
                     break
                 end
             else
-                # For the layer, consider its two jump values:
-                # we compare the left jump's b and the right jump's a.
                 layer_candidate = sort([layer[1].b, layer[2].a])
                 if isapprox(candidate[1], layer_candidate[1]; atol=1e-7) && isapprox(candidate[2], layer_candidate[2]; atol=1e-10)
                     seg_index = layer_idx
@@ -249,11 +200,8 @@ function make_potential_for_integrand(cosz, earth_potential_function, n=3)
         end
 
         if seg_index == 0
-            # Prepare error message with all layer candidate pairs.
             layer_candidates = ""
             for (layer_idx, layer) in enumerate(layers)
-                # Determine candidate for each layer. If both jump values are nearly identical,
-                # only include one value; else, include both values sorted.
                 if isapprox(layer[1].b, layer[2].a; atol=1e-10)
                     candidate_layer = string(layer[1].b)
                 else
@@ -281,20 +229,17 @@ function get_avg_densities(path_list)
 
     data_tuples = [(item[1], item[2]) for item in tmp]
 
-    # Sort the vector of tuples based on the 'idx' (the first element of the tuple)
     sorted_data = sort(data_tuples, by=first)
 
-    # Extract the 'idx' and 'density' values from the sorted tuples
     indices = Int.([item[1] for item in sorted_data])
     densities = [item[2] for item in sorted_data]
 
-    # Find the unique indices and the start/end points of their occurrences
     unique_indices = sort(unique(indices))
     
     starts = [findfirst(isequal(idx), indices) for idx in unique_indices]
     ends = [findlast(isequal(idx), indices) for idx in unique_indices]
 
-    # Calculate the average density for each unique index and structure the output
+    # Average density per layer index
     average_densities = [sum(densities[starts[idx]:ends[idx]]) / (ends[idx] - starts[idx] + 1) for idx in unique_indices]
     return average_densities
 end

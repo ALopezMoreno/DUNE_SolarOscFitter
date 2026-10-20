@@ -250,9 +250,7 @@ const IC_BDY_BINS = (N_COARSE_SEGS[1],   N_COARSE_SEGS[1]+1)
 const CM_BDY_BINS = (sum(N_COARSE_SEGS[1:2]), sum(N_COARSE_SEGS[1:2])+1)
 
 # ── Convergence table ─────────────────────────────────────────────────────────
-# Errors are measured in the flux-weighted night probability φ(E)·P_night(cosz,E),
-# integrated over E for each coarse cosz bin — this is the quantity that enters
-# the event rate, so it is what actually needs to converge.
+# Errors in ∫ φ(E) P_night(cos z, E) dE per coarse cos z bin, the quantity in the event rate.
 
 println("\nComputing truth (full average of $(N_REF)×$(N_REF), flux-weighted)...")
 FP_truth = truth_coarse(FP_ref)                 # (N_COARSE cosz) × (N_COARSE E)
@@ -405,10 +403,7 @@ savefig(pl, joinpath(SCRIPT_DIR, "osc_convergence.pdf"))
 savefig(hm, joinpath(SCRIPT_DIR, "osc_error_heatmap_N$(n_now).pdf"))
 println("\nSaved: utils/osc_convergence.pdf, utils/osc_error_heatmap_N$(n_now).pdf")
 
-# ── Parameter sensitivity ─────────────────────────────────────────────────────
-# Translate the rate error into equivalent parameter bias at the nominal best-fit.
-# Earth paths depend only on cos(z), so we compute them once for the coarse
-# analysis grid and reuse across all parameter evaluations.
+# ── Parameter sensitivity: the rate error as an equivalent parameter bias (paths computed once) ──
 
 const NOM_SIN2_TH12 = 0.307
 const NOM_DM2_21    = 7.53e-5
@@ -513,12 +508,8 @@ comparison = plot(hm_s12, hm_dm2, hm_sub2; layout=(1,3), size=(1500, 500))
 savefig(comparison, joinpath(SCRIPT_DIR, "osc_error_comparison.pdf"))
 println("Saved: utils/osc_error_comparison.pdf")
 
-# ── Parameter bias from sub-bin approximation ────────────────────────────────
-# For each N_sub, compute the per-bin rate offset at nominal parameters
-# and project it onto the parameter gradient to get the first-order best-fit
-# bias.  This is the correct approach: the per-bin errors have mostly alternating
-# signs that cancel in the projection, so the actual best-fit shift is much
-# smaller than the raw per-bin max error.
+# ── Parameter bias from the sub-bin approximation: per-bin rate offsets projected onto the
+#    parameter gradient (first-order best-fit shift; alternating signs mostly cancel) ──
 
 # Build uniformly-spaced sub-bin cosz centres and their Earth paths.
 function build_subbin_infra(n_sub)

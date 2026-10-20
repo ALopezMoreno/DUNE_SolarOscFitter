@@ -1,12 +1,7 @@
 #=
-Tabulated model inputs (SPEC 8.1): validation on construction, an explicit extrapolation policy
-per input, never a silent extrapolation, linear interpolation through the nodes, the range used
-at setup, and headerless tables that keep their first row.
-
-The ported inputs (⁸B/hep spectra, CC cross section, solar exposure, Earth potential, makePaths
-path potential) are compared with their pre-port implementations, which are reproduced below
-verbatim from master (a9723b4) on the same files: values must be identical (===) at every node
-and every midpoint.
+Tabulated model inputs (SPEC 8.1): validation, extrapolation policy, interpolation, used range and
+header handling. Each ported input is compared (===, at nodes and midpoints) with an independent
+reference implementation reproduced below.
 =#
 using Test, Interpolations, QuadGK, DelimitedFiles, CSV, DataFrames, JLD2, Logging
 

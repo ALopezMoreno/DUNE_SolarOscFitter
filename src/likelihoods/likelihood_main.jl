@@ -1,6 +1,5 @@
-# Build one likelihood closure per detector, then sum them.
-# Oscillation parameters are shared; background nuisance params are namespaced by detector.
-detector_llh_fns    = OrderedDict{String, Function}()   # same order as detector_configs
+# One likelihood per detector, summed; background norms are namespaced by detector.
+detector_llh_fns    = OrderedDict{String, Function}()
 detector_perbin_fns = OrderedDict{String, Function}()
 
 for (dname, out) in detector_outputs
@@ -9,8 +8,7 @@ for (dname, out) in detector_outputs
 
     use_CC = det.CC_mode && (!det.inclusive_analysis || det.semi_inclusive_analysis)
 
-    # Channel likelihoods: plain Poisson, or with the MC statistical uncertainty of the
-    # predictions (mc_stat_likelihood; src/likelihoods/mcstat.jl).
+    # Poisson, or with the MC statistical uncertainty (mcstat.jl)
     if det.mc_stat_likelihood == "Poisson"
         ES_llh,  CC_llh  = det.angular_reco ? llh_ES_angle : llh_ES_poisson, llh_CC_poisson
         ES_pbin, CC_pbin = det.angular_reco ? llh_ES_angle_perbin : llh_ES_poisson_perbin, llh_CC_poisson_perbin
@@ -33,9 +31,8 @@ _det_llh_tuple    = Tuple(values(detector_llh_fns))
 _det_perbin_tuple = Tuple(values(detector_perbin_fns))
 _shared_ssm       = solarModel
 
-# Sum over the detector likelihoods by tuple recursion rather than a generator: a generator
-# stores the (constant) closures next to the (differentiable) oscillation probabilities,
-# which Enzyme's activity analysis rejects.
+# Tuple recursion, not a generator: Enzyme rejects a generator holding the constant closures next
+# to the active oscillation probabilities.
 _sum_det_llh(::Tuple{}, parameters, osc) = false
 @inline _sum_det_llh(fns::Tuple, parameters, osc) =
     first(fns)(parameters; precomputed_osc=osc) + _sum_det_llh(Base.tail(fns), parameters, osc)
@@ -47,7 +44,7 @@ total_llh = let fns = _det_llh_tuple, ssm = _shared_ssm
     end
 end
 
-# Per-bin log L, one entry per detector: the detectors' bin grids differ, so they cannot be summed.
+# Per-bin log L per detector (their grids differ)
 per_bin_llh = parameters -> OrderedDict(dname => f(parameters) for (dname, f) in detector_perbin_fns)
 
 global likelihood_all_samples = logfuncdensity(total_llh)

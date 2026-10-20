@@ -2,9 +2,8 @@
 # --- ES sample contributions --- #
 ###################################
 
-# Sum of the Poisson log-likelihoods of the night rows (cos z bins) from energy bin `idx` on.
-# Explicit loops, summed left to right like the previous generator: zipping the
-# differentiable rates with the constant data in one iterator is rejected by Enzyme.
+# Poisson log-likelihood of the night rows from energy bin `idx` on. Explicit loops: Enzyme rejects
+# zipping the active rates with the constant data.
 function _night_poisson_sum(rates_night::AbstractMatrix, obs_night::AbstractMatrix, idx::Int)
     n_E = size(rates_night, 2)
     acc = poissonLogLikelihood(view(rates_night, 1, idx:n_E), view(obs_night, 1, idx:n_E))
@@ -46,12 +45,10 @@ function llh_ES_poisson_perbin(d::LikelihoodInputs, parameters, rates;
 
     n_bins = length(nObs.ES_day)
 
-    # Allocate full outputs filled with zeros (zero contribution below threshold)
-    llh_ES_day_bins   = zeros(n_bins)               # same length as ES_day
-    llh_ES_night_bins = zeros(size(nObs.ES_night))  # same shape as ES_night
+    llh_ES_day_bins   = zeros(n_bins)               # zero below threshold
+    llh_ES_night_bins = zeros(size(nObs.ES_night))
 
-    # Exclude the overflow bin (last bin, extended to +Inf) from the diagnostic mask;
-    # it has near-zero signal and dominates driver scores when included.
+    # the overflow bin (to +Inf) is left out of the diagnostic: no signal, it dominates the scores
     mask = below_threshold ? (1:n_bins) : (idx:n_bins-1)
 
     @views begin
@@ -73,15 +70,12 @@ function llh_ES_angle(d::LikelihoodInputs, parameters, rates)
     idx  = d.index_ES
     nObs = d.nObserved
 
-    # DAY: rates.ES_day and nObs.ES_day are (Ncos, NE)
-    # → restrict in energy (dimension 2) and flatten over all cos bins + energy bins
+    # day (Ncos, NE), night (Ncos, NE, Nnight)
     loglh_ES_day = poissonLogLikelihood(
         vec(rates.ES_day[:, idx:end]),
         vec(nObs.ES_day[:, idx:end]),
     )
 
-    # NIGHT: rates.ES_night and nObs.ES_night are (Ncos, NE, Nnight)
-    # → loop over the night bins (dim=3), restrict in energy, and sum log-likelihoods
     loglh_ES_night = _night_angular_poisson_sum(rates.ES_night, nObs.ES_night, idx)
 
     return loglh_ES_day + loglh_ES_night
@@ -93,11 +87,10 @@ function llh_ES_angle_perbin(d::LikelihoodInputs, parameters, rates;
     idx  = d.index_ES
     nObs = d.nObserved
 
-    n_bins = size(nObs.ES_day, 2)  # bins are along 2nd dimension
+    n_bins = size(nObs.ES_day, 2)
 
-    # Allocate full outputs filled with zeros (zero contribution below threshold)
-    llh_ES_day_bins   = zeros(size(nObs.ES_day))        # same shape as ES_day
-    llh_ES_night_bins = zeros(size(nObs.ES_night))      # same shape as ES_night
+    llh_ES_day_bins   = zeros(size(nObs.ES_day))
+    llh_ES_night_bins = zeros(size(nObs.ES_night))
 
     mask = below_threshold ? (1:n_bins) : (idx:n_bins-1)
 
@@ -143,11 +136,10 @@ function llh_CC_poisson_perbin(d::LikelihoodInputs, parameters, rates;
 
     n_bins = length(nObs.CC_day)
 
-    # Initialize outputs with zeros
     llh_CC_day_bins   = zeros(n_bins)
     llh_CC_night_bins = zeros(size(nObs.CC_night))
 
-    # Decide which bins to compute; exclude overflow bin (last, extended to +Inf).
+    # overflow bin excluded
     mask = below_threshold ? (1:n_bins) : (idx:n_bins-1)
 
     @views begin
@@ -166,8 +158,7 @@ function llh_CC_poisson_perbin(d::LikelihoodInputs, parameters, rates;
 end
 
 
-# NOT READY: FOR TESTING ONLY
-# NOTE: NO PER-BIN CALCULATION EITHER
+# Testing only, no per-bin form.
 function llh_CC_barlowBeeston(
     d::LikelihoodInputs,
     parameters,
@@ -178,13 +169,11 @@ function llh_CC_barlowBeeston(
     idx  = d.index_CC
     nObs = d.nObserved
 
-    # --- Day contribution still Poisson ---
     loglh_CC_day = poissonLogLikelihood(
         rates.CC_day[idx:end],
         nObs.CC_day[idx:end],
     )
 
-    # --- Night contribution with Barlow–Beeston ---
     loglh_CC_night = sum(
         barlowBeestonLogLikelihood(
             row[idx:end],
@@ -206,8 +195,7 @@ end
 # --- Put everything together --- #
 ###################################
 
-# -Inf as the common number type of the parameter values (Float64 or a ForwardDiff dual), so the
-# likelihood's return type does not become Union{Float64, Dual}, which BAT cannot handle.
+# -Inf in the parameters' number type, so the return type stays concrete (BAT rejects a Union).
 _neg_inf(parameters::NamedTuple) = convert(promote_type(Float64, map(typeof, values(parameters))...), -Inf)
 _neg_inf(parameters) = -Inf
 function make_likelihood(
@@ -220,19 +208,16 @@ function make_likelihood(
     debug::Bool = false
 )
     return function (parameters; precomputed_osc=nothing)
-        # bounds (-Inf in the parameters' number type keeps the return type concrete)
         check_earth_norm_bounds(parameters) || return _neg_inf(parameters)
 
-        # propagate MC once
         rates = expected_rates(d, parameters; precomputed_osc=precomputed_osc)
 
-        # optional debugging
         if debug
             print_negatives_1d(rates.CC_day, parameters)
             print_negatives_2d(rates.CC_night, parameters)
         end
 
-        loglh = zero(_neg_inf(parameters))   # parameters' number type, so the result type is concrete
+        loglh = zero(_neg_inf(parameters))
 
         # === ES contribution ==========================================
         if use_ES
@@ -265,9 +250,7 @@ function make_perbin_likelihood(
     uncertainty_ratio_CC_night = nothing,           # needed only for Barlow-Beeston
     debug::Bool = false
 )
-    # Build a fixed-shape array template filled with `fillval`, matching the shape of
-    # d.nObserved. Used to pre-allocate zero / -Inf arrays for disabled channels
-    # without recomputing shapes on every likelihood call.
+    # Arrays shaped like d.nObserved, filled with `fillval`
     function _template(fillval::Float64)
         nObs = d.nObserved
         ES_day   = fill(fillval, size(nObs.ES_day)...)
@@ -277,25 +260,18 @@ function make_perbin_likelihood(
         return (ES_day=ES_day, ES_night=ES_night, CC_day=CC_day, CC_night=CC_night)
     end
 
-    # Cache a zero template so we don't re-allocate shapes every call.
-    # (Still allocates new arrays per call via `copy`; you can reuse and overwrite if desired.)
     zero_tpl = _template(0.0)
 
     return function (parameters; rates=nothing)
-        # bounds: if invalid, return fixed-shape -Inf arrays
         check_earth_norm_bounds(parameters) || return _template(-Inf)
 
-        # propagate MC
         local _rates = rates === nothing ? expected_rates(d, parameters) : rates
 
-        # optional debugging
         if debug
             print_negatives_1d(_rates.CC_day, parameters)
             print_negatives_2d(_rates.CC_night, parameters)
         end
 
-        # Start with zeros in the correct fixed output shape
-        # (copy so callers can mutate without affecting the cached template)
         out = (ES_day=copy(zero_tpl.ES_day),
                ES_night=copy(zero_tpl.ES_night),
                CC_day=copy(zero_tpl.CC_day),
@@ -305,7 +281,6 @@ function make_perbin_likelihood(
         if use_ES
             es = ES_llh(d, parameters, _rates)
 
-            # Add into output (ensures fixed fields are always present)
             out.ES_day   .+= es.ES_day
             out.ES_night .+= es.ES_night
         end
@@ -317,8 +292,6 @@ function make_perbin_likelihood(
                     error("uncertainty_ratio_CC_night must be provided for Barlow-Beeston systematics")
                 error("llh_CC_barlowBeeston_perbin is not yet implemented")
             else
-                # the CC per-bin function passed in (this used to call llh_CC_poisson_perbin
-                # regardless, which only mattered once a non-Poisson CC likelihood existed)
                 CC_llh(d, parameters, _rates)
             end
 

@@ -1,18 +1,8 @@
 #=
-derived_mode.jl — end-to-end test of RunMode "derived" (src/derive_variables_from_chain.jl).
-
-Writes a tiny synthetic chain (three weighted steps in two batches) for the two-detector
-fixture config (tests/fixtures/regression_config.yaml), runs derived mode on it, and checks the
-output against values computed here directly from `expected_rates` and the per-bin likelihood:
-per-step day-night asymmetries, weighted posterior-predictive means, variances and quantile
-bands, background and signal-only arrays, per-bin log-L means, variances and correlations, the
-CC background components, the shared best-fit oscillation map and the file layout, plus the
-per-bin breakdown CSVs written at setup (src/inputChecks.jl). A third,
-purely inclusive detector (FXC, no CC channel) is added to this test's copy of the config. If python3 with h5py is
-available it also checks that utils/posteriorHelpers.py reads each detector's values back and
-rejects an unknown detector.
-
-    julia --project tests/derived_mode.jl        (~1–2 min; run by tests/runtests.jl)
+derived_mode.jl — end-to-end test of RunMode "derived": derived mode on a tiny synthetic chain of the
+fixture config (plus an inclusive-only detector FXC), checked against values computed here from
+`expected_rates` and the per-bin likelihood. With python3 and h5py it also checks that
+utils/posteriorHelpers.py reads each detector back.
 =#
 using Test, YAML, JLD2, CSV, DataFrames
 
@@ -178,7 +168,7 @@ end
     @test Bf.night ≈ 0.4978 atol=1e-4
     @test S.night < Bf.night - 0.1                     # the tilted flux column: a strongly different split
     @test S.day + S.night == 1 && Bf.day + Bf.night == 1
-    @test sum(wS) ≈ 1 rtol=1e-7   # quadgk tolerance on the kinked interpolant
+    @test sum(wS) ≈ 1 rtol=1e-7
     @test sum(wB) ≈ 1 rtol=1e-7
     @test maximum(abs.(wS ./ wB .- 1)) > 0.1           # and different night cos z weights
     li = Base.invokelatest(() -> detector_outputs["FXA"].likelihood_inputs)
@@ -244,7 +234,7 @@ saved = jldopen(f -> Dict(k => f[k] for k in keys(f) if startswith(k, "derived_"
     @test saved["derived_bg_day_fraction"] == Bf.day && saved["derived_bg_night_fraction"] == Bf.night
     @test saved["derived_exposure_weights_signal"] == vec(wS)
     @test saved["derived_exposure_weights_bg"] == vec(wB)
-    # the single, ambiguous set of older files is no longer written
+    # no single set shared by signal and backgrounds
     @test !any(haskey.(Ref(saved), ["derived_exposure_weights", "derived_day_fraction", "derived_night_fraction"]))
 end
 

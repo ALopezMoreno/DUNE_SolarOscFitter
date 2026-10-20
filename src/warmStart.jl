@@ -1,29 +1,17 @@
 #=
 warmStart.jl — start the HMC sampler from a previous run's posterior (config key warm_start_chain).
 
-BAT samples in a pretransformed space (PriorToNormal: each parameter mapped so its prior is a
-standard normal) and, on top of it, an affine map z ↦ A z + b that plays the role of the mass
-matrix. With HMC, BAT's default tuning of that map (RAMTuning, a random-walk Metropolis rule)
-does not learn the posterior shape: on a toy posterior with a ×100 scale spread it returned
-A ≈ identity from a cold start, and it erased a correct A it was started from, within the
-burn-in. NUTS then needs ~100 gradients per step where 8 suffice.
-
-The warm start therefore
-  - maps the previous run's samples into the pretransformed space,
-  - sets b = their mean and A = chol(their covariance), and keeps A fixed (no RAM tuning; the
-    step size is still adapted),
-  - starts the chains from previous posterior draws.
-The previous run must have the same parameters (it may have more: extra ones are ignored) and
-should have the same priors, since the pretransform depends on them; a changed likelihood is
-fine, as long as the posterior has not moved by much more than its width.
+BAT's RAM tuning of the affine map z ↦ A z + b (the mass matrix, on top of PriorToNormal) does not
+learn the posterior shape under HMC, so NUTS needs far more gradients per step than it should. The
+warm start sets b and A = chol(Σ) from the previous run's samples in the pretransformed space,
+keeps A fixed (the step size is still adapted) and starts the chains from its draws. The previous
+run needs the same parameters (extra ones are ignored) and priors.
 =#
 
 using JLD2, Statistics, LinearAlgebra
 using BAT: DensitySampleVector
 
-# Saved samples of the run with output prefix `prefix` (the outFile of that run, with or without
-# ".jld2"): name ⇒ values over all batches, and the weights. Only `names` are returned; each must
-# be present.
+# Samples (name ⇒ values over all batches) and weights of the run with outFile `prefix`
 function load_chain_samples(prefix::AbstractString, names)
     file = endswith(prefix, ".jld2") ? prefix : prefix * ".jld2"
     isfile(file) || error("warm_start_chain: $file not found")
@@ -48,19 +36,16 @@ function load_chain_samples(prefix::AbstractString, names)
     return cols, w
 end
 
-# Weighted mean and covariance of the columns of Z (one sample per column; integer weights count
-# repeats, as in the saved chains).
+# Weighted mean and covariance of the columns of Z (weights are repeat counts)
 function weighted_mean_cov(Z::AbstractMatrix, w::AbstractVector)
     W = sum(w)
     μ = Z * w ./ W
     D = Z .- μ
-    Σ = (D .* reshape(w, 1, :)) * D' ./ (W - 1)     # w = multiplicities: the covariance of the repeated samples
+    Σ = (D .* reshape(w, 1, :)) * D' ./ (W - 1)
     return μ, Symmetric(Σ)
 end
 
-# Warm start from the run `prefix` for the posterior `posterior` (prior `prior`), sampled with
-# pretransform `pretransform`. Returns (transform = BAT adaptive transform, init = BAT init
-# algorithm, nsamples, scales = sqrt(diag Σ) in the pretransformed space).
+# (transform, init, nsamples, scales) for BAT from the run `prefix`
 function build_warm_start(prefix::AbstractString, posterior, prior, pretransform;
                           max_samples::Integer = 20_000, init = nothing)
     names = collect(keys(BAT.varshape(prior)))
@@ -73,8 +58,7 @@ function build_warm_start(prefix::AbstractString, posterior, prior, pretransform
 
     _, f_pretransform = BAT.transform_and_unshape(pretransform, posterior, BATContext())
     Z = reduce(hcat, [f_pretransform(x) for x in nts])
-    # Samples past the current prior support map to NaN; PriorToNormal clamps samples exactly on a
-    # boundary to |z| ≈ 8, an outlier that would inflate Σ. Drop both (|z| ≥ 7.5 is ~1e-13 a priori).
+    # drop samples outside the prior (NaN) or clamped on its boundary (|z| ≈ 8), which inflate Σ
     ok = vec(all(z -> isfinite(z) && abs(z) < 7.5, Z; dims = 1))
     count(!, ok) <= 0.01 * length(ok) ||
         error("warm_start_chain: $(count(!, ok)) of $(length(ok)) samples in $prefix lie on or outside the " *

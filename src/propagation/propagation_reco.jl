@@ -1,13 +1,8 @@
 """
     compute_ES_event_rates(oscSamplesES, responseMatrices, BG_ES, det_flags)
 
-Compute ES day and night event rates (including backgrounds), or zero arrays if
-`det_flags.ES_mode` is false or `oscSamplesES === nothing`.
-
-`responseMatrices` must carry `.eff.ES_nue`, `.eff.ES_nuother`, `.bins.ES`, `.bins.cos_scatter`.
-Uses shared constants: `N_COSZ_BINS`, the signal split `SIGNAL_DAY_FRACTION`/`SIGNAL_NIGHT_FRACTION` (flux-
-weighted) and the background split `BG_DAY_FRACTION`/`BG_NIGHT_FRACTION` with `exposure_weights_bg`
-(time-weighted), SPEC 4.6.
+ES day and night event rates including backgrounds (zeros without ES), with the signal and
+background exposure splits (SPEC 4.6).
 """
 function compute_ES_event_rates(oscSamplesES, responseMatrices, BG_ES, det_flags)
     Ereco_bins_ES = responseMatrices.bins.ES
@@ -34,8 +29,7 @@ end
 """
     compute_ES_angular_event_rates(oscSamplesES, responseMatrices, BG_ES, det_flags)
 
-Compute ES day/night angular (cos-scatter × Ereco) event rates including backgrounds.
-Returns zero arrays if `det_flags.ES_mode` is false or angular_reco is disabled.
+ES day and night rates in (cos θ, Ereco) including backgrounds (zeros without angular ES).
 """
 function compute_ES_angular_event_rates(oscSamplesES, responseMatrices, BG_ES, det_flags)
     Ereco_bins_ES    = responseMatrices.bins.ES
@@ -69,7 +63,6 @@ function compute_ES_angular_event_rates(oscSamplesES, responseMatrices, BG_ES, d
                                             reshape(reshape(BG_ES, nErec, 1) .* reshape(exposure_weights_bg, 1, ncosz), 1, nErec, ncosz)
     eventRate_ES_night_angular = eventRate_ES_night_angular_signal .+ eventRate_ES_night_angular_background .* BG_NIGHT_FRACTION
 
-    # Angular cut from det_flags
     cos_cut = det_flags.angular_cos_cut
     N = cos_scatter_bins.bin_number
     edges   = range(cos_scatter_bins.min, cos_scatter_bins.max, length=N + 1)
@@ -85,8 +78,7 @@ end
 """
     compute_CC_event_rates(oscSamplesCC, responseMatrices, BG_CC, det_flags)
 
-Compute CC day and night event rates (including backgrounds), or zero arrays if
-`det_flags.CC_mode` is false or `oscSamplesCC === nothing`.
+CC day and night event rates including backgrounds (zeros without CC).
 """
 function compute_CC_event_rates(oscSamplesCC, responseMatrices, BG_CC, det_flags)
     Ereco_bins_CC = responseMatrices.bins.CC
@@ -107,8 +99,7 @@ end
 """
     compute_CC_inclusive_event_rates(oscSamplesCC, responseMatrices, det_flags)
 
-Compute CC signal event rates for inclusive (ES+CC combined) analysis. Returns arrays
-in ES Ereco bins so they can be added directly to ES rates.
+CC signal rates in ES Ereco bins, for the inclusive analysis.
 """
 function compute_CC_inclusive_event_rates(oscSamplesCC, responseMatrices, det_flags)
     Ereco_bins_ES    = responseMatrices.bins.ES
@@ -145,17 +136,8 @@ end
 """
     compute_ES_misID_CC_event_rates(oscSamplesES, responseMatrices, det_flags)
 
-CC-bin event rates for backward-scattered ES events mis-identified as CC.
-
-`responseMatrices` must carry `.CC_misID_nue` and `.CC_misID_nuother` — precomputed
-`(N_Etrue × N_Ereco_CC)` matrices that encode the full two-step chain:
-  1. 100%-efficiency ES reco pass (normalised ES response, no `ES_nue_eff` applied).
-  2. CC reco pass treating `e_reco_ES` as pseudo-true energy (via CC response reindexed
-     to ES reco bin centres — the stated approximation).
-Backward angular fraction is already folded into the matrices.
-
-CC efficiency (`eff.CC`) is applied here; ES selection efficiency is NOT.
-Only active when `det_flags.semi_inclusive_analysis` is true.
+CC-bin rates of backward ES events mis-identified as CC (semi-inclusive only), through the
+`CC_misID_*` responses (response.jl). The CC efficiency is applied, the ES selection is not.
 """
 function compute_ES_misID_CC_event_rates(oscSamplesES, responseMatrices, det_flags)
     Ereco_bins_CC = responseMatrices.bins.CC

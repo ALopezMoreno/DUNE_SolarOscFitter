@@ -43,16 +43,8 @@ def plot_95_percent_contour(ax, x_data, y_data, color, alpha=1, linestyles=['-']
 
 
 def msw_prob(oscpars, E_true, n_e):
+    """Adiabatic MSW survival probability at energy E_true and electron density n_e."""
     global G_f
-    """
-    with h5py.File('outputs/' + mcmc_chain, 'r') as f:
-    sin2_th12 = np.array(f['sin2_th12'][()])
-    sin2_th13 = np.array(f['sin2_th13'][()])
-    dm2_21 = np.array(f['dm2_21'][()])Parameters:
-    - oscpars: A dictionary containing oscillation parameters with keys 'sin2_th12', 'sin2_th13', 'dm2_21'.
-    - E_true: The true energy value, which must be positive.
-    - n_e: The electron density, which must be non-negative.
-    """
 
     
     # Calculate the cosine of twice the angle theta_12 using the oscillation parameter
@@ -73,18 +65,7 @@ def msw_prob(oscpars, E_true, n_e):
     return Probs
 
 def solar_surface_probs(params, E_true, solar_model, process="8B"):
-    """
-    Calculate the neutrino oscillation probabilities at the solar surface for a given energy and solar model.
-
-    Parameters:
-    - params: An instance of OscillationParameters containing the oscillation parameters.
-    - E_true: The true energy of the neutrino.
-    - solar_model: The solar model object containing radius, electron density, and production regions.
-    - process: The process type, either "8B" or "hep".
-
-    Returns:
-    - A float representing the integrated probability for the specified neutrino type.
-    """
+    """P(νe→νe) at the solar surface, averaged over the 8B or hep production region."""
 
     # Calculate the neutrino oscillation probabilities using the electron density
     enu_osc_prob = msw_prob(params, E_true, solar_model['n_e'])
@@ -284,12 +265,6 @@ probs_ES_nue_upper = np.array([solar_surface_probs({'sin2_th12': 0.307, 'sin2_th
 probs_ES_nuother_upper = 1 - np.array([solar_surface_probs({'sin2_th12': 0.307, 'sin2_th13': th13, 'dm2_21': dm2}, E, solar_model) for E in enu_ES_nuother])
 probs_CC_upper = np.array([solar_surface_probs({'sin2_th12': 0.307, 'sin2_th13': th13, 'dm2_21': dm2}, E, solar_model) for E in enu_CC])
 
-# dm2 = 4.95e-5
-# th13 = dm2/5 * 1e4-0.09
-
-# probs_ES_nue_lower = np.array([solar_surface_probs({'sin2_th12': 0.307, 'sin2_th13': th13, 'dm2_21': dm2}, E, solar_model) for E in enu_ES_nue])
-# probs_ES_nuother_lower = 1 - np.array([solar_surface_probs({'sin2_th12': 0.307, 'sin2_th13': th13, 'dm2_21': dm2}, E, solar_model) for E in enu_ES_nuother])
-# probs_CC_lower = np.array([solar_surface_probs({'sin2_th12': 0.307, 'sin2_th13': th13, 'dm2_21': dm2}, E, solar_model) for E in enu_CC])
 
 
 # WE DISREGARD THE HEP PROBABILITY BECAUSE THE WEIGHTING IS MINIMAL
@@ -302,8 +277,6 @@ probs_CC = probs_8B_CC
 fig, (axProbs, ax) = plt.subplots(2, 1, figsize=(12, 12), sharex=True, gridspec_kw={'height_ratios': [1, 2]})
 
 
-# Calculate solar surface probabilities for each dm2_21 and each energy
-# solar_probs = np.array([
 #     [solar_surface_probs({'sin2_th12': 0.307, 'sin2_th13': dm2/5 * 1e4-0.1, 'dm2_21': dm2}, energy, solar_model)
 #      for energy in calc_energies]
 #     for dm2 in dm2_21_values

@@ -7,11 +7,9 @@ import .NightOsc
 
 include(joinpath(@__DIR__, "osc_setup.jl"))
 
-# Set energy bin centers for calculation
 const E_calc = (bin_edges_calc[1:end-1] + bin_edges_calc[2:end]) / 2.0
 
-# Settings read on the likelihood path, frozen as constants after the config is loaded so
-# that the likelihood is type-stable (required by Enzyme, and faster under ForwardDiff).
+# Settings read on the likelihood path, as constants for type stability (Enzyme)
 const CC_XSEC_NORM_TRUE  = Float64(cc_xsec_norm_true)
 
 # Which day and night calculations run (see osc_setup.jl).
@@ -23,7 +21,7 @@ const OSC = build_osc_setup(
     depth_km          = depth,
     cosz_edges        = COARSE_COSZ_EDGES,
     energy_edges      = calculate_bins(Etrue_bins)[1],
-    exposure          = exposure_intp_signal,      # NightOsc integrates the signal over cos z: flux-weighted
+    exposure          = exposure_intp_signal,      # flux-weighted
     exposure_weights  = exposure_weights_signal,
     n_E_calc          = length(E_calc),
     n_earth_norms     = isnothing(earth_normalisation_true) ? nothing : length(earth_normalisation_true),
@@ -115,10 +113,8 @@ end
 """
     binned_oscillation_probabilities(E_calc, mixingPars, solarModel, p1e_binned)
 
-Day and night probabilities when `p1e_binned` holds bin-averaged P₁ₑ on the analysis
-(cos z, E_true) grid. The day probability and ⟨cos2θ₁₂ᵐ⟩ vary slowly and are averaged
-over the two `E_calc` points of each bin; the night probability in each bin is
-P_day + c₁₃² ⟨cos2θ₁₂ᵐ⟩ (P̄₁ₑ − c₁₂²c₁₃²).
+Day and night probabilities from bin-averaged P₁ₑ on the analysis grid: P_day and ⟨cos2θ₁₂ᵐ⟩
+averaged over the two `E_calc` points of each bin, P_night = P_day + c₁₃² ⟨cos2θ₁₂ᵐ⟩ (P̄₁ₑ − c₁₂²c₁₃²).
 """
 function binned_oscillation_probabilities(E_calc, mixingPars, solarModel, p1e_binned)
     c13sq = cos(mixingPars.θ₁₃)^2
@@ -182,9 +178,7 @@ function compute_oscillated_samples(unoscillatedSample, params, oscProbs, ::Val{
         xsec_shape = cc_xsec_shape(_xsec_norm, _xsec_tilt, _xsec_curv,
                                    unoscillatedSample.xsec_p1, unoscillatedSample.xsec_p2)
 
-        # Pre-apply xsec_shape to 1D CC samples so the night (cosz×Etrue) broadcast
-        # works: (1,n_Etrue) .* (n_cosz,n_Etrue) is fine; (n_cosz,n_Etrue) .* (n_Etrue,)
-        # fails because Julia compares axes left-to-right without left-padding.
+        # applied to the 1D samples: (n_cosz, n_Etrue) .* (n_Etrue,) would align the wrong axis
         CC_8B_s  = unoscillatedSample.CC_8B  .* xsec_shape
         CC_hep_s = unoscillatedSample.CC_hep .* xsec_shape
 

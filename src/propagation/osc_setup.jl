@@ -1,12 +1,6 @@
 #=
-osc_setup.jl
-
-Selects the oscillation calculation from the config, once. The choice is stored in the
-type of `OscSetup`, so the likelihood dispatches on it and stays type-stable.
-
-Night backends:
-- NightOscNight:    NightOsc bin averages (nightOsc: true, default)
-- NumOscNight{F}:   3-flavour per-path NumOsc (nightOsc: false; F = fastFit)
+osc_setup.jl — the oscillation calculation, chosen once from the config and stored in the type of
+`OscSetup` so the likelihood stays type-stable. Night: NightOscNight (default) or NumOscNight{fastFit}.
 =#
 
 abstract type NightBackend end
@@ -87,19 +81,9 @@ function check_layer_agreement(earth::NightOsc.EarthModel, legacy_path, depth_km
     return nothing
 end
 
-# The engine's per-bin exposure must equal exposure_weights up to one common factor (SPEC 4.6).
-# The bin totals the likelihood uses are exposure_weights_signal, exact cell integrals of the table;
-# NightOsc's sampled weights only set the weighting inside a bin, and it normalises its bin average by
-# them. The flux-weighted table has a narrow integrable peak at the declination turning point,
-# cos z = −cos(φ + ε) ≈ −0.377, which NightOsc's zenith pieces sample coarsely: how far off the bins
-# next to it are depends on where an edge falls (0.33 % on the regression grid, 0.58 % on the
-# production one, 0.96 % with 60 + 20 bins). Elsewhere the two agree to ≤ 8e-5 on all those grids.
-# So the check is per bin: within peak_halfwidth of the table's night-side maximum, rtol_peak; elsewhere
-# rtol, against the median ratio of those bins. (It needs at least two bins away from the peak to
-# see a wrong column; analysis grids have ≥ 24.) A wrong column (the time weighting given to the
-# signal) is off by ~3 % in the deep bins and still trips it. Effect of the peak bins on the bin-averaged
-# P1e, against pieces 16× finer: ≤ 1.2e-4 on the production grid, the same as with the time column
-# (NightOsc's own accuracy, SPEC 1.3).
+# NightOsc's per-bin exposure must match exposure_weights up to a common factor (SPEC 4.6): rtol per
+# bin, rtol_peak within peak_halfwidth of an interior maximum of the table, where the zenith pieces
+# sample the declination turning point (cos z ≈ −0.377) coarsely. A swapped column fails it.
 function check_exposure_normalisation(engine::NightOsc.BinnedP1e, cosz_edges, exposure, exposure_weights;
                                       rtol=1e-3, rtol_peak=5e-2, peak_halfwidth=0.03)
     den = NightOsc._den(engine)
@@ -108,8 +92,7 @@ function check_exposure_normalisation(engine::NightOsc.BinnedP1e, cosz_edges, ex
     zero_bins = findall(i -> (w[i] > 0) != (den[i] > 0), eachindex(w))
     isempty(zero_bins) ||
         error("nightOsc: cos z bins $zero_bins are exposed in one of the engine and exposure_weights but not the other")
-    # The loose window only around an interior maximum: a table whose maximum is at an end of the
-    # range (e.g. monotone) has no turning-point peak, and every bin gets rtol.
+    # a maximum at an end of the range is no turning point: no loose window
     grid = range(first(cosz_edges), last(cosz_edges); length=2001)
     k_peak = argmax(exposure.(grid))
     interior = 1 < k_peak < length(grid)

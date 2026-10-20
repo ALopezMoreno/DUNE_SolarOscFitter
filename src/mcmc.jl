@@ -1,7 +1,5 @@
 using Logging
 
-# DEBUGGING AND TESTING: Set the logging level to Warn to suppress Info messages
-# global_logger(ConsoleLogger(stderr, Logging.Warn))
 
 using LinearAlgebra, Statistics, Distributions, StatsBase, BAT, DensityInterface, IntervalSets
 using Plots, JLD2
@@ -9,47 +7,38 @@ using ForwardDiff, AdvancedHMC
 import AutoDiffOperators: ADSelector
 
 using Random
-# Random.seed!(1234)  # Set global seed once at startup if you want RNG reproducibility
 
 include(joinpath(@__DIR__, "setup.jl"))
 include(joinpath(@__DIR__, "mcmcHelpers.jl"))
 include(joinpath(@__DIR__, "warmStart.jl"))
 
 
-# Set prior distributions from config
-# Construct a dictionary of priors
 priors = Dict{Symbol,Any}(
-  # miximg parameters
   :sin2_th12 => prior_sin2_th12,
   :sin2_th13 => prior_sin2_th13,
   :dm2_21 => prior_dm2_21,
 
-  # HEP discovery
   :integrated_HEP_flux => prior_HEP_flux,
 
-  # systematic parameters
   :integrated_8B_flux => prior_8B_flux,
-  # CC xsec shape: omit when fix_cc_xsec=true so they are not sampled.
-  # propagation_osc.jl falls back to the Asimov true values in that case.
+  # not sampled with fix_cc_xsec (the Asimov values are used)
   (fix_cc_xsec ? () : (:cc_xsec_norm => prior_cc_xsec_norm,
                         :cc_xsec_tilt => prior_cc_xsec_tilt,
                         :cc_xsec_curv => prior_cc_xsec_curv))...
 )
 
 
-# Conditionally add nuisance parameters
 if earthUncertainty
-  # Independent truncated normals per layer; correlations are added to the log-density below.
+  # independent per layer; correlations are added to the log-density below
   means = mean(earth_normalisation_prior)
   covmat = cov(earth_normalisation_prior)
   n = length(means)
   for i in 1:n
     priors[Symbol("earth_norm_$i")] = truncated(Normal(means[i], sqrt(covmat[i, i])), 0.0, 2.0)
   end
-  # param_bounds = Dict(:earth_norm => (0.0, 2.0)) # We want these to be fixed between 0 and 2
 end
 
-# Add per-detector background nuisance parameters (names prefixed by detector name)
+# per-detector background norms (names prefixed by the detector)
 for (dname, out) in detector_outputs
     det = detector_configs[dname]
     if det.ES_mode
@@ -64,16 +53,9 @@ for (dname, out) in detector_outputs
     end
 end
 
-# Use splatting to pass the priors to distprod
 prior = distprod(; priors...)
 
-# Check if explicit param bounds have been given:
-# param_names = collect(keys(prior))
-# Create aligned bounds vector
-# bounds = [haskey(param_bounds, name) ? param_bounds[name] : (-Inf, Inf) for name in param_names]
-
-# The Earth-layer priors above are independent normals. If the covariance is correlated, add
-# the correlation term to the log-density so the product becomes the full MvNormal.
+# A correlated Earth covariance: add the correlation term, making the product the full MvNormal.
 if earthUncertainty && !isdiag(covmat)
   @logmsg MCMC "Earth prior covariance is correlated: adding the correlation term to the log-density"
   global likelihood_all_samples = let f = total_llh,
@@ -83,16 +65,10 @@ if earthUncertainty && !isdiag(covmat)
   end
 end
 
-# Define Bayesian model
 posterior = PosteriorMeasure(likelihood_all_samples, prior)
 
-# Apply parameter bounds
-#bounded_domain = BoundedDomain(bounds)
-#transformed_posterior = TransformedDensity(bounded_domain, posterior)
-
-# Set chain parameters
 init = MCMCChainPoolInit(
-  init_tries_per_chain=IntervalSets.ClosedInterval(4, 180),  # min>1 avoids BAT v4 bug in else-branch of chain selection
+  init_tries_per_chain=IntervalSets.ClosedInterval(4, 180),  # min > 1 avoids a BAT v4 bug
   nsteps_init=15,
   initval_alg=InitFromTarget()
 )
@@ -109,8 +85,7 @@ end
 
 convergence = AssumeConvergence()
 
-# Warm start from an earlier run's posterior: fixed mass matrix + chains started from its draws.
-# Only for a fresh run; a resumed run carries its own transform in the chain state.
+# Warm start (fresh runs only): fixed mass matrix and starting points from an earlier posterior
 warm_start = nothing
 if warm_start_chain !== nothing
   if prevFile !== nothing
@@ -126,8 +101,7 @@ end
 
 @logmsg MCMC "running $mcmcChains chains with $mcmcSteps steps each (HMC)."
 
-# NUTS tree-depth cap: at most 2^max_depth leapfrog steps (gradients) per MCMC step. Every
-# batch logs how close the steps come to it (log_sampler_cost in mcmcHelpers.jl).
+# NUTS: at most 2^hmc_max_depth gradients per MCMC step
 proposal_algorithm = HamiltonianMC(termination=GeneralisedNoUTurn(max_depth=hmc_max_depth))
 if ad_backend == "Enzyme" && !uses_night_osc(OSC)
   error("ad_backend: Enzyme requires nightOsc: true " *
@@ -142,17 +116,16 @@ end
 @logmsg MCMC "HMC gradients: $ad_backend" * (ad_backend_defaulted ? " (default; set ad_backend to override)" : "") *
              (mcmc_seed === nothing ? "" : ", RNG seed $mcmc_seed")
 
-batchSteps = 200   # checkpoint/output cadence only — tuning persists across batches
+batchSteps = 200   # checkpoint cadence; tuning persists across batches
 nBatches   = ceil(Int, mcmcSteps / batchSteps)
 
 @logmsg MCMC "Running chains in $nBatches post-tuning batches of $batchSteps steps each."
 println(" ")
 
-# Batch 0: init + tune (or load chain state from prevFile if resuming)
+# Batch 0: init and tuning, or the chain state of a resumed run
 chain_state  = runMCMCbatch(0, priors)
 currentBatch = 1
 
-# Sampling loop: all batches continue from the tuned chain state
 while currentBatch <= nBatches
     global currentBatch, chain_state
     chain_state = runMCMCbatch(currentBatch, priors, chain_state)

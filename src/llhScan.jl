@@ -1,30 +1,21 @@
 
 using Logging
-# DEBUGGING AND TESTING: Set the logging level to Warn to suppress Info messages
-# global_logger(ConsoleLogger(stderr, Logging.Warn))
 
 using LinearAlgebra, Statistics, Distributions, StatsBase, BAT, DensityInterface, IntervalSets
-using DelimitedFiles  # For CSV output
+using DelimitedFiles
 
-# Set up the analysis environment
 include(joinpath(@__DIR__, "setup.jl"))
 
 #=
 2D likelihood scans of the oscillation parameters (RunMode: LLH).
 
-Each cell holds 2·log L of all active detectors and channels (total_llh), with every other
-parameter fixed at its Asimov true value: a conditional scan, not a marginalised or profiled
-one, so its contours are narrower than the posterior's. Plot 2·log L − max: the
-2-parameter 1/2/3σ contours are at −2.30, −6.18, −11.83 (utils/plotLLH.py).
-
-The earlier version summed ad-hoc ±FWHM shifts of selected systematics divided by a
-degrees-of-freedom count, and evaluated the full likelihood once per active channel, which
-counted it twice when both ES and CC were on.
+Each cell holds 2·log L (total_llh) with every other parameter at its Asimov value: a conditional
+scan, narrower than the posterior. The 1/2/3σ contours of 2·log L − max are at −2.30, −6.18,
+−11.83 (utils/plotLLH.py).
 =#
 
 nbins = llhBins  # grid points per axis
 
-# Parameter ranges for scanning
 lim_th12 = [0.2, 0.4]      # sin²θ₁₂ range
 lim_th13 = [1e-4, 0.25]    # sin²θ₁₃ range
 lim_dm21 = [4e-5, 1.5e-4]  # Δm²₂₁ range (eV²)

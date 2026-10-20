@@ -1,38 +1,16 @@
 #=
-mcmcHelpers.jl — MCMC batch processing with persistent native tuning.
-
-Based on Newthrino (Philipp Eller), extended by Andres Lopez Moreno.
-
-Batching strategy
------------------
-The run is written out in fixed-size batches (for checkpointing / bounded
-memory), but the sampler state must be CONTINUOUS across batches and resumes —
-otherwise BAT's tuners (RAM affine transform + dual-averaging step size) get
-reset every batch and never converge, the step size drifts, and tree depth (and
-wall-time) blow up on continuation.
-
-`bat_sample` cannot give us this: it returns a generator that keeps only the
-`chain_state` and *discards* the tuner states
-(`MCMCSampleGenerator(mcmc_states) = getfield.(mcmc_states, :chain_state)`).
-
-So instead of one `bat_sample` per batch, we drive BAT's MCMC loop directly
-(exactly what `bat_sample_impl` does), holding the full `Vector{MCMCState}`
-(chain_state + proposal_tuner_state + trafo_tuner_state + temperer) across
-batches and serialising it whole. Native tuning therefore persists and keeps
-converging with its diminishing adaptation rate (which remains ergodic-valid),
-and a resume continues tuning mid-stream rather than restarting cold.
+mcmcHelpers.jl — MCMC in batches with tuning carried across batches and resumes (after Newthrino,
+P. Eller). `bat_sample` returns only the chain states and drops the tuner states, so tuning would
+restart every batch; instead BAT's MCMC loop is driven directly and the full `Vector{MCMCState}`
+(chain, proposal and transform tuners, temperer) is kept and serialised.
 =#
 
 using BAT: DensitySampleVector, MCMCState, MCMCBurninAlgorithm
 using Serialization  # For run-state persistence
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Persistent run state carried across batches and serialised for resume.
-# `mcmc_states` holds the full BAT MCMCState per chain (incl. tuner state);
-# `f_pretransform` is the (prior→normal) map needed to push samples back to
-# parameter space.
-# ─────────────────────────────────────────────────────────────────────────────
+# Run state carried across batches and serialised for resume. `f_pretransform` maps samples back
+# to parameter space.
 struct RunState
     mcmc_states::Vector       # Vector{MCMCState}  (chain + tuners + temperer)
     f_pretransform            # PriorToNormal unshaping transform
@@ -58,11 +36,8 @@ function BAT.mcmc_burnin!(
 end
 
 
-# Build the sampling algorithm. Tuning fields (transform_tuning=RAMTuning,
-# proposal_tuning=StepSizeAdaptor, pretransform=PriorToNormal, …) take BAT's
-# native HMC defaults — that's the tuning we now persist rather than reset.
-# With a warm start (warmStart.jl) the affine transform comes from the previous
-# posterior and is kept fixed: BAT's RAM tuning would pull it back towards identity.
+# BAT's native HMC tuning. With a warm start (warmStart.jl) the affine transform comes from the
+# previous posterior and stays fixed: RAM tuning would pull it back towards identity.
 _build_samplingalg() = warm_start === nothing ?
     TransformedMCMC(
         proposal    = proposal_algorithm,
@@ -94,26 +69,9 @@ _build_samplingalg() = warm_start === nothing ?
 end
 
 
-# On resume, rebuild each chain's likelihood functions from the LIVE current
-# session, keeping the numeric state (positions, tuner accumulators, affine
-# transform, step size, metric) from the checkpoint. The serialize round-trip
-# type-erases the target/likelihood CLOSURES into Serialization stand-ins; running
-# the identical arithmetic through those boxes/allocates ~7-8x more per batch
-# (~600 GB vs ~80 GB measured) → heavy GC → a resume runs ~2x slower than one
-# continuous run, for no mathematical reason (it's a Markov chain). Swapping in the
-# live `posterior` + `f_pretransform` and rebuilding the proposal's ℓπ/∂ℓπ∂θ
-# restores fresh-run allocation (verified: rebuilt batch == fresh batch). The
-# ongoing per-step RAM tuning also rebuilds via chain_state.target, so the swap
-# keeps that path live too.
-# Warm the process the way a fresh run's init does, so the FIRST resumed batch does not
-# hit a cold-heap GC collapse. A fresh run gradually grows the GC heap (and JIT-compiles
-# the threaded sampling path) during mcmc_init!/burnin; a resume otherwise jumps straight
-# from a cold heap into ~60 GB/batch of churn across N threads, where Julia's GC falls into
-# a sustained over-collection equilibrium (~14x slower at 10 chains, threads==chains).
-# This runs a throwaway mcmc_init! purely for that warming; the loaded numeric chain state
-# is untouched (these throwaway states are discarded). Verified: brings a resumed batch back
-# to fresh-run wall-time. Its RNG draws are isolated (fresh contexts), so the real chains'
-# randomness is unaffected.
+# Load-bearing: a throwaway mcmc_init! warms the GC heap and the JIT as a fresh run's init does.
+# Without it the first resumed batch falls into a GC collapse (~14x slower at 10 chains). The
+# loaded chain state and the chains' RNG are untouched.
 function warmup_process()
     salg = _build_samplingalg()
     tmw, fptw = BAT.transform_and_unshape(salg.pretransform, posterior, hmc_context)
@@ -125,6 +83,9 @@ function warmup_process()
 end
 
 
+# On resume, rebuild each chain's target and proposal gradient from the live session and keep only
+# the numeric state (positions, tuners, transform, step size, metric) from the checkpoint:
+# deserialised closures run the same arithmetic with ~7x the allocation, so a resume ran ~2x slower.
 function rebuild_live_state(run_state::RunState)
     salg = _build_samplingalg()
     transformed_m, f_pretransform =
@@ -144,9 +105,7 @@ function rebuild_live_state(run_state::RunState)
 end
 
 
-# Function to save output chunks into the same JLD2 file, one group per batch.
-# Each batch is written as "batch_N" so that groups can be appended without
-# extending existing datasets (which JLD2 does not support).
+# Append one batch to the JLD2 output as a new group (JLD2 cannot extend datasets).
 function saveBatch(samples, start_step_number, priors, batchNumber)
   println("Saving batch $batchNumber (starting step $start_step_number)")
 
@@ -167,9 +126,7 @@ function saveBatch(samples, start_step_number, priors, batchNumber)
 
   println("Number of samples to save: ", length(samples))
 
-  # 4) write as a new group inside the shared JLD2 file, numbered after the groups already
-  #    there: a resumed run writing into its own outFile starts its counter at 1 again, and
-  #    reusing "batch_1" failed (the samples were lost with only a logged error).
+  # 4) write as the next free batch group: a resumed run restarts its counter at 1
   fileName = outFile * ".jld2"
   try
     jldopen(fileName, "a+") do f
@@ -192,11 +149,7 @@ end
 
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Drive one batch of sampling on a live `Vector{MCMCState}`. Tuning state is
-# preserved (we never recreate the tuners). Returns (new_states, batch_samples)
-# with `batch_samples` already mapped back to parameter space.
-# ─────────────────────────────────────────────────────────────────────────────
+# One batch on the live states (tuners kept); samples are returned in parameter space.
 function _sample_one_batch(mcmc_states, f_pretransform, nsteps)
     BAT.next_cycle!.(mcmc_states)
     outputs     = BAT._empty_chain_outputs.(mcmc_states)
@@ -206,10 +159,8 @@ function _sample_one_batch(mcmc_states, f_pretransform, nsteps)
     return new_states, batch_samples
 end
 
-# Gradients per MCMC step in the last batch, against the 2^hmc_max_depth cap. Counted from the
-# NightOsc Enzyme rule, so only with ad_backend = Enzyme and nightOsc. Steps that use nearly the
-# whole cap mean NUTS is being cut short (it would continue until a U-turn): raise
-# hmc_max_depth, or improve the mass-matrix adaptation (longer tuning).
+# Gradients per MCMC step in the last batch against the 2^hmc_max_depth cap (counted by the
+# NightOsc Enzyme rule, so Enzyme + nightOsc only). Near the cap, NUTS is cut short of a U-turn.
 const _GRADIENTS_AT_BATCH_START = Ref(0)
 function log_sampler_cost(nsteps, nchains)
     g = NightOsc.GRADIENT_COUNT[]
@@ -235,7 +186,6 @@ function _log_tree_depth(mcmc_states)
 end
 
 
-# Function for running the MCMC in batches.
 function runMCMCbatch(currentBatch, priors, args...)
   if currentBatch == 0
       # ── Batch 0: native init + tuning (fresh), or load a resumed run state ──

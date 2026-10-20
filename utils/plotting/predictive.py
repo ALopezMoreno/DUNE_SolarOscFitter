@@ -46,9 +46,7 @@ def plot_binmap(ax, Z, x_edges=None, y_edges=None, title=None,
         vmin, vmax = -m, m
 
     if x_edges is not None and y_edges is not None:
-        # pcolormesh honours NON-uniform bin edges (e.g. the horizon-refined cos z grid),
-        # unlike imshow which assumes uniform spacing. Accept either centres (len n) or
-        # edges (len n+1) for each axis and build proper edges for shading="flat".
+        # pcolormesh, not imshow: the cos z grid is non-uniform. Accepts centres or edges.
         def _as_edges(e, n):
             e = np.asarray(e, dtype=float)
             if e.size == n + 1:
@@ -111,10 +109,8 @@ def plot_predictive_spectrum(ax, pp_mean, bands=None, x_centers=None,
     pp_lo, pp_hi : legacy single-band fallback
     total_rate : total expected rate μ_total per bin (signal + bg); adds Poisson shot noise
                  to the PPD: half-width² = rate_hw² + n²·(μ_total + bg_var)
-    bg_var : posterior variance of the background mean per bin; propagates background
-             normalisation uncertainty into the PPD.  Data error bars should be Poisson-only
-             (√data) so that the PPD is visibly wider — the difference reveals the size of
-             the parameter + systematic uncertainty relative to the statistical floor.
+    bg_var : posterior variance of the background mean per bin (enters the PPD; data error bars
+             stay Poisson-only)
     """
     # Legacy single-band compat
     if bands is None and pp_lo is not None and pp_hi is not None:
@@ -132,11 +128,8 @@ def plot_predictive_spectrum(ax, pp_mean, bands=None, x_centers=None,
     edges[:-1] = x_centers - step / 2.0
     edges[-1]  = x_centers[-1] + step / 2.0
 
-    # Optional inflation to convert rate credible intervals into PPD count intervals.
-    # For the n-sigma band: half-width² = half-width_rate² + n²·(μ_total + bg_var)
-    # μ_total adds Poisson shot noise; bg_var adds background-subtraction uncertainty.
-    # Default OFF: bands then show the raw _wquantile parameter+systematic spread only.
-    # Bands are stored outermost-first so sigma levels are [nb, nb-1, ..., 1].
+    # Optional: rate intervals → count intervals, half-width² = hw_rate² + n²·(μ_total + bg_var).
+    # Bands are outermost first.
     if inflate and bands and total_rate is not None:
         μ = np.maximum(np.asarray(total_rate, dtype=float), 0.0)
         bv = np.maximum(np.asarray(bg_var, dtype=float), 0.0) if bg_var is not None else 0.0
