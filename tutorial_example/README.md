@@ -44,7 +44,8 @@ tutorial_example/
 ├── 04_mcmc_CC_only.yaml      base: 02_mcmc.yaml, singleChannel CC
 ├── 05_llh_scan.yaml          base: configs/tutorial.yaml, RunMode LLH
 ├── 06_derived.yaml           base: 02_mcmc.yaml, RunMode derived on the step-2 chain
-└── 07_mcmc_fast.yaml         base: [02_mcmc.yaml, configs/oscillation_fast.yaml], a quick test fit
+├── 07_mcmc_fast.yaml         base: [02_mcmc.yaml, configs/oscillation_fast.yaml], a test fit
+└── 08_quick_test.yaml        the same, 7 free parameters and 2 short chains: a 2-minute check
 ```
 
 ### How `base:` works
@@ -102,7 +103,7 @@ with a selection efficiency of 1.
 
 ```bash
 julia -t 4 --project src/readConfig.jl tutorial_example/02_mcmc.yaml
-python3 utils/plotOutput.py outputs/tutorial/mcmc
+python3 utils/plotOutput.py outputs/tutorial/mcmc -o outputs/tutorial/corner   # → corner.pdf
 ```
 
 The log warns that NUTS trajectories hit the tree-depth cap. That is the production default
@@ -146,6 +147,16 @@ within 1% of their value. On this tutorial its posteriors for sin²θ₁₂ and 
 within a quarter of a standard deviation, which is the sampling noise of chains this short. Use it
 for test fits only. Add `configs/oscillation_fast.yaml` to the
 `base:` list of any other run config to make it fast too.
+
+**A 2-minute check.** `08_quick_test.yaml` checks that everything runs. It uses the fast
+oscillation settings, fixes the Earth-density and CC cross-section nuisances (7 free parameters),
+and runs 2 chains of 50 steps. It takes about 2 minutes on 2 threads, most of it compilation.
+Its posteriors mean nothing.
+
+```bash
+julia -t 2 --project src/readConfig.jl tutorial_example/08_quick_test.yaml
+python3 utils/plotOutput.py outputs/tutorial/quick_test -b 0 -o outputs/tutorial/quick_corner
+```
 
 Outputs are not overwritten cleanly. Delete a run's files (`outputs/tutorial/<name>*`) before
 running it again.

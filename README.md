@@ -17,7 +17,7 @@ SolarOscFitter is a comprehensive analysis framework for studying solar neutrino
 ### Prerequisites
 
 - Julia 1.12.3 (pinned in `Manifest.toml`)
-- Python 3.7 or higher
+- Python 3.10 or higher (the plotting package uses `X | None` annotations)
 
 ### Julia Dependencies
 
@@ -52,6 +52,10 @@ PYTHONPATH=/path/to/SolarOscFitter/utils python utils/plotOutput.py ...
 ```
 
 ## Quick Start
+
+New here? [TUTORIAL.md](TUTORIAL.md) runs a complete fit on idealised inputs that a fresh clone
+can build itself. Most of `inputs/` is not in git, so the production `config.yaml` needs the
+detector samples from the analysis group.
 
 ### 1. Basic Usage
 
