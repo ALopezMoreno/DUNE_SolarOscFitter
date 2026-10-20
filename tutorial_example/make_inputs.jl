@@ -24,7 +24,8 @@ run gives each channel's signal endpoint: the E_reco bin edge below which SIGNAL
 signal in the fit window lies (the upper edge of range_Ereco if it is not reached), and the
 backgrounds are rewritten flat up to it. The second run sets the two background normalisations in
 configs/detectors/VD.yaml so that, per channel, the background above Ereco_min is twice the signal
-at the Asimov truth (S/B = 0.5). With --no-calibrate the backgrounds reach the top of range_Ereco.
+at the Asimov truth (S/B = 0.5). With --no-calibrate the backgrounds end at the endpoints recorded
+in VD.yaml, so the norms there still hold for the same detector settings.
 =#
 using Random, CSV, DataFrames, YAML, Printf
 
@@ -146,6 +147,16 @@ end
 
 range_top_MeV() = Dict(ch => Float64(VD["range_Ereco_$ch"][2]) for ch in ("ES", "CC"))
 
+const ENDPOINT_LINE = r"^(\s*)# Flat in E_reco from 0 to the signal endpoint:.*$"m
+const ENDPOINT_VALUES = r"signal endpoint: ES ([0-9.eE+-]+) MeV, CC ([0-9.eE+-]+) MeV"
+
+# The endpoints written into VD.yaml by the last calibration
+function recorded_endpoint_MeV()
+    m = match(ENDPOINT_VALUES, read(DETECTOR_CONFIG, String))
+    m === nothing && error("no recorded signal endpoints in $DETECTOR_CONFIG; run without --no-calibrate")
+    return Dict("ES" => parse(Float64, m[1]), "CC" => parse(Float64, m[2]))
+end
+
 # ── Background calibration from the fitter's own SETUP ──
 # Runs SETUP on 01_setup.yaml with the current inputs and norms; returns the per-bin breakdown
 # (signal, background) of each channel at the Asimov truth.
@@ -192,13 +203,18 @@ function calibrate()
         occursin(pat, text) || error("no '$key: [...]' line in $DETECTOR_CONFIG")
         text = replace(text, pat => SubstitutionString("\\g<1>[" * @sprintf("%.6g", new) * "]"))
     end
-    pat = r"^(\s*# Flat in E_reco from 0 to the signal endpoint:).*$"m
-    occursin(pat, text) || error("no '# Flat in E_reco from 0 to the signal endpoint:' line in $DETECTOR_CONFIG")
-    text = replace(text, pat => SubstitutionString("\\g<1>" * @sprintf(" ES %.1f MeV, CC %.1f MeV", endpoint["ES"], endpoint["CC"])))
+    occursin(ENDPOINT_LINE, text) || error("no '# Flat in E_reco from 0 to the signal endpoint:' line in $DETECTOR_CONFIG")
+    line = @sprintf("# Flat in E_reco from 0 to the signal endpoint: ES %.10g MeV, CC %.10g MeV (%.4g%% of the signal above threshold lies below it; set by make_inputs.jl)",
+                    endpoint["ES"], endpoint["CC"], 100 * SIGNAL_CONTAINED)
+    text = replace(text, ENDPOINT_LINE => SubstitutionString("\\g<1>" * line))
     write(DETECTOR_CONFIG, text)
     println("  updated ", relpath(DETECTOR_CONFIG, ROOT))
 end
 
 make_signal()
-make_backgrounds(range_top_MeV())
-"--no-calibrate" in ARGS || calibrate()
+if "--no-calibrate" in ARGS
+    make_backgrounds(recorded_endpoint_MeV())
+else
+    make_backgrounds(range_top_MeV())
+    calibrate()
+end

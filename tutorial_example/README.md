@@ -82,7 +82,8 @@ The backgrounds are then rewritten flat up to that point. The second run sets th
 normalisations in `configs/detectors/VD.yaml` so that S/B = 0.5 holds. The sampling is seeded, so
 the values in git are reproduced. Rerun the script whenever you change the threshold, the
 exposure, the E_reco range, the resolution or the truth. `--no-calibrate` only writes the samples,
-with the backgrounds flat to the top of the E_reco range.
+reusing the endpoints recorded in `VD.yaml`. Use it when the inputs are missing, for example in a
+new checkout, and the detector settings are unchanged.
 
 **1. Set up the likelihood** (about a minute):
 
@@ -150,3 +151,7 @@ running it again.
   function is the non-relativistic one.
 - Backgrounds are flat, end where the signal ends, and their shape is known exactly. Each has a 2%
   normalisation prior.
+- Above the endpoint the bins have no background, so the hep tail sits on zero background and
+  the hep sensitivity comes out optimistic.
+- The background MC is thin near its endpoint (CC: a few events in the last bins). This matters
+  only with an MC-statistics likelihood.
