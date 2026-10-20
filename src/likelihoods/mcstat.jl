@@ -27,7 +27,7 @@ Asimov truth. MaCh3 (UpdateW2 = false) instead freezes Σw², the absolute uncer
 recomputes a = μ²/Σw² from the current prediction; the two agree at the truth only.
 Not modelled: correlations of one MC sample across channels (the CC MC feeds both semi-inclusive
 channels; the ES MC also feeds the mis-ID term) and per-component shape fluctuations within one
-E_reco bin (one β covers all cos θ bins). Notes: docs/mcstat/mcstat.pdf.
+E_reco bin (one β covers all cos θ bins). Method: docs/likelihood.md.
 =#
 using Printf
 using Statistics: median

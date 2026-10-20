@@ -304,8 +304,8 @@ Benchmarks and profiling runs are opt-in via `JULIA_LIKELIHOOD_BENCH=1` and `JUL
 
 The predictions come from finite MC samples. Set `mc_stat_likelihood: DembinskiAbdelmotteleb`
 (or `BarlowBeeston`) to include their statistical uncertainty in the likelihood; the setup log
-reports the MC uncertainty per channel either way. Method and implementation:
-[docs/mcstat/mcstat.pdf](docs/mcstat/mcstat.pdf).
+reports the MC uncertainty per channel either way. Method: Dembinski & Abdelmotteleb,
+[arXiv:2206.12346](https://arxiv.org/abs/2206.12346); implementation in [docs/likelihood.md](docs/likelihood.md).
 
 ## Performance Tips
 

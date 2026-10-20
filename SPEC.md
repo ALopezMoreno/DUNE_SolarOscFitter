@@ -444,7 +444,7 @@ The full-likelihood value at fixed points matches `tests/regression_reference.to
 
 <a id="55a"></a>
 #### 🟢🟣 5.5a · MC statistical uncertainty
-`mc_stat_likelihood` (`src/likelihoods/mcstat.jl`, notes in `docs/mcstat/mcstat.pdf`).
+`mc_stat_likelihood` (`src/likelihoods/mcstat.jl`; method in `docs/likelihood.md`).
 
 🟢 Tested (`test_mcstat.jl`, `derived_mode.jl`, regression variants `night_da`, `night_bb`,
 `night_da_indep`):

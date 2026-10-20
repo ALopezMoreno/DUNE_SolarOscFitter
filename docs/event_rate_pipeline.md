@@ -244,8 +244,7 @@ backgrounds carry f_day^B by day and f_night^B·w^B_k at night. Before 2026-10 t
 likelihood exactly (regression variant `night_sym`).
 
 **MC statistics.** `mc_effective_counts` uses the signal split for the signal terms and the background
-split and weights for the background terms. The notes in [mcstat/mcstat.pdf](mcstat/mcstat.pdf) write
-the day/night split as 0.5/0.5; the code uses the fractions above.
+split and weights for the background terms (the fractions above, not 0.5/0.5).
 
 ---
 

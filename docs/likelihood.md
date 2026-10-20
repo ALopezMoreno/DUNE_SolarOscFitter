@@ -103,9 +103,9 @@ if the angular normalisation per energy bin were not trusted; the code no longer
 each channel's predictions are scaled by a factor β per E_reco bin, shared by the day bin and all
 night bins of that energy (`mc_stat_day_night: shared`), and profiled in closed form against the
 bin's effective MC count a = M²/Var_MC(M), computed once at the Asimov truth from the signal
-response counts and the background weights. Derivation, references and the tests:
-[mcstat/mcstat.pdf](mcstat/mcstat.pdf) (Dembinski & Abdelmotteleb,
-[arXiv:2206.12346](https://arxiv.org/abs/2206.12346)).
+response counts and the background weights. Method: Dembinski & Abdelmotteleb,
+[arXiv:2206.12346](https://arxiv.org/abs/2206.12346); tests in `tests/test_mcstat.jl` and the
+regression variants `night_da`, `night_bb`, `night_da_indep`.
 
 ## 4. Barlow–Beeston log-likelihood (old CC-night-only function, not used)
 

@@ -400,3 +400,7 @@ cluster_output/
 # Generated osc-grid convergence reference (consumed by plotOscReference.jl / checkOscGridConvergence.jl)
 utils/osc_convergence_reference.jld2
 .claude/hooks/.last_pass
+
+# Claude tooling and local notes: kept on disk, not in the repository (maintainer, 2026-10-20)
+.claude/
+docs/mcstat/
