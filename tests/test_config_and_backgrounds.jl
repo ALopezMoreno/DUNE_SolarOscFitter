@@ -238,6 +238,15 @@ end
         @test length(config_files(top)) == 3
     end
 
+    @testset "a shared base is applied once and cannot undo a later override" begin
+        w("diamond/d.yaml", "nSteps: 1\nnChains: 1\n")
+        w("diamond/b.yaml", "base: d.yaml\nnSteps: 2\n")
+        w("diamond/c.yaml", "base: d.yaml\nnChains: 3\n")
+        top = w("diamond/a.yaml", "base: [b.yaml, c.yaml]\n")
+        @test resolve_config(top) == Dict("nSteps" => 2, "nChains" => 3)
+        @test basename.(config_files(top)) == ["d.yaml", "b.yaml", "c.yaml", "a.yaml"]
+    end
+
     @testset "errors" begin
         w("cyc/x.yaml", "base: y.yaml\n"); w("cyc/y.yaml", "base: x.yaml\n")
         @test occursin("cycle", errmsg(() -> resolve_config(joinpath(d, "cyc", "x.yaml"))))

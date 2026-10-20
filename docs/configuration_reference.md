@@ -55,8 +55,10 @@ detectors:
 Paths in `base:` are relative to the file that names them; the bases may have bases of their own.
 The bases are merged in order and the file itself goes on top: mappings (such as `detectors:` or a
 detector block) are merged key by key at every depth, the later file wins, and any other value,
-a list included, is replaced whole. An override cannot delete a key. A config without `base:` is
-read as before. The run record's `config:` section holds the merged result, and its provenance
+a list included, is replaced whole; so is a key set to null (`key:` with no value) rather than
+inherited. An override cannot delete a key. A file reached twice, as when two bases share a base,
+is applied once, where it is first reached, so it cannot undo an override made after it. A config
+without `base:` is read as before. The run record's `config:` section holds the merged result, and its provenance
 lists every base file with its SHA-256 (`config_base_files`). `src/configFiles.jl` implements it;
 [tutorial_example/](../tutorial_example/README.md) is a worked example.
 
