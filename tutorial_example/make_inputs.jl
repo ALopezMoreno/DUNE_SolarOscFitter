@@ -14,14 +14,17 @@ Run from the repository root. Writes event-level CSVs into tutorial_example/inpu
                                            marley_levels_Bhattacharya2009.dat)
   ES_angular_ideal.csv                     cos of the ν_e ES electron angle, exact kinematics
   ES_background_flat.csv, CC_background_flat.csv
-                                           flat in E_reco from 0 to the upper edge of range_Ereco
+                                           flat in E_reco from 0 to the signal endpoint of the channel
 
 In every signal sample E_reco = T (1 + 0.1 g), g ~ N(0, 1), and every event is selected
 (mask = true, weight 1): an ideal detector. Energies are in GeV, as the fitter expects.
 
-Calibration (default): runs the fitter's SETUP on tutorial_example/01_setup.yaml and rescales the
-two background normalisations in configs/detectors/VD.yaml so that, per channel, the background
-above Ereco_min is twice the signal at the Asimov truth (S/B = 0.5).
+Calibration (default) runs the fitter's SETUP on tutorial_example/01_setup.yaml twice. The first
+run gives each channel's signal endpoint: the E_reco bin edge below which SIGNAL_CONTAINED of the
+signal in the fit window lies (the upper edge of range_Ereco if it is not reached), and the
+backgrounds are rewritten flat up to it. The second run sets the two background normalisations in
+configs/detectors/VD.yaml so that, per channel, the background above Ereco_min is twice the signal
+at the Asimov truth (S/B = 0.5). With --no-calibrate the backgrounds reach the top of range_Ereco.
 =#
 using Random, CSV, DataFrames, YAML, Printf
 
@@ -34,6 +37,7 @@ const N_SIGNAL     = 500_000   # events per signal sample
 const N_BACKGROUND = 500_000   # events per background file (= ES_bg_generated_events in VD.yaml)
 const RESOLUTION   = 0.10      # σ(E_reco)/E
 const S_OVER_B     = 0.5
+const SIGNAL_CONTAINED = 0.999   # fraction of the in-window signal below the background endpoint
 const Q_GS_MEV     = 1.50443   # ⁴⁰Ar → ⁴⁰K ground state: T_e = E_ν − Q − E_x (MARLEY)
 const Z_FINAL      = 19
 const ALPHA        = 1 / 137.035999
@@ -111,7 +115,7 @@ end
 
 write_sample(name, df) = (CSV.write(joinpath(OUT, name), df); println("  wrote ", joinpath("tutorial_example", "inputs", name), " (", nrow(df), " events)"))
 
-function make_samples()
+function make_signal()
     mkpath(OUT)
     rng = Xoshiro(20261020)
     println("Signal samples (", N_SIGNAL, " events each)")
@@ -125,32 +129,58 @@ function make_samples()
     Ex, B = read_levels(joinpath(TUT, "marley_levels_Bhattacharya2009.dat"))
     Etrue, T = sample_cc(rng, N_SIGNAL, Ex, B)
     write_sample("CC_nue_ideal.csv", DataFrame(Etrue = Etrue, Ereco = smear.(T, Ref(rng)), weights = 1.0, mask = true))
+end
 
+# Backgrounds flat in E_reco on [0, endpoint_MeV[ch]]
+function make_backgrounds(endpoint_MeV)
+    mkpath(OUT)
+    rng = Xoshiro(20261021)
     println("Backgrounds (flat, ", N_BACKGROUND, " events each)")
     for (name, ch) in (("ES_background_flat.csv", "ES"), ("CC_background_flat.csv", "CC"))
-        emax = VD["range_Ereco_$ch"][2] * 1e-3
-        write_sample(name, DataFrame(Ereco = emax .* rand(rng, N_BACKGROUND), weights = 1.0, mask = true))
+        @printf("  %s: flat from 0 to %.2f MeV\n", ch, endpoint_MeV[ch])
+        write_sample(name, DataFrame(Ereco = endpoint_MeV[ch] * 1e-3 .* rand(rng, N_BACKGROUND), weights = 1.0, mask = true))
     end
     Int(VD["ES_bg_generated_events"]) == N_BACKGROUND ||
         error("ES_bg_generated_events in $DETECTOR_CONFIG must equal N_BACKGROUND = $N_BACKGROUND")
 end
 
-# ── Background calibration: S and B above threshold from the fitter's own SETUP ──
-function calibrate()
+range_top_MeV() = Dict(ch => Float64(VD["range_Ereco_$ch"][2]) for ch in ("ES", "CC"))
+
+# ── Background calibration from the fitter's own SETUP ──
+# Runs SETUP on 01_setup.yaml with the current inputs and norms; returns the per-bin breakdown
+# (signal, background) of each channel at the Asimov truth.
+function run_setup(label)
     tmp = mktempdir()
     cfg = resolve_config(joinpath(TUT, "01_setup.yaml"))
     cfg["outFile"] = joinpath(tmp, "calibration")
     cfg_file = joinpath(tmp, "calibration.yaml")
     YAML.write_file(cfg_file, cfg)
-    println("\nRunning the fitter's SETUP for the calibration (log in $tmp/setup.log)")
+    println("\nRunning the fitter's SETUP ($label; log in $tmp/setup.log)")
     cmd = `$(Base.julia_cmd()) -t auto --project=$ROOT $(joinpath(ROOT, "src", "readConfig.jl")) $cfg_file`
     ok = success(pipeline(cmd; stdout = joinpath(tmp, "setup.log"), stderr = joinpath(tmp, "setup.log")))
     ok || error("SETUP failed; see $tmp/setup.log")
+    return Dict(ch => CSV.read(joinpath(tmp, "calibration_VD_$(ch)_breakdown.csv"), DataFrame) for ch in ("ES", "CC"))
+end
+
+# Upper edge of the bin where the cumulative in-window signal reaches SIGNAL_CONTAINED
+function signal_endpoint_MeV(df, top_MeV)
+    fit = findall(df.in_fit)
+    c = cumsum(df.signal[fit]) ./ sum(df.signal[fit])
+    hi = df.Ereco_hi_MeV[fit[searchsortedfirst(c, SIGNAL_CONTAINED)]]
+    return isfinite(hi) ? min(hi, top_MeV) : top_MeV
+end
+
+function calibrate()
+    top = range_top_MeV()
+    first_pass = run_setup("signal endpoints")
+    endpoint = Dict(ch => signal_endpoint_MeV(first_pass[ch], top[ch]) for ch in ("ES", "CC"))
+    make_backgrounds(endpoint)
+    breakdown = run_setup("background normalisations")
 
     text = read(DETECTOR_CONFIG, String)
     println("\nBackground calibration (fit window, day + night, at the Asimov truth)")
     for ch in ("ES", "CC")
-        df = CSV.read(joinpath(tmp, "calibration_VD_$(ch)_breakdown.csv"), DataFrame)
+        df = breakdown[ch]
         fit = df.in_fit
         S, B = sum(df.signal[fit]), sum(df.background[fit])
         key = "$(ch)_background_normalisations"
@@ -162,9 +192,13 @@ function calibrate()
         occursin(pat, text) || error("no '$key: [...]' line in $DETECTOR_CONFIG")
         text = replace(text, pat => SubstitutionString("\\g<1>[" * @sprintf("%.6g", new) * "]"))
     end
+    pat = r"^(\s*# Flat in E_reco from 0 to the signal endpoint:).*$"m
+    occursin(pat, text) || error("no '# Flat in E_reco from 0 to the signal endpoint:' line in $DETECTOR_CONFIG")
+    text = replace(text, pat => SubstitutionString("\\g<1>" * @sprintf(" ES %.1f MeV, CC %.1f MeV", endpoint["ES"], endpoint["CC"])))
     write(DETECTOR_CONFIG, text)
     println("  updated ", relpath(DETECTOR_CONFIG, ROOT))
 end
 
-make_samples()
+make_signal()
+make_backgrounds(range_top_MeV())
 "--no-calibrate" in ARGS || calibrate()

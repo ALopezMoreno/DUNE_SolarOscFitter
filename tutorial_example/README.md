@@ -13,7 +13,7 @@ subconfigs that the run configs build on with `base:`.
 | Threshold | E_reco > 5 MeV in both channels |
 | ES E_reco | electron kinetic energy T, smeared by 10% (Gaussian σ/E), all events selected |
 | CC E_reco | electron kinetic energy T_e = E_ν − 1.504 MeV − E_x, smeared by 10%, all events selected |
-| Backgrounds | one per channel, flat in E_reco, S/B = 0.5 above threshold (background = 2 × signal) |
+| Backgrounds | one per channel, flat in E_reco from 0 up to where the signal ends (14.5 MeV ES, 12.3 MeV CC); S/B = 0.5 above threshold, i.e. background = 2 × signal |
 | Not used | ES angular information, MC-statistics likelihood |
 
 The ES recoil spectrum is drawn from the fitter's own dσ/dT (BKS95, `src/xsec.jl`). For CC, the
@@ -76,10 +76,13 @@ julia --project tutorial_example/make_inputs.jl
 ```
 
 This writes six event-level CSVs (500 000 events each, energies in GeV) to
-`tutorial_example/inputs/`. It then runs the fitter's SETUP once and writes the two background
-normalisations into `configs/detectors/VD.yaml`, so that S/B = 0.5 holds. The sampling is seeded,
-so the values in git are reproduced. Rerun the script whenever you change the threshold, the
-exposure, the E_reco range or the truth. `--no-calibrate` only writes the samples.
+`tutorial_example/inputs/`. It then runs the fitter's SETUP twice. The first run finds where each
+channel's signal ends: the E_reco bin edge below which 99.9% of the signal above threshold lies.
+The backgrounds are then rewritten flat up to that point. The second run sets the two background
+normalisations in `configs/detectors/VD.yaml` so that S/B = 0.5 holds. The sampling is seeded, so
+the values in git are reproduced. Rerun the script whenever you change the threshold, the
+exposure, the E_reco range, the resolution or the truth. `--no-calibrate` only writes the samples,
+with the backgrounds flat to the top of the E_reco range.
 
 **1. Set up the likelihood** (about a minute):
 
@@ -92,12 +95,16 @@ Look in the log for the event counts, `S/B 0.5` per channel and the day-night as
 Four warnings, "every event ... passes the selection", are expected: this is an ideal detector
 with a selection efficiency of 1.
 
-**2. The joint fit** (RUNTIME_MCMC):
+**2. The joint fit** (about 30 minutes on 4 threads, 3.5 GB of memory):
 
 ```bash
 julia -t 4 --project src/readConfig.jl tutorial_example/02_mcmc.yaml
 python3 utils/plotOutput.py outputs/tutorial/mcmc
 ```
+
+The log warns that NUTS trajectories hit the tree-depth cap. That is the production default
+`hmc_max_depth: 4`, which trades effective sample size for speed. Add `hmc_max_depth: 6` to a run
+config to see the difference.
 
 **3. One channel at a time**, to see what each contributes:
 
@@ -141,4 +148,5 @@ running it again.
 - Every event is reconstructed and selected, with no energy-scale or resolution systematics.
 - CC uses discrete ⁴⁰K* levels: no continuum and no de-excitation γ energy in E_reco. The Fermi
   function is the non-relativistic one.
-- Backgrounds are flat and their shape is known exactly. Each has a 2% normalisation prior.
+- Backgrounds are flat, end where the signal ends, and their shape is known exactly. Each has a 2%
+  normalisation prior.
