@@ -5,7 +5,7 @@ runRecord.jl — the run record: the resolved configuration and its provenance, 
 has been parsed (globals set) and before the RunMode script runs, so a run that crashes or is
 killed still leaves its record. It writes `<outFile>_config.yaml` with three sections:
 
-  provenance:        config file path and SHA-256, git commit / branch / dirty state, Julia
+  provenance:        config file path and SHA-256 (and of its `base:` files), git commit / branch / dirty state, Julia
                      version, host, threads, timestamp, RunMode
   defaults_applied:  the keys absent from the YAML, with the values readConfig.jl used for them
   config:            the resolved configuration = the YAML as loaded + defaults_applied.
@@ -23,6 +23,7 @@ such key is covered.
 =#
 using YAML, Dates, SHA, JLD2
 using DataStructures: OrderedDict
+include(joinpath(@__DIR__, "configFiles.jl"))   # resolve_config, config_files (`base:` inheritance)
 
 # Top-level keys with a default in readConfig.jl main() → value used (in config-file units),
 # as thunks: only the defaults actually applied are evaluated. `nothing` (mcmc_seed) means
@@ -145,6 +146,9 @@ function run_provenance(yaml_file::AbstractString; run_mode = "unknown", repo::A
         "git_branch"      => something(branch, "unknown"),
         "git_dirty"       => status === nothing ? "unknown" : !isempty(status),
     )
+    # Files the config inherits from (`base:`), each with its SHA-256; absent for a flat config.
+    bases = try config_files(yaml_file)[1:end-1] catch; String[] end
+    isempty(bases) || (p["config_base_files"] = OrderedDict{String,Any}(f => bytes2hex(open(sha256, f)) for f in bases))
     status !== nothing && !isempty(status) && (p["git_dirty_files"] = [String(strip(l)) for l in split(status, '\n')])
     merge!(p, OrderedDict{String,Any}(
         "julia_version"   => string(VERSION),

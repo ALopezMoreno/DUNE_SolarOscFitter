@@ -1,0 +1,15 @@
+# Fast, approximate oscillation calculation for test fits (about 1e-2 precision).
+# Layer it on top of any run config: base: [<run config>, configs/oscillation_fast.yaml].
+#
+# Night: the legacy per-path calculation (NumOsc.Fast) instead of NightOsc: P_1e is sampled at
+# one or two paths per cos z bin and two energies per E_true bin, not averaged over the bin.
+# cos z: 20 bins on the legacy PREM-aligned grid, no horizon-refined fine zone.
+# E_true stays at 40 bins: it also bins the cross sections and the detector response, and 1 MeV
+# bins move about 1% of the CC events.
+# Against the default on this tutorial at the truth: event counts per E_reco bin within 4e-4,
+# day-night asymmetries within 1% of their value. Not for results.
+
+nightOsc: false
+ad_backend: "ForwardDiff"   # the legacy calculation has no Enzyme rule
+nBins_cosz: 20
+nBins_cosz_fine: 0

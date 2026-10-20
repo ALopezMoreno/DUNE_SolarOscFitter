@@ -1,0 +1,7 @@
+# Step 4: 2D likelihood scans on an llh_bins × llh_bins grid, no sampling.
+#   julia -t auto --project src/readConfig.jl tutorial_example/05_llh_scan.yaml
+base: configs/tutorial.yaml
+
+outFile: "outputs/tutorial/scan"
+RunMode: "LLH"
+llh_bins: 10

@@ -23,7 +23,8 @@ using JLD2, Plots, Printf, Statistics, LinearAlgebra, YAML, DelimitedFiles
 const SCRIPT_DIR = @__DIR__
 const REPO_ROOT  = dirname(SCRIPT_DIR)
 config_path = length(ARGS) > 0 ? ARGS[1] : joinpath(REPO_ROOT, "config.yaml")
-config = YAML.load_file(config_path)
+include(joinpath(REPO_ROOT, "src", "configFiles.jl"))   # resolve_config: follows `base:`
+config = resolve_config(config_path)
 
 const solarModelFile = joinpath(REPO_ROOT, config["solar_model_file"])
 const flux_file_path = joinpath(REPO_ROOT, config["flux_model_file"])

@@ -1,0 +1,7 @@
+# Step 5: derived quantities and per-bin diagnostics from the chain of step 2 (run that first).
+# Results go into outputs/tutorial/mcmc.jld2; outFile is not used.
+#   julia -t auto --project src/readConfig.jl tutorial_example/06_derived.yaml
+base: 02_mcmc.yaml
+
+RunMode: "derived"
+prevFile: "outputs/tutorial/mcmc"

@@ -1,0 +1,14 @@
+# A very fast end-to-end check (a few minutes, most of it compilation): the fast oscillation
+# settings, the Earth-density and CC cross-section nuisances fixed (7 free parameters), 2 short
+# chains. It tests that the setup and the sampler run; its posteriors mean nothing.
+#   julia -t 2 --project src/readConfig.jl tutorial_example/08_quick_test.yaml
+base: [02_mcmc.yaml, configs/oscillation_fast.yaml]
+
+outFile: "outputs/tutorial/quick_test"
+earth_potential_uncertainties: false
+fix_cc_xsec: true
+nChains: 2
+nSteps: 50
+nTuning: 20
+maxTuningAttempts: 2
+hmc_max_depth: 3

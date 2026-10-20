@@ -1,0 +1,9 @@
+# Step 3a: the same fit with the ES channel only. A nested override: only singleChannel changes,
+# every other VD setting comes from configs/detectors/VD.yaml.
+#   julia -t auto --project src/readConfig.jl tutorial_example/03_mcmc_ES_only.yaml
+base: 02_mcmc.yaml
+
+outFile: "outputs/tutorial/mcmc_ES_only"
+detectors:
+  VD:
+    singleChannel: "ES"

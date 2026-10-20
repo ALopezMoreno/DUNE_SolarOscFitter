@@ -1,0 +1,42 @@
+# Idealised vertical-drift module (section 8 of the root config.yaml).
+# 10 kt × 10 years, ES and CC as separate (exclusive) channels, 5 MeV threshold on both.
+# E_reco is the electron kinetic energy with a 10% Gaussian smearing; the samples and the flat
+# backgrounds come from tutorial_example/make_inputs.jl, which also sets the two background
+# normalisations below so that S/B = 0.5 above threshold at the Asimov truth (rerun it after
+# changing the threshold, the exposure or the truth).
+
+active_detectors: [VD]
+
+detectors:
+  VD:
+    module_mass_kt: 10    # fiducial mass [kt]
+    CC_exposure: 10       # module-years: 10 × 10 kt = 100 kt-yr
+    ES_exposure: 10
+    singleChannel:       false   # both channels
+    inclusiveMode:       false
+    semiInclusiveMode:   false
+    use_scattering_info: false   # no ES angular likelihood
+    ES_cos_cut: 0.0
+
+    nBins_Ereco_ES: 30
+    nBins_Ereco_CC: 30
+    range_Ereco_ES: [2, 20]   # MeV; the fit runs from Ereco_min to the upper edge
+    range_Ereco_CC: [2, 25]
+    Ereco_min_ES: 5
+    Ereco_min_CC: 5
+    nBins_cos_scatter: 25
+
+    reconstruction_sample_CC:         "tutorial_example/inputs/CC_nue_ideal.csv"
+    reconstruction_sample_ES_nue:     "tutorial_example/inputs/ES_nue_ideal.csv"
+    reconstruction_sample_ES_nuother: "tutorial_example/inputs/ES_numutau_ideal.csv"
+    reconstruction_sample_ES_angle:   "tutorial_example/inputs/ES_angular_ideal.csv"
+
+    # Flat in E_reco from 0 to the signal endpoint: ES 14.5 MeV, CC 12.33333333 MeV (99.9% of the signal above threshold lies below it; set by make_inputs.jl)
+    ES_background_files: ["tutorial_example/inputs/ES_background_flat.csv"]
+    CC_background_files: ["tutorial_example/inputs/CC_background_flat.csv"]
+    ES_bg_generated_events: 500000   # = rows of the ES background file: all of it reaches the detector
+
+    ES_background_normalisations: [1.86511e-11]   # set by make_inputs.jl
+    CC_background_normalisations: [1.55977e-08]   # set by make_inputs.jl
+    ES_background_systematics:    [0.02]
+    CC_background_systematics:    [0.02]

@@ -1,0 +1,8 @@
+# Step 3b: the same fit with the CC channel only.
+#   julia -t auto --project src/readConfig.jl tutorial_example/04_mcmc_CC_only.yaml
+base: 02_mcmc.yaml
+
+outFile: "outputs/tutorial/mcmc_CC_only"
+detectors:
+  VD:
+    singleChannel: "CC"

@@ -46,10 +46,10 @@ include(joinpath(@__DIR__, "core.jl"))        # DEFAULT_CC_XSEC_FILE
 include(joinpath(@__DIR__, "logger.jl"))
 include(joinpath(@__DIR__, "runRecord.jl"))   # <outFile>_config.yaml: resolved config + provenance
 
-# Function to load parameters from the YAML file
+# Load a config file with its `base:` chain resolved (src/configFiles.jl); `nothing` on error.
 function load_parameters(yaml_file::String)
     try
-        params = YAML.load_file(yaml_file)
+        params = resolve_config(yaml_file)
         return params
     catch e
         println("Error loading YAML file: $e")
