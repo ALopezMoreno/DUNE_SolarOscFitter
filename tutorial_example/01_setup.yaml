@@ -1,0 +1,8 @@
+# Step 1: build the detector, the Asimov data and the likelihood, then stop (about a minute).
+# Writes the per-bin breakdown outputs/tutorial/setup_VD_{ES,CC}_breakdown.csv (signal and
+# background per E_reco bin) and logs S/B in the fit window for each channel.
+#   julia -t auto --project src/readConfig.jl tutorial_example/01_setup.yaml
+base: configs/tutorial.yaml
+
+outFile: "outputs/tutorial/setup"
+RunMode: "SETUP"

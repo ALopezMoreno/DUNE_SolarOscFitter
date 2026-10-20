@@ -1,0 +1,9 @@
+# HMC sampler (section 4 of the root config.yaml), shortened for the tutorial.
+# The production values are nChains 10, nSteps 1000.
+
+nChains:           4     # parallel chains; run with julia -t 4 (or -t auto) to use one core each
+nSteps:            500   # post-tuning steps per chain
+nTuning:           50    # steps per tuning cycle
+maxTuningAttempts: 30    # tuning cycles
+
+# warm_start_chain: "outputs/tutorial/mcmc"   # mass matrix and starting points from an earlier run

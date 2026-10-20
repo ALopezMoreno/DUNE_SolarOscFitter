@@ -1,0 +1,7 @@
+# Step 2: the joint ES + CC fit (HMC). The config is configs/tutorial.yaml as it is; only the
+# output prefix is named here.
+#   julia -t auto --project src/readConfig.jl tutorial_example/02_mcmc.yaml
+#   python3 utils/plotOutput.py outputs/tutorial/mcmc
+base: configs/tutorial.yaml
+
+outFile: "outputs/tutorial/mcmc"

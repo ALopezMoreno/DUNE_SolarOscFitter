@@ -1,0 +1,26 @@
+# Physics: Asimov truth and priors (sections 2 and 3 of the root config.yaml), same values.
+# Priors use Distributions.jl syntax; every parameter listed is sampled.
+
+# ── Asimov truth ──
+true_sin2_th12:           0.307
+true_sin2_th13:           0.022
+true_dm2_21:              6e-5      # eV²
+true_integrated_HEP_flux: 7950.0    # ν/cm²/s, SF-III GS98
+true_cc_xsec_norm:        1.0       # CC cross section relative to MARLEY 2.0.0
+# true_8B_flux unset: the Asimov ⁸B flux is the centre of prior_8B_flux
+
+# ── Priors ──
+prior_sin2_th12: Uniform(0.15, 0.5)
+prior_sin2_th13: truncated(Normal(0.022, 0.0007), 0.005, 0.035)   # reactor constraint
+prior_dm2_21:    Uniform(2e-5, 3e-4)
+
+prior_8B_flux:  truncated(Normal(5.25e6, 0.28e6), 1.5e6, 1e7)     # SNO NC, ~5.3%
+prior_HEP_flux: Uniform(0, 2e4)
+
+# CC cross-section shape nuisances (fix_cc_xsec: true holds them at their true values)
+fix_cc_xsec: false
+prior_cc_xsec_norm: truncated(Normal(1.0, 0.1), 0.1, 2.0)
+prior_cc_xsec_tilt: Normal(0.0, 0.1)
+prior_cc_xsec_curv: Normal(0.0, 0.05)
+
+earth_potential_uncertainties: true   # marginalise over the Earth density profile

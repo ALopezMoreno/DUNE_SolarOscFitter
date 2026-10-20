@@ -1,0 +1,10 @@
+# The full tutorial configuration: the pieces below, merged in order (later files win).
+# It holds every key of the root config.yaml and runs as it is (an ES+CC MCMC fit);
+# the run configs in tutorial_example/ build on it and change only what differs.
+
+base:
+  - run_control.yaml
+  - physics.yaml
+  - sampler.yaml
+  - model_inputs.yaml
+  - detectors/VD.yaml

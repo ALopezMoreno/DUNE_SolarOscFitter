@@ -188,6 +188,95 @@ end
     end
 end
 
+# ── config inheritance (`base:`, src/configFiles.jl) ─────────────────────────
+# A config built from bases must load as the flat file holding the same settings: mappings merged
+# at every depth, the later file winning, lists and scalars replaced whole.
+@testset "config inheritance (base:)" begin
+    repo_root = joinpath(@__DIR__, "..")
+    d = mktempdir()
+    w(name, text) = (p = joinpath(d, name); mkpath(dirname(p)); write(p, text); p)
+    errmsg(f) = try f(); "" catch e; sprint(showerror, e) end
+
+    @testset "an override resolves to the equivalent flat file" begin
+        w("parts/a.yaml", """
+            nChains: 4
+            range_Etrue: [1, 21]
+            detectors:
+              VD: {CC_exposure: 10, ES_exposure: 10, range_Ereco_ES: [2, 20]}
+            """)
+        w("parts/b.yaml", "nChains: 8\nnSteps: 100\n")
+        top = w("run.yaml", """
+            base: [parts/a.yaml, parts/b.yaml]
+            nSteps: 200
+            range_Etrue: [2, 20]
+            detectors:
+              VD: {ES_exposure: 5, range_Ereco_ES: [3, 15]}
+            """)
+        flat = w("flat.yaml", """
+            nChains: 8
+            nSteps: 200
+            range_Etrue: [2, 20]
+            detectors:
+              VD: {CC_exposure: 10, ES_exposure: 5, range_Ereco_ES: [3, 15]}
+            """)
+        @test resolve_config(top) == YAML.load_file(flat)
+        @test load_parameters(top) == YAML.load_file(flat)
+        @test config_files(top) == [joinpath(d, "parts", "a.yaml"), joinpath(d, "parts", "b.yaml"), top]
+    end
+
+    @testset "a config without base: loads unchanged" begin
+        path = joinpath(repo_root, "config.yaml")
+        @test resolve_config(path) == YAML.load_file(path)
+        @test config_files(path) == [abspath(path)]
+    end
+
+    @testset "bases chain, each relative to the file naming it" begin
+        w("chain/deep/c.yaml", "nTuning: 7\n")
+        w("chain/b.yaml", "base: deep/c.yaml\nnTuning: 8\nllh_bins: 3\n")
+        top = w("chain/top.yaml", "base: b.yaml\nllh_bins: 4\n")
+        @test resolve_config(top) == Dict("nTuning" => 8, "llh_bins" => 4)
+        @test length(config_files(top)) == 3
+    end
+
+    @testset "errors" begin
+        w("cyc/x.yaml", "base: y.yaml\n"); w("cyc/y.yaml", "base: x.yaml\n")
+        @test occursin("cycle", errmsg(() -> resolve_config(joinpath(d, "cyc", "x.yaml"))))
+        miss = w("miss.yaml", "base: nowhere.yaml\n")
+        m = errmsg(() -> resolve_config(miss))
+        @test occursin("not found", m) && occursin("named in", m)
+        @test occursin("base must be", errmsg(() -> resolve_config(w("bad.yaml", "base: {a: 1}\n"))))
+        @test occursin("mapping", errmsg(() -> resolve_config(w("list.yaml", "- 1\n- 2\n"))))
+    end
+end
+
+# ── tutorial_example/ ────────────────────────────────────────────────────────
+# The run configs load, pass the key check and parse; the full tutorial config sets every key of
+# the root config.yaml; a nested override changes only the key it names.
+@testset "tutorial_example configs" begin
+    repo_root = joinpath(@__DIR__, "..")
+    tut = joinpath(repo_root, "tutorial_example")
+    runs = filter(f -> endswith(f, ".yaml"), readdir(tut, join = true))
+    @test length(runs) >= 6
+    for path in vcat(joinpath(tut, "configs", "tutorial.yaml"), runs)
+        @testset "$(relpath(path, repo_root))" begin
+            c = load_parameters(path)
+            @test c !== nothing && validate_config_keys(c) === nothing && parses_ok(c)
+        end
+    end
+
+    root = load_parameters(joinpath(repo_root, "config.yaml"))
+    full = load_parameters(joinpath(tut, "configs", "tutorial.yaml"))
+    @test isempty(setdiff(keys(root), keys(full)))
+    @test isempty(setdiff(keys(root["detectors"]["VD"]), keys(full["detectors"]["VD"])))
+
+    mcmc    = load_parameters(joinpath(tut, "02_mcmc.yaml"))
+    es_only = load_parameters(joinpath(tut, "03_mcmc_ES_only.yaml"))
+    expected = deepcopy(mcmc)
+    expected["outFile"] = es_only["outFile"]
+    expected["detectors"]["VD"]["singleChannel"] = "ES"
+    @test es_only == expected
+end
+
 # ── build_backgrounds: par_counts alignment & normalisation arithmetic ──────
 # Guards the actual downstream consumer of the arrays above: a mismatch
 # (intentional or not) must not silently misalign `ES_par_counts`/

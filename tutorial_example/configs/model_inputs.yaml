@@ -1,0 +1,18 @@
+# Model inputs and the shared binning (sections 6 and 7 of the root config.yaml), same values.
+# Paths are relative to the directory the fitter is run from (the repository root).
+
+# ── Shared binning ──
+TPC_threshold: 0.2    # MeV: lowest electron recoil the ES cross section counts; matches make_inputs.jl
+nBins_Etrue:  40
+range_Etrue:  [1, 21]     # MeV
+nBins_cosz:   50          # cos z bins from −1 to 0
+nBins_cosz_fine: 20       # of which uniform in [cosz_fine_edge, 0]
+cosz_fine_edge:  -0.15
+
+# ── Input files ──
+solar_model_file:               "inputs/SF3_GS98.jld2"
+flux_model_file:                "inputs/fluxes.jld2"
+earth_model_file:               "inputs/EARTH_MODEL_PREM_DENSE.dat"
+earth_uncertainty_file:         "inputs/earth_uncertainty_4.5e-5.jld2"   # required key, not read
+earth_normalisation_prior_file: "inputs/earth_uncertainty_cov.jld2"
+solar_exposure_file:            "inputs/solarExposure_v2.csv"

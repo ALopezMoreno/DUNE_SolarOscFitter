@@ -111,7 +111,9 @@ The example above is a flat (single-detector) config. Detector-level keys (`sing
 under a `detectors:` section (with an optional `active_detectors` list) to fit several detector
 configurations simultaneously; the root `config.yaml` does this. With a `detectors:` section,
 detector-level keys must go inside each block: unknown or misplaced keys stop the run with a
-"did you mean" hint, so a typo cannot silently fall back to a default. See [docs/configuration_reference.md](docs/configuration_reference.md) for every key, and [docs/index.md](docs/index.md) for the developer documentation.
+"did you mean" hint, so a typo cannot silently fall back to a default. A config can also build on
+other config files with a `base:` key, changing only what differs; [tutorial_example/](tutorial_example/README.md)
+is a complete example, with idealised inputs, split into subconfigs this way. See [docs/configuration_reference.md](docs/configuration_reference.md) for every key, and [docs/index.md](docs/index.md) for the developer documentation.
 
 ### 3. Output Visualization
 
@@ -165,6 +167,7 @@ SolarOscFitter/
 ├── inputs/               # Input data files
 ├── outputs/              # Analysis results
 ├── configs/              # Configuration file examples
+├── tutorial_example/     # Tutorial: idealised VD inputs and a config split into subconfigs
 ├── config.yaml           # Main configuration file
 └── SPEC.md               # Validation criteria (what the tests check)
 ```

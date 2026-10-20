@@ -1,0 +1,17 @@
+# Run control: sections 1 and 5 of the root config.yaml.
+# Each run config in tutorial_example/ overrides outFile and RunMode.
+
+outFile:  "outputs/tutorial/mcmc"   # output prefix; the directory is created if needed
+RunMode:  "MCMC"                    # MCMC | LLH | derived | PROFILE | SETUP
+Asimov:   true                      # the only data mode: fit the Asimov data made from true_* values
+
+fastFit:  true        # solar production average at the mean density
+nightOsc: true        # NightOsc: exact (cos z, E_true) bin-averaged night Earth crossing
+ad_backend: "Enzyme"  # HMC gradients: Enzyme (needs nightOsc: true) or ForwardDiff
+mcmc_seed: 2026       # fixed, so that everyone running the tutorial gets the same chains
+
+# LLH / derived
+llh_bins: 15   # bins per axis of the 2D likelihood scans (RunMode LLH)
+thinning: 1    # thinning of the bin-importance diagnostics (RunMode derived)
+
+data_file: "data.txt"   # reserved for real data; not read while Asimov: true
