@@ -257,30 +257,93 @@ Results are written into `{prevFile}.jld2` (`outFile` is not used), and the run 
 
 ## Input Data Requirements
 
-At setup, every detector's input samples are checked: a per-file table (rows, selected rows,
-weight range, events in the fit window) is printed, with warnings for pre-binned samples,
-signal and ES background samples with every event selected, and identical files. A per-bin breakdown of data,
-signal and each background component at the true parameters is written to
-`<outFile>_<DET>_<ES|CC>_breakdown.csv`.
+The repository ships the physics model: solar model (`inputs/SF3_GS98.jld2`), solar fluxes
+(`inputs/fluxes.jld2`), Earth density table (`inputs/EARTH_MODEL_PREM_DENSE.dat`), solar exposure
+(`inputs/solarExposure_v2.csv`) and the CC ν_e–⁴⁰Ar cross section (MARLEY 2.0.0). The fitter
+computes the ES cross sections itself. **An analyser provides the detector**: for each detector
+in `detectors:`, event-level Monte Carlo samples for the signal response and for each background.
 
+### What to provide per detector
 
-The analysis requires several input files:
+| Config key | Content | Columns |
+|---|---|---|
+| `reconstruction_sample_ES_nue` | ν_e–e⁻ scattering events | `Etrue`, `Ereco`, `weights`, `mask` |
+| `reconstruction_sample_ES_nuother` | ν_μ,τ–e⁻ scattering events (a different recoil spectrum, so a separate sample) | same |
+| `reconstruction_sample_CC` | ν_e ⁴⁰Ar CC events | same |
+| `reconstruction_sample_ES_angle` | ES electron direction (always read; used with `use_scattering_info: true`) | `Ereco`, `cos_scatter` |
+| `ES_background_files`, `CC_background_files` | one file per background component | `Ereco`, `weights`, `mask` (ES: optional `side`) |
 
-- **Solar model**: `inputs/SF3_GS98.jld2` (SF-III GS98, high-Z; `inputs/SF3_AGSS09met.jld2` is the low-Z alternative)
-- **Neutrino fluxes**: `inputs/fluxes.jld2`
-- **Earth model**: `inputs/EARTH_MODEL_PREM_DENSE.dat` (a PREM-like table without crust; the Earth
-  modelling is being reworked)
-- **CC ν_e–⁴⁰Ar cross section**: `inputs/CC_nue_40Ar_total_marley_v2.0.0.csv` (MARLEY 2.0.0, HF-CRPA + Bhattacharya 2009; config key `cc_xsec_file`)
-- **Detector response**: event-level Monte Carlo samples for the CC and ES channels (csv, one row
-  per event: `Etrue`, `Ereco`, `weights`, `mask`)
-- **Background samples**: event-level Monte Carlo samples for the neutron and gamma backgrounds
-  (csv, one row per event: `Ereco`, `weights`, `mask`)
+Rules for every file:
+- **One row per simulated event, never a histogram.** The fitter bins the events itself. A
+  histogram fed in as if it were events is re-binned onto the analysis grid and aliases. Setup
+  warns about samples that look pre-binned.
+- **Energies in GeV.** `Etrue` is the neutrino energy. `Ereco` is your reconstructed energy
+  observable.
+- **Keep rejected events, with `mask = false`.** For the signal, the fitter takes the response
+  P(E_reco | E_true) from all events of each E_true bin, and the selection efficiency from
+  selected / all events of each E_reco bin. Dropping rejected events would set the efficiency to 1.
+- **Signal samples need no flux or cross-section weighting.** The fitter applies flux × σ ×
+  oscillation itself. The E_ν distribution of the sample only needs to cover `range_Etrue` with
+  enough events in every E_true bin; a flat distribution is fine. Non-unit signal `weights` are
+  ignored, with a warning.
+- **ES samples start at the TPC threshold.** Generate the electron recoils down to
+  `TPC_threshold` (the lower limit of the fitter's ES cross section), not down to the analysis
+  cut `Ereco_min_ES`. The analysis cut is applied by the binning.
 
-> **Inputs must be event-level, never pre-binned histograms.** The fitter bins the events itself;
-> a histogram fed in as if it were events is re-binned onto the analysis grid and aliases (for a
-> 200 keV histogram on 0.67 MeV bins, a ±20% sawtooth). Setup warns about samples that look
-> pre-binned. All model tables (fluxes, cross section, exposure, Earth) are validated at load and
-> never extrapolated silently ([SPEC.md](SPEC.md) 8.1).
+### How backgrounds are normalised
+
+- **ES backgrounds** (external, e.g. neutrons entering the detector): each file holds the events
+  that reached the detector out of `ES_bg_generated_events` thrown on the detector faces. Expected
+  events per E_reco bin = `ES_background_normalisations` [cm⁻² s⁻¹] × face area (`side` 0 = long
+  faces, 1 = end caps, absent = all, `ES_bg_face_areas_m2`) × 1 year × `ES_exposure` × Σ weights of
+  the selected events in the bin / `ES_bg_generated_events`.
+- **CC backgrounds**: the weighted selected events are events per kt-year at the flux
+  `CC_bg_reference_flux`. Expected events = Σ weights × `module_mass_kt` × `CC_exposure` ×
+  `CC_background_normalisations` / `CC_bg_reference_flux`.
+- `*_background_systematics` sets a Gaussian prior of that relative width on each normalisation
+  (0 fixes it).
+
+### Example: an ES ν_e sample
+
+`tutorial_example/inputs/ES_nue_ideal.csv`, made by `tutorial_example/make_inputs.jl`. E_ν is
+drawn flat in 1–21 MeV, the recoil T from dσ/dT above `TPC_threshold`, and `Ereco` = T smeared by
+10%:
+
+```
+Etrue,Ereco,weights,mask
+0.013494352138785793,0.007846489500269371,1.0,true
+0.0017821080575948726,0.0010736813495904106,1.0,true
+0.0025061557219528577,0.00046075219640512516,1.0,true
+```
+
+All events pass the selection here (an ideal detector). A real sample keeps the rejected
+events, with `mask = false`. In the config:
+
+```yaml
+detectors:
+  VD:
+    ES_exposure: 10                  # module-years (× module_mass_kt = 100 kt-yr)
+    module_mass_kt: 10
+    Ereco_min_ES: 5                  # analysis cut [MeV]: the fit starts here
+    range_Ereco_ES: [2, 20]          # upper edge [MeV]; events above go to the last bin
+    nBins_Ereco_ES: 30
+    reconstruction_sample_ES_nue:     "tutorial_example/inputs/ES_nue_ideal.csv"
+    reconstruction_sample_ES_nuother: "tutorial_example/inputs/ES_numutau_ideal.csv"
+    reconstruction_sample_ES_angle:   "tutorial_example/inputs/ES_angular_ideal.csv"
+    ES_background_files:          ["tutorial_example/inputs/ES_background_flat.csv"]
+    ES_background_normalisations: [1.86511e-11]   # cm⁻² s⁻¹
+    ES_background_systematics:    [0.02]
+```
+
+### Checking the inputs
+
+`julia --project src/readConfig.jl config.yaml --plot` builds the likelihood and plots what the
+fitter made of the inputs (see "Inputs as the fitter sees them"). Every run also prints a table
+per input file (rows, selected rows, weight range, events in the fit window) and writes
+`<outFile>_<DET>_<ES|CC>_breakdown.csv`, with data, signal and each background per E_reco bin
+at the truth. All model tables are validated at load and never extrapolated
+([SPEC.md](SPEC.md) 8.1). Every key is listed in
+[docs/configuration_reference.md](docs/configuration_reference.md).
 
 ## Physics Parameters
 
