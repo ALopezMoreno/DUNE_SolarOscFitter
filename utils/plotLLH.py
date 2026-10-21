@@ -163,6 +163,16 @@ def main():
         axes[j, j].set_xlim(axes[n - 1, j].get_xlim())
     axes[n - 1, n - 1].set_xlim(axes[n - 1, 0].get_ylim())
     plt.subplots_adjust(hspace=0.0, wspace=-0.015)
+    for i in range(n):                                 # dark map background: white ticks and inner edges
+        for j in range(i):
+            ax = axes[i, j]
+            ax.tick_params(which="both", color="white")
+            ax.spines["top"].set_color("white")
+            ax.spines["right"].set_color("white")
+            if i < n - 1:
+                ax.spines["bottom"].set_color("white")
+            if j > 0:
+                ax.spines["left"].set_color("white")
 
     s0 = next(iter(scans.values()))
     corner = axes[0, n - 1]
