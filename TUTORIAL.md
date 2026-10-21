@@ -20,7 +20,7 @@ Install Julia 1.12.3 and Python 3.10 or later, and set them up as in [README.md]
 ```bash
 julia --project=./ -e "using Pkg; Pkg.instantiate()"
 pip install matplotlib numpy pandas scipy h5py seaborn mplhep cmasher cmap \
-            networkx corner Pillow termcolor peanuts
+            networkx corner Pillow termcolor peanuts pyyaml
 ```
 
 ## 2. Build the inputs (about 2 minutes)
@@ -39,6 +39,15 @@ julia -t 2 --project src/readConfig.jl tutorial_example/08_quick_test.yaml
 ```
 
 This is a short fit with the fast settings, meant only to show that nothing is broken.
+
+Plot what went into the fit: signal and background spectra, response matrices, P_ee and the
+raw samples. They are drawn from the outputs of a SETUP run (about a minute), which builds the
+likelihood at the truth and stops:
+
+```bash
+julia -t auto --project src/readConfig.jl tutorial_example/01_setup.yaml
+python3 utils/plotInputs.py outputs/tutorial/setup -o outputs/tutorial/inputs   # → inputs.pdf
+```
 
 ## 4. Run the fit
 

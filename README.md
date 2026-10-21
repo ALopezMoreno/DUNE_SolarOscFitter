@@ -40,7 +40,7 @@ Install the required Python packages:
 
 ```bash
 pip install matplotlib numpy pandas scipy h5py seaborn mplhep cmasher cmap \
-            networkx corner Pillow termcolor peanuts
+            networkx corner Pillow termcolor peanuts pyyaml
 ```
 
 `plotting/` (a package: shared style, corner plots, contours, layouts), `style.py`, `posteriorHelpers.py`, and `binImportanceHelpers.py` are local modules inside `utils/`. Run plotting scripts from within that directory, or set `PYTHONPATH`:
@@ -139,6 +139,23 @@ printed at startup. Set `--smooth 0` for raw histograms.
 python3 utils/compareOutput.py --help
 python3 utils/compareOutput.py -a chainsA -b chainsB --labels "Run A" "Run B"
 ```
+#### Inputs as the fitter sees them
+
+After any run (a `RunMode: SETUP` run is enough), `plotInputs.py` plots one detector's inputs at
+the Asimov truth. It reads the `outFile` prefix the run wrote:
+- signal and each background per E_reco bin in the fit window, with S/B per bin;
+- the response matrices P(E_reco | E_true) as binned by the fitter, and the fraction above threshold;
+- the oscillated true-energy spectra, P_ee by day and night, and the regeneration;
+- the night P_ee map by zenith bin;
+- the raw event-level samples, the background samples and the selection efficiency.
+
+```bash
+python3 utils/plotInputs.py --help
+python3 utils/plotInputs.py outFileName [--detector HD] -o images/my_inputs   # → images/my_inputs.pdf
+```
+
+Run it from the repository root, so that the input paths in the run record resolve.
+
 #### Bin diagnostic results (derived mode)
 
 ```bash
