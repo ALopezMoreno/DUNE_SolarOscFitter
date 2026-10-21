@@ -160,7 +160,7 @@ def main():
     corner = axes[0, n - 1]
     nu = s0["nuisance"]
     note = ("Conditional scans:\nother parameters at their true values" if nu == "false" else
-            f"Nuisances marginalised:\n{nu} (Fisher-ranked)" if nu.startswith("top") else
+            "Nuisances marginalised:\n" + nu.replace(">=", r"$\geq$") + " (Fisher-ranked)" if nu.startswith("top") else
             f"Nuisances marginalised:\naverage over {nu} prior throws")
     corner.text(0.95, 0.95, note, transform=corner.transAxes, ha="right", va="top", fontsize=20, color="0.3")
     cax = corner.inset_axes([0.1, 0.5, 0.8, 0.08])
