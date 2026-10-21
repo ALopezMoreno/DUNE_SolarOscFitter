@@ -38,7 +38,7 @@ All priors are defined in `mcmc.jl` and constructed from the distributions in `c
 
 | Parameter | Config key | Typical prior | Physics motivation |
 |-----------|-----------|---------------|-------------------|
-| ⁸B flux (ν/cm²/s) | `prior_8B_flux` | `truncated(Normal(5.25e6, 0.28e6), 1.5e6, 1e7)` | SNO NC measurement (5.3% uncertainty) |
+| ⁸B flux (ν/cm²/s) | `prior_8B_flux` | `truncated(Normal(5.25e6, 0.20e6), 1.5e6, 1e7)` | SNO NC measurement, PRC 88 025501: 5.25 ± 0.16 (stat) ± 0.12 (syst, symmetrised), in quadrature 3.8% |
 | HEP flux (ν/cm²/s) | `prior_HEP_flux` | `Uniform(0, 2e4)` | Conservative upper bound |
 
 ### CC cross-section shape parameters
