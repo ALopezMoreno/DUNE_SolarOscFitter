@@ -362,3 +362,25 @@ reports the MC uncertainty per channel either way. Method: Dembinski & Abdelmott
 ## Acknowledgments
 
 - Thanks to Philipp Eller for providing the Newthrino source code, upon which the julia oscillation calculations are based
+## Upcoming plans
+
+- **Earth model.** Replace the shipped density table with a full PREM-based model, including the
+  crust and the detector depth. Add Earth parametrisations beyond per-layer scaling: boundary
+  shifts, and local and large-scale density perturbations.
+- **Solar spectra.** Use the ⁸B spectrum of Winter et al. (2006) with its full high-energy tail, and
+  the hep spectrum of Bahcall (1997).
+- **CC cross section.** Use physically motivated uncertainties instead of the ad hoc
+  normalisation, tilt and curvature: a Fermi/Gamow-Teller split, per-transition MARLEY modes, and
+  data-set variations. Study how well a joint ES+CC fit constrains them.
+- **Detector systematics.** Add an energy scale and resolution shared by ES and CC.
+- **Statistics.** Use the MC-statistics likelihood by default once all inputs are event-level.
+  Add R-hat and ESS convergence diagnostics, and check the coverage of the credible intervals
+  with toy data.
+- **Oscillation accuracy and speed.** Move the oscillation settings into their own config file,
+  with a check that tunes the calculation grids to a target accuracy.
+- **Sampling.** Estimate the mass matrix from the run's own tuning (self warm start).
+- **Diagnostics.** Base pulls, impacts and per-bin information in derived mode on exact gradients,
+  and add oscillograms to the bin diagnostics.
+- **Configs.** Convert the example configs in `configs/` to overrides of a shared base
+  (`base:`).
+- **Real data.** Fit measured data (`Asimov: false`) as well as Asimov data sets.
