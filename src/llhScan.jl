@@ -16,7 +16,8 @@ backgrounds, Earth layers (jointly, with their covariance). `nuisance: {top: k, 
 k nuisances that carry most of the sin²θ₁₂ and Δm²₂₁ variance in the Fisher matrix at the truth
 (numerical Hessian of log L + log π) are averaged by a 3-point rule per nuisance (prior mean and
 ± √3 σ, weights 2/3, 1/6, 1/6; `points: 2`: ± 1 σ), all combinations; the rest stay at their true
-values. Deterministic, no throw noise. In every mode the other solar oscillation parameter stays
+values. With `method: laplace` (the default for this form) the top k are instead marginalised by
+the Laplace approximation at each cell (laplace_cell). Deterministic, no throw noise. In every mode the other solar oscillation parameter stays
 at its true value. Plot χ² = chi2_ref − cell, chi2_ref the value at the truth; the
 2-parameter 1/2/3σ contours are at Δχ² = 2.30, 6.18, 11.83 (utils/plotLLH.py).
 =#
@@ -110,13 +111,17 @@ if RANKING !== nothing
     end
 end
 
-const NUISANCE_LABEL = llh_nuisance isa AbstractDict ?
-    "top $(llh_nuisance["top"]), $(get(llh_nuisance, "points", 3)) points" : string(llh_nuisance)
+laplace_mode() = llh_nuisance isa AbstractDict && get(llh_nuisance, "method", "laplace") == "laplace"
+top_nuisances(xkey, ykey) = [k for (k, _) in RANKING if k ∉ (xkey, ykey)][1:Int(llh_nuisance["top"])]
+
+const NUISANCE_LABEL = !(llh_nuisance isa AbstractDict) ? string(llh_nuisance) :
+    laplace_mode() ? "top $(llh_nuisance["top"]), Laplace" :
+    "top $(llh_nuisance["top"]), $(get(llh_nuisance, "points", 3)) points"
 
 function scan_throws(xkey, ykey)
     llh_nuisance === false && return NamedTuple[], Float64[]
     if llh_nuisance isa AbstractDict
-        top = [k for (k, _) in RANKING if k ∉ (xkey, ykey)][1:Int(llh_nuisance["top"])]
+        top = top_nuisances(xkey, ykey)
         @logmsg MCMC "  averaged over $(join(top, ", ")) ($(get(llh_nuisance, "points", 3)) points each)"
         return quadrature(top, Int(get(llh_nuisance, "points", 3)))
     end
@@ -126,18 +131,73 @@ function scan_throws(xkey, ykey)
     return [throw_nuisances(rng, nuis) for _ in 1:n], fill(1 / n, n)
 end
 
+"""
+    laplace_cell(base, ks, u0) -> (2 log L_marg, u)
+
+Laplace marginalisation over the nuisances `ks` at `base`: 2[max_u f(u) − ½ log det(−∇²f)],
+f = log L + log π, u the nuisances in units of their prior σ from their true values. Damped
+Newton steps from `u0` (the neighbouring cell's optimum), finite-difference derivatives.
+"""
+function laplace_cell(base, ks, u0; maxiter = 6, h = 0.02)
+    μ = [true_params[k] for k in ks]
+    σ = [std(SCAN_PRIORS[k]) for k in ks]
+    f(u) = (p = merge(base, NamedTuple{Tuple(ks)}(Tuple(μ .+ σ .* u)));
+            loglik(p) + sum(logpdf(SCAN_PRIORS[k], p[k]) for k in ks))
+    n = length(ks)
+    u, fu = copy(u0), f(u0)
+    g, H = zeros(n), zeros(n, n)
+    e(i) = (v = zeros(n); v[i] = h; v)
+    for it in 1:maxiter
+        for a in 1:n
+            fp, fm = f(u + e(a)), f(u - e(a))
+            g[a], H[a, a] = (fp - fm) / (2h), (fp - 2 * fu + fm) / h^2
+            for b in a+1:n
+                H[a, b] = H[b, a] = (f(u + e(a) + e(b)) - f(u + e(a) - e(b)) -
+                                     f(u - e(a) + e(b)) + f(u - e(a) - e(b))) / (4h^2)
+            end
+        end
+        it == maxiter && break
+        A, λ = Symmetric(-H), 0.0
+        while !isposdef(A + λ * I)
+            λ = max(2λ, 1e-3)
+        end
+        step = (A + λ * I) \ g
+        norm(step) > 2 && (step .*= 2 / norm(step))
+        norm(step) < 1e-3 && break
+        tries = 0
+        unew = u + step; fnew = f(unew)
+        while fnew < fu && tries < 5
+            step ./= 2; unew = u + step; fnew = f(unew); tries += 1
+        end
+        fnew < fu && break
+        u, fu = unew, fnew
+    end
+    A = Symmetric(-H)
+    return 2 * (fu - 0.5 * (isposdef(A) ? logdet(A) : 0.0)), u
+end
+
 function scan2d(xkey, xvals, ykey, yvals)
-    throws, weights = scan_throws(xkey, ykey)
+    lap = laplace_mode()
+    ks = lap ? top_nuisances(xkey, ykey) : Symbol[]
+    lap && @logmsg MCMC "  Laplace over $(join(ks, ", "))"
+    throws, weights = lap ? (NamedTuple[], Float64[]) : scan_throws(xkey, ykey)
     out = zeros(Float64, length(xvals), length(yvals))
     done = Threads.Atomic{Int}(0)
     Threads.@threads for i in eachindex(xvals)
+        u = zeros(length(ks))
         for (j, y) in enumerate(yvals)
-            out[i, j] = cell(merge(true_params, NamedTuple{(xkey, ykey)}((xvals[i], y))), throws, weights)
+            base = merge(true_params, NamedTuple{(xkey, ykey)}((xvals[i], y)))
+            if lap
+                out[i, j], u = laplace_cell(base, ks, u)
+            else
+                out[i, j] = cell(base, throws, weights)
+            end
         end
         k = Threads.atomic_add!(done, 1) + 1
         k % 5 == 0 && @logmsg MCMC "Completed $k rows out of $(length(xvals))"
     end
-    return out, cell(true_params, throws, weights)
+    ref = lap ? first(laplace_cell(true_params, ks, zeros(length(ks)))) : cell(true_params, throws, weights)
+    return out, ref
 end
 
 # Fitted bins of all detectors (E_reco from the threshold on; day, every night cos z bin, cos θ)
