@@ -544,10 +544,13 @@ function main()
     global llh_range_sin2_th12 = Float64.(get(config, "llh_range_sin2_th12", [0.2, 0.4]))
     global llh_range_sin2_th13 = Float64.(get(config, "llh_range_sin2_th13", [1e-4, 0.25]))
     global llh_range_dm2_21    = Float64.(get(config, "llh_range_dm2_21", [4e-5, 1.5e-4]))
-    # nuisance: false = the other parameters at their true values; N = best of N prior throws
+    # nuisance: false (conditional), N (average over N prior throws) or {top: k, points: 2|3}
     global llh_nuisance = get(config, "nuisance", false)
-    (llh_nuisance === false || (llh_nuisance isa Integer && llh_nuisance > 0)) ||
-        error("nuisance must be false or a positive number of throws (got $(repr(llh_nuisance)))")
+    ok_dict = llh_nuisance isa AbstractDict && haskey(llh_nuisance, "top") && llh_nuisance["top"] isa Integer &&
+              llh_nuisance["top"] > 0 && get(llh_nuisance, "points", 3) in (2, 3) &&
+              issubset(keys(llh_nuisance), ("top", "points"))
+    (llh_nuisance === false || (llh_nuisance isa Integer && llh_nuisance > 0) || ok_dict) ||
+        error("nuisance must be false, a positive number of throws, or {top: k, points: 2 or 3} (got $(repr(llh_nuisance)))")
 
     # Derived parameters
     global thinning = config["thinning"]

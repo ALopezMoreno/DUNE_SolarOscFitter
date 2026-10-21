@@ -158,8 +158,10 @@ def main():
 
     s0 = next(iter(scans.values()))
     corner = axes[0, n - 1]
-    note = (f"Nuisances marginalised:\naverage over {s0['nuisance']} prior throws" if s0["nuisance"] != "false"
-            else "Conditional scans:\nother parameters at their true values")
+    nu = s0["nuisance"]
+    note = ("Conditional scans:\nother parameters at their true values" if nu == "false" else
+            f"Nuisances marginalised:\n{nu} (Fisher-ranked)" if nu.startswith("top") else
+            f"Nuisances marginalised:\naverage over {nu} prior throws")
     corner.text(0.95, 0.95, note, transform=corner.transAxes, ha="right", va="top", fontsize=20, color="0.3")
     cax = corner.inset_axes([0.1, 0.5, 0.8, 0.08])
     label = rf"$\chi^2/{{\rm ndof}}$ (ndof = {s0['ndof']})" if s0["ndof"] else r"$\Delta\chi^2$"

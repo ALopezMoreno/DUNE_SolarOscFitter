@@ -1,6 +1,6 @@
 using Logging
 using LinearAlgebra, Statistics, Distributions, StatsBase, BAT, DensityInterface, IntervalSets
-using DelimitedFiles, Random
+using DelimitedFiles, Random, Printf
 
 include(joinpath(@__DIR__, "setup.jl"))
 include(joinpath(@__DIR__, "priors.jl"))
@@ -12,8 +12,12 @@ include(joinpath(@__DIR__, "priors.jl"))
 conditional scan). `nuisance: N`: each cell is 2 log of the likelihood averaged over N throws of
 the nuisances from their priors, the same throws for every cell: a Monte Carlo marginalisation,
 a quick picture of the posterior. Thrown: sin²θ₁₃ when not scanned, fluxes, CC cross section,
-backgrounds, Earth layers (jointly, with their covariance); the other solar oscillation parameter
-stays at its true value. Plot χ² = chi2_ref − cell, chi2_ref the value at the truth; the
+backgrounds, Earth layers (jointly, with their covariance). `nuisance: {top: k, points: 3}`: the
+k nuisances that carry most of the sin²θ₁₂ and Δm²₂₁ variance in the Fisher matrix at the truth
+(numerical Hessian of log L + log π) are averaged by a 3-point rule per nuisance (prior mean and
+± √3 σ, weights 2/3, 1/6, 1/6; `points: 2`: ± 1 σ), all combinations; the rest stay at their true
+values. Deterministic, no throw noise. In every mode the other solar oscillation parameter stays
+at its true value. Plot χ² = chi2_ref − cell, chi2_ref the value at the truth; the
 2-parameter 1/2/3σ contours are at Δχ² = 2.30, 6.18, 11.83 (utils/plotLLH.py).
 =#
 
@@ -46,29 +50,94 @@ end
 
 loglik(p) = logdensityof(likelihood_all_samples, p)
 
-# 2 log of the likelihood at `base`, averaged over `throws` (none: the conditional value)
-function cell(base, throws)
+# 2 log of the likelihood at `base`, averaged over `throws` with `weights` (none: the conditional value)
+function cell(base, throws, weights)
     isempty(throws) && return 2 * loglik(base)
     v = [loglik(merge(base, t)) for t in throws]
     m = maximum(v)
-    return 2 * (m + log(sum(exp.(v .- m)) / length(v)))
+    return 2 * (m + log(sum(weights .* exp.(v .- m))))
+end
+
+const OSC_KEYS = (:sin2_th12, :sin2_th13, :dm2_21)
+
+"""
+    nuisance_ranking() -> Vector{Pair{Symbol,Float64}}
+
+Every free parameter but sin²θ₁₂ and Δm²₂₁, ranked by the fraction of their variance it carries:
+Σ_p C_pk² / (C_kk C_pp), p ∈ (sin²θ₁₂, Δm²₂₁), with C the inverse of minus the numerical Hessian
+of log L + log π at the truth (steps of 5% of each prior's standard deviation).
+"""
+function nuisance_ranking()
+    ks = collect(keys(SCAN_PRIORS))
+    x0 = Float64[true_params[k] for k in ks]
+    h = [0.05 * std(SCAN_PRIORS[k]) for k in ks]
+    f(x) = (p = merge(true_params, NamedTuple{Tuple(ks)}(Tuple(x)));
+            loglik(p) + sum(logpdf(SCAN_PRIORS[k], p[k]) for k in ks))
+    n = length(ks)
+    pairs = [(a, b) for a in 1:n for b in a:n]
+    H = zeros(n, n)
+    fc = f(x0)
+    Threads.@threads for (a, b) in pairs
+        ea, eb = zeros(n), zeros(n); ea[a] = h[a]; eb[b] = h[b]
+        H[a, b] = H[b, a] = a == b ?
+            (f(x0 + ea) - 2 * fc + f(x0 - ea)) / h[a]^2 :
+            (f(x0 + ea + eb) - f(x0 + ea - eb) - f(x0 - ea + eb) + f(x0 - ea - eb)) / (4h[a] * h[b])
+    end
+    C = inv(Symmetric(-H))
+    pois = [findfirst(==(k), ks) for k in (:sin2_th12, :dm2_21)]
+    score = Dict(ks[k] => sum(C[p, k]^2 / (C[k, k] * C[p, p]) for p in pois)
+                 for k in 1:n if ks[k] ∉ (:sin2_th12, :dm2_21))
+    return sort(collect(score), by = last, rev = true)
+end
+
+# Tensor-product quadrature over the nuisances `ks`: (points, weights)
+function quadrature(ks, npoints)
+    nodes, w = npoints == 3 ? ((-sqrt(3.0), 0.0, sqrt(3.0)), (1 / 6, 2 / 3, 1 / 6)) : ((-1.0, 1.0), (0.5, 0.5))
+    throws, weights = NamedTuple[], Float64[]
+    for idx in Iterators.product(ntuple(_ -> eachindex(nodes), length(ks))...)
+        vals = Tuple(mean(SCAN_PRIORS[k]) + nodes[i] * std(SCAN_PRIORS[k]) for (k, i) in zip(ks, idx))
+        push!(throws, NamedTuple{Tuple(ks)}(vals))
+        push!(weights, prod(w[i] for i in idx))
+    end
+    return throws, weights
+end
+
+const RANKING = llh_nuisance isa AbstractDict ? nuisance_ranking() : nothing
+if RANKING !== nothing
+    @logmsg MCMC "Nuisances ranked by their share of the sin²θ₁₂ and Δm²₂₁ variance (Fisher at the truth):"
+    for (k, v) in RANKING[1:min(end, 8)]
+        @logmsg MCMC @sprintf("  %-24s %.3f", k, v)
+    end
+end
+
+const NUISANCE_LABEL = llh_nuisance isa AbstractDict ?
+    "top $(llh_nuisance["top"]), $(get(llh_nuisance, "points", 3)) points" : string(llh_nuisance)
+
+function scan_throws(xkey, ykey)
+    llh_nuisance === false && return NamedTuple[], Float64[]
+    if llh_nuisance isa AbstractDict
+        top = [k for (k, _) in RANKING if k ∉ (xkey, ykey)][1:Int(llh_nuisance["top"])]
+        @logmsg MCMC "  averaged over $(join(top, ", ")) ($(get(llh_nuisance, "points", 3)) points each)"
+        return quadrature(top, Int(get(llh_nuisance, "points", 3)))
+    end
+    nuis = [k for k in keys(SCAN_PRIORS) if k ∉ (xkey, ykey, :sin2_th12, :dm2_21)]
+    rng = Xoshiro(hash((xkey, ykey)))
+    n = Int(llh_nuisance)
+    return [throw_nuisances(rng, nuis) for _ in 1:n], fill(1 / n, n)
 end
 
 function scan2d(xkey, xvals, ykey, yvals)
-    nuis = [k for k in keys(SCAN_PRIORS) if k ∉ (xkey, ykey, :sin2_th12, :dm2_21)]
-    n_throws = llh_nuisance === false ? 0 : Int(llh_nuisance)
-    rng = Xoshiro(hash((xkey, ykey)))
-    throws = [throw_nuisances(rng, nuis) for _ in 1:n_throws]
+    throws, weights = scan_throws(xkey, ykey)
     out = zeros(Float64, length(xvals), length(yvals))
     done = Threads.Atomic{Int}(0)
     Threads.@threads for i in eachindex(xvals)
         for (j, y) in enumerate(yvals)
-            out[i, j] = cell(merge(true_params, NamedTuple{(xkey, ykey)}((xvals[i], y))), throws)
+            out[i, j] = cell(merge(true_params, NamedTuple{(xkey, ykey)}((xvals[i], y))), throws, weights)
         end
         k = Threads.atomic_add!(done, 1) + 1
         k % 5 == 0 && @logmsg MCMC "Completed $k rows out of $(length(xvals))"
     end
-    return out, cell(true_params, throws)
+    return out, cell(true_params, throws, weights)
 end
 
 # Fitted bins of all detectors (E_reco from the threshold on; day, every night cos z bin, cos θ)
@@ -94,12 +163,12 @@ function write_scan(suffix, xname, xlim, yname, ylim, (matrix, chi2_ref), xkey, 
         println(file, "truth: $(true_params[xkey]), $(true_params[ykey])")   # the scan's conditioning point
         println(file, "chi2_ref: $chi2_ref")                                  # cell value at the truth
         println(file, "ndof: $SCAN_NDOF")
-        println(file, "nuisance: $llh_nuisance")
+        println(file, "nuisance: $NUISANCE_LABEL")
         writedlm(file, matrix, ',')
     end
 end
 
-@logmsg MCMC "LLH scan: $llhBins × $llhBins per pair, nuisance = $llh_nuisance, ndof = $SCAN_NDOF, $(Threads.nthreads()) threads"
+@logmsg MCMC "LLH scan: $llhBins × $llhBins per pair, nuisance = $NUISANCE_LABEL, ndof = $SCAN_NDOF, $(Threads.nthreads()) threads"
 
 @logmsg MCMC ("Scanning sin2th12 vs sin2th13")
 write_scan("_llh_sin2th12_sin2th13.csv", "lim_th12", lim_th12, "lim_th13", lim_th13,
