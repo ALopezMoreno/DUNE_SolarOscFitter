@@ -187,7 +187,7 @@ const TOP_LEVEL_CONFIG_KEYS = Set([
     "detectors", "active_detectors", "mc_stat_likelihood", "mc_stat_day_night",
     # MCMC / LLH / derived
     "nSteps", "nChains", "nTuning", "maxTuningAttempts", "llh_bins", "thinning",
-    "llh_range_sin2_th12", "llh_range_sin2_th13", "llh_range_dm2_21",
+    "llh_range_sin2_th12", "llh_range_sin2_th13", "llh_range_dm2_21", "nuisance",
     # priors and nuisances
     "prior_sin2_th12", "prior_sin2_th13", "prior_dm2_21", "prior_8B_flux", "prior_HEP_flux",
     "fix_cc_xsec", "prior_cc_xsec_norm", "prior_cc_xsec_tilt", "prior_cc_xsec_curv",
@@ -544,6 +544,10 @@ function main()
     global llh_range_sin2_th12 = Float64.(get(config, "llh_range_sin2_th12", [0.2, 0.4]))
     global llh_range_sin2_th13 = Float64.(get(config, "llh_range_sin2_th13", [1e-4, 0.25]))
     global llh_range_dm2_21    = Float64.(get(config, "llh_range_dm2_21", [4e-5, 1.5e-4]))
+    # nuisance: false = the other parameters at their true values; N = best of N prior throws
+    global llh_nuisance = get(config, "nuisance", false)
+    (llh_nuisance === false || (llh_nuisance isa Integer && llh_nuisance > 0)) ||
+        error("nuisance must be false or a positive number of throws (got $(repr(llh_nuisance)))")
 
     # Derived parameters
     global thinning = config["thinning"]

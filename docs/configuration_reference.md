@@ -120,6 +120,7 @@ Strings are evaluated as Julia `Distributions.jl` expressions.
 | `llh_range_sin2_th12` | [Float, Float] | (default `[0.2, 0.4]`) Scanned sin²θ₁₂ range. |
 | `llh_range_sin2_th13` | [Float, Float] | (default `[1e-4, 0.25]`) Scanned sin²θ₁₃ range. |
 | `llh_range_dm2_21` | [Float, Float] | (default `[4e-5, 1.5e-4]`) Scanned Δm²₂₁ range [eV²]. |
+| `nuisance` | `false` or Int | (default `false`) The parameters not scanned. `false` holds them at their true values (a conditional scan). `N` averages the likelihood of each grid point over `N` throws of the nuisances from their priors, the same throws for every point: a Monte Carlo marginalisation, a quick picture of the posterior. Thrown: sin²θ₁₃ when not scanned, the fluxes, CC cross section, background norms and Earth layers (jointly, with their covariance); the other solar oscillation parameter stays at its true value. Costs `N` times the conditional scan; grid rows run on all threads. |
 
 ---
 

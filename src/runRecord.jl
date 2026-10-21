@@ -46,6 +46,7 @@ function _toplevel_defaults_used()
         "llh_range_sin2_th12" => () -> llh_range_sin2_th12,
         "llh_range_sin2_th13" => () -> llh_range_sin2_th13,
         "llh_range_dm2_21"   => () -> llh_range_dm2_21,
+        "nuisance"           => () -> llh_nuisance,
         "mcmc_seed"          => () -> mcmc_seed,
         "warm_start_chain"   => () -> warm_start_chain,                  # nothing = cold start
         "CC_xsec_scale"      => () -> CC_xsec_scale,
