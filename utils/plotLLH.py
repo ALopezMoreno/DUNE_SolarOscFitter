@@ -1,10 +1,11 @@
-"""Corner plot of the 2D likelihood scans of RunMode LLH (src/llhScan.jl).
+"""Corner plot of the 2D likelihood scans of RunMode LLH (src/llhScan.jl), laid out like the
+posterior corner plots (utils/plotting/cornerplot.py).
 
 Off-diagonal: each scan as a colour map of χ²/ndof (χ² = chi2_ref − cell, zero at the truth;
-Δχ² from the minimum for older files) with the 2-parameter 1/2/3σ contours (Δχ² = 2.30, 6.18,
-11.83). Diagonal: the Δχ² curve of each parameter, the likelihood integrated over the other
-parameter of a scan, with the 1D 1/2/3σ levels; each parameter is in two scans, the second is
-dashed.
+Δχ² from the best point for older files), best point yellow, with the 2-parameter 1/2/3σ
+contours (Δχ² = 2.30, 6.18, 11.83) and dotted lines to the best point. Diagonal: the Δχ² curve of
+each parameter, the likelihood integrated over the other parameter of a scan, with the 1D
+1/2/3σ levels; each parameter is in two scans, the second is dashed.
 
     python3 utils/plotLLH.py outputs/tutorial/scan [--rebin 2] [-o name]   # → images/scan_llh.pdf
 """
@@ -12,12 +13,14 @@ import argparse
 import os
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import numpy as np
 
 import plotting  # applies the shared CMS/LaTeX style
 import style
 
 COLOR = "#0894bc"                              # the default corner-plot colour (plotOutput.py)
+LINE = "red"                                   # contours and best-point lines
 DM21_SCALE = 1e4                               # Δm²₂₁ is drawn in 10⁻⁴ eV²
 VARS = ["sin2_th12", "sin2_th13", "dm2_21"]
 LABELS = {"sin2_th12": r"$\sin^2\theta_{12}$", "sin2_th13": r"$\sin^2\theta_{13}$",
@@ -28,7 +31,7 @@ SCANS = {("sin2_th12", "sin2_th13"): "_llh_sin2th12_sin2th13.csv",
          ("sin2_th13", "dm2_21"): "_llh_sin2th13_delt2m21.csv"}
 LEVELS_2D = [2.30, 6.18, 11.83]
 LEVELS_1D = [1.0, 4.0, 9.0]
-CMAP = plotting.parula_map
+CMAP = plotting.parula_map_r                   # best point (lowest χ²) yellow
 CHI2_MAX = 25.0                                # colour scale: χ² up to this, divided by ndof
 
 
@@ -42,8 +45,8 @@ def rebin(m, x, y, k):
 
 
 def read_scan(path, k=1):
-    """One scan file: grids, header fields, Δχ² from the minimum and χ² from the truth (n_x, n_y),
-    with the likelihood averaged over k × k blocks of grid points."""
+    """One scan file: grids, header fields, Δχ² from the best point and χ² from the truth
+    (n_x, n_y), with the likelihood averaged over k × k blocks of grid points."""
     head = {}
     with open(path) as f:
         for line in f:
@@ -51,12 +54,13 @@ def read_scan(path, k=1):
             if not sep or not key.replace("_", "").isalnum():
                 break
             head[key] = val.strip()
-    lims = [[float(v) for v in head[k].split(", ")] for k in list(head)[:2]]
+    lims = [[float(v) for v in head[name].split(", ")] for name in list(head)[:2]]
     m = np.loadtxt(path, delimiter=",", skiprows=len(head), ndmin=2)   # 2 log L per point, rows along x
     x, y = np.linspace(*lims[0], m.shape[0]), np.linspace(*lims[1], m.shape[1])
     if k > 1:
         m, x, y = rebin(m, x, y, k)
-    s = {"x": x, "y": y,
+    i, j = np.unravel_index(np.argmax(m), m.shape)
+    s = {"x": x, "y": y, "best": (x[i], y[j]),
          "truth": [float(v) for v in head["truth"].split(", ")] if "truth" in head else None,
          "dchi2": m.max() - m,
          "ndof": int(head["ndof"]) if "ndof" in head else None,
@@ -81,11 +85,35 @@ def draw_2d(ax, s, xk, yk):
     m = ax.pcolormesh(edges(xs), edges(ys), np.minimum(s["chi2"].T, CHI2_MAX) / norm, cmap=CMAP,
                       vmin=0, vmax=CHI2_MAX / norm, shading="flat", rasterized=True)
     X, Y = np.meshgrid(xs, ys)
-    ax.contour(X, Y, s["dchi2"].T, levels=LEVELS_2D, colors="white", linestyles=style.SIGMA_LINESTYLES[::-1],
+    ax.contour(X, Y, s["dchi2"].T, levels=LEVELS_2D, colors=LINE, linestyles=style.SIGMA_LINESTYLES[::-1],
                linewidths=3)
+    bx, by = scaled(xk, s["best"][0]), scaled(yk, s["best"][1])
+    ax.axvline(bx, color=LINE, ls=":", lw=2)
+    ax.axhline(by, color=LINE, ls=":", lw=2)
+    ax.plot(bx, by, "+", color=LINE, markersize=18, mew=3)
     if s["truth"]:
-        ax.plot(scaled(xk, s["truth"][0]), scaled(yk, s["truth"][1]), "+", color="#a41007", markersize=16, mew=3)
+        ax.plot(scaled(xk, s["truth"][0]), scaled(yk, s["truth"][1]), "o", color="white", markersize=6)
     return m
+
+
+def draw_1d(ax, scans, xk):
+    pairs = [(k, s) for k, s in scans.items() if xk in k]
+    for m, (key, s) in enumerate(pairs):
+        first = key.index(xk) == 0
+        other = key[1] if first else key[0]
+        grid = scaled(xk, s["x"] if first else s["y"])
+        L = np.exp(-0.5 * s["dchi2"]).sum(axis=1 if first else 0)
+        q = -2 * np.log(np.maximum(L / L.max(), 1e-300))
+        ax.plot(grid, q, color=COLOR if m == 0 else "0.3", lw=3 if m == 0 else 2.5,
+                ls="-" if m == 0 else "--", label=f"integrated over {SHORT[other]}")
+        if m == 0:
+            ax.axvline(grid[np.argmin(q)], color=LINE, ls=":", lw=2)
+    for lev, lab in zip(LEVELS_1D, (r"1$\sigma$", r"2$\sigma$", r"3$\sigma$")):
+        ax.axhline(lev, color="0.5", lw=1.5, ls=":")
+        ax.text(0.03, lev, lab, transform=ax.get_yaxis_transform(), va="bottom", fontsize=20, color="0.4")
+    ax.set_ylim(0, 12)
+    ax.set_yticks([])
+    ax.legend(fontsize=16, loc="upper right", frameon=False)
 
 
 def main():
@@ -102,61 +130,57 @@ def main():
     for i, yk in enumerate(VARS):
         for j, xk in enumerate(VARS):
             ax = axes[i, j]
-            ax.set_box_aspect(1)
             if j > i:
                 ax.axis("off")
-                continue
-            if i == j:
-                pairs = [(k, s) for k, s in scans.items() if xk in k]
-                for m, (key, s) in enumerate(pairs):
-                    first = key.index(xk) == 0
-                    other = key[1] if first else key[0]
-                    grid = scaled(xk, s["x"] if first else s["y"])
-                    L = np.exp(-0.5 * s["dchi2"]).sum(axis=1 if first else 0)
-                    q = -2 * np.log(np.maximum(L / L.max(), 1e-300))
-                    ax.plot(grid, q, color=COLOR if m == 0 else "0.3", lw=3 if m == 0 else 2.5,
-                            ls="-" if m == 0 else "--", label=f"integrated over {SHORT[other]}")
-                    if s["truth"]:
-                        ax.axvline(scaled(xk, s["truth"][0 if first else 1]), color="#a41007", lw=2, ls=":")
-                for lev, lab in zip(LEVELS_1D, (r"1$\sigma$", r"2$\sigma$", r"3$\sigma$")):
-                    ax.axhline(lev, color="0.5", lw=1.5, ls=":")
-                    ax.text(0.02, lev, lab, transform=ax.get_yaxis_transform(), va="bottom", fontsize=16, color="0.4")
-                ax.set_ylim(0, 12)
-                ax.yaxis.tick_right()
-                ax.yaxis.set_label_position("right")
-                ax.set_ylabel(r"$\Delta\chi^2$")
-                ax.legend(fontsize=14, loc="upper right", frameon=False)
+            elif i == j:
+                draw_1d(ax, scans, xk)
             else:
                 s = scans[(xk, yk)]
                 mesh = draw_2d(ax, s, xk, yk)
                 ax.set_xlim(edges(scaled(xk, s["x"]))[[0, -1]])
                 ax.set_ylim(edges(scaled(yk, s["y"]))[[0, -1]])
+            ax.xaxis.set_major_formatter(ticker.FuncFormatter(plotting.two_sig_figs_math))
+            if i != j:
+                ax.yaxis.set_major_formatter(ticker.FuncFormatter(plotting.two_sig_figs_math))
+            ax.set_box_aspect(1)
+
+    # Labels and spacing as in plotting.plot_corner
+    for i in range(n):
+        for j in range(i + 1):
+            ax = axes[i, j]
             if i == n - 1:
-                ax.set_xlabel(LABELS[xk])
+                ax.set_xlabel(LABELS[VARS[j]])
+                ax.xaxis.set_label_coords(0.6 if j < n - 1 else 0.9, -0.2)
             else:
                 ax.set_xticklabels([])
-            if j == 0 and i > 0:
-                ax.set_ylabel(LABELS[yk])
-            elif i != j:
-                ax.set_yticklabels([])
-    for j in range(n - 1):                             # diagonal x ranges follow their column
+            if i > j:
+                if j == 0:
+                    ax.set_ylabel(LABELS[VARS[i]])
+                    ax.yaxis.set_label_coords(-0.3, 0.6)
+                else:
+                    ax.set_yticklabels([])
+    for j in range(n - 1):
         axes[j, j].set_xlim(axes[n - 1, j].get_xlim())
-    axes[n - 1, n - 1].set_xlim(edges(scaled("dm2_21", scans[("sin2_th12", "dm2_21")]["y"]))[[0, -1]])
+    axes[n - 1, n - 1].set_xlim(axes[n - 1, 0].get_ylim())
+    plt.subplots_adjust(hspace=0.0, wspace=-0.015)
 
     s0 = next(iter(scans.values()))
-    prof = s0["nuisance"] != "false"
-    axes[0, 2].text(0.95, 0.95, (f"Nuisances marginalised:\naverage over {s0['nuisance']} prior throws"
-                                 if prof else "Conditional scans:\nother parameters at their true values"),
-                    transform=axes[0, 2].transAxes, ha="right", va="top", fontsize=14, color="0.3")
-    cax = axes[0, 2].inset_axes([0.1, 0.55, 0.8, 0.07])
-    label = (rf"$\chi^2/{{\rm ndof}}$ (ndof = {s0['ndof']})" if s0["ndof"] else r"$\Delta\chi^2$")
-    fig.colorbar(mesh, cax=cax, orientation="horizontal", extend="max", label=label)
-    axes[0, 2].text(0.5, 0.05, "contours: 1, 2, 3$\\sigma$\n($\\Delta\\chi^2$ = 2.30, 6.18, 11.83)",
-                    transform=axes[0, 2].transAxes, ha="center", va="bottom", fontsize=16, color="0.3")
-    fig.tight_layout()
+    corner = axes[0, n - 1]
+    note = (f"Nuisances marginalised:\naverage over {s0['nuisance']} prior throws" if s0["nuisance"] != "false"
+            else "Conditional scans:\nother parameters at their true values")
+    corner.text(0.95, 0.95, note, transform=corner.transAxes, ha="right", va="top", fontsize=20, color="0.3")
+    cax = corner.inset_axes([0.1, 0.5, 0.8, 0.08])
+    label = rf"$\chi^2/{{\rm ndof}}$ (ndof = {s0['ndof']})" if s0["ndof"] else r"$\Delta\chi^2$"
+    cb = fig.colorbar(mesh, cax=cax, orientation="horizontal", extend="max")
+    cb.set_label(label, fontsize=22)
+    cb.ax.tick_params(labelsize=18)
+    corner.text(0.5, 0.05, "contours: 1, 2, 3$\\sigma$\n($\\Delta\\chi^2$ = 2.30, 6.18, 11.83)",
+                transform=corner.transAxes, ha="center", va="bottom", fontsize=20, color="0.3")
+
     if args.output:
-        plotting.save_figure(fig, args.output + "_llh.pdf", dpi=300, format="pdf")
-    plotting.save_figure(fig, os.path.join("images", os.path.basename(args.input) + "_llh.pdf"), dpi=300, format="pdf")
+        plotting.save_figure(fig, args.output + "_llh.pdf", dpi=300, format="pdf", bbox_inches="tight")
+    plotting.save_figure(fig, os.path.join("images", os.path.basename(args.input) + "_llh.pdf"), dpi=300,
+                         format="pdf", bbox_inches="tight")
     plt.show()
 
 
