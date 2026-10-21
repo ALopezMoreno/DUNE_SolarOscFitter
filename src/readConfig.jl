@@ -419,12 +419,29 @@ function save_settings_to_file(filename::String)
 end
 
 
+"""
+    write_input_report(prefix, detectors)
+
+`--plot` (plotMode): plot each detector's inputs from the SETUP outputs at `prefix` with
+utils/plotInputs.py, into `<prefix>_<det>.pdf`. PYTHON chooses the interpreter (default python3).
+"""
+function write_input_report(prefix, detectors)
+    python = get(ENV, "PYTHON", "python3")
+    for d in detectors
+        run(`$python $(joinpath(@__DIR__, "..", "utils", "plotInputs.py")) $prefix --detector $d -o $(prefix)_$(d)`)
+        @logmsg Output "Input plots: $(prefix)_$(d).pdf"
+    end
+end
+
 # Main script logic
 function main()
-    # Check if a command-line argument is provided
-    if length(ARGS) > 0
+    # --plot (plotMode): plot instead of run. The likelihood is built (RunMode SETUP) under the
+    # prefix <outFile>_inputs, the inputs of each detector are plotted, and no fit is run.
+    global plotMode = "--plot" in ARGS
+    args = filter(!=("--plot"), ARGS)
+    if length(args) > 0
         # Use the first argument as the path to the YAML file
-        yaml_file = ARGS[1]
+        yaml_file = args[1]
     else
         # Fallback to a default path or handle the error
         println("No configuration file provided. Defaulting to config.yaml")
@@ -438,6 +455,12 @@ function main()
         return
     end
     validate_config_keys(config)   # unknown (e.g. misspelled) keys are an error, not a default
+    if plotMode
+        config["RunMode"] = "SETUP"
+        config["outFile"] = string(config["outFile"], "_inputs")
+        isfile(config["outFile"] * "_config.yaml") &&
+            error("plotMode: $(config["outFile"])_* already exist; delete the previous plots first")
+    end
 
     ##########################################
     #### Set inputs from config YAML file ####
@@ -616,6 +639,8 @@ function main()
 
     @logmsg Output ("$(outFile)_configSettings.txt")
     save_settings_to_file("$(outFile)_configSettings.txt")
+
+    plotMode && write_input_report(outFile, collect(keys(detector_configs)))
 end
 
 

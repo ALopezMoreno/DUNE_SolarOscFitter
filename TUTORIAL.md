@@ -40,13 +40,12 @@ julia -t 2 --project src/readConfig.jl tutorial_example/08_quick_test.yaml
 
 This is a short fit with the fast settings, meant only to show that nothing is broken.
 
-Plot what went into the fit: signal and background spectra, response matrices, P_ee and the
-raw samples. They are drawn from the outputs of a SETUP run (about a minute), which builds the
-likelihood at the truth and stops:
+Plot what goes into the fit before running it (about a minute). `--plot` builds the likelihood
+and plots instead of running. The plots cover the fluxes and cross sections, the true-energy,
+signal and background spectra, the response matrices, the day-night asymmetry and the raw samples:
 
 ```bash
-julia -t auto --project src/readConfig.jl tutorial_example/01_setup.yaml
-python3 utils/plotInputs.py outputs/tutorial/setup -o outputs/tutorial/inputs   # → inputs.pdf
+julia -t auto --project src/readConfig.jl tutorial_example/02_mcmc.yaml --plot   # → outputs/tutorial/mcmc_inputs_VD.pdf
 ```
 
 ## 4. Run the fit

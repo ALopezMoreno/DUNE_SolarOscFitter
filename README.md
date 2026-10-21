@@ -73,6 +73,8 @@ julia -t 8 --project src/readConfig.jl path/to/your/config.yaml
 
 `--project` makes Julia use this repository's pinned environment (without it, Julia uses your
 default environment, which may not have the packages). `-t` sets the number of threads.
+Add `--plot` to plot the configuration's inputs instead of running it (see "Inputs as the fitter
+sees them" below).
 
 ### 2. Configuration
 
@@ -141,8 +143,15 @@ python3 utils/compareOutput.py -a chainsA -b chainsB --labels "Run A" "Run B"
 ```
 #### Inputs as the fitter sees them
 
-After any run (a `RunMode: SETUP` run is enough), `plotInputs.py` plots one detector's inputs at
-the Asimov truth. It reads the `outFile` prefix the run wrote:
+To look at a configuration's inputs before fitting, call the fitter with `--plot`. It plots
+instead of running: it builds the likelihood (as `RunMode: SETUP`) under the prefix
+`<outFile>_inputs`, writes `<outFile>_inputs_<detector>.pdf` and stops.
+
+```bash
+julia -t auto --project src/readConfig.jl path/to/config.yaml --plot
+```
+
+The plots show one detector's inputs at the Asimov truth:
 - the solar fluxes (⁸B, hep) and the ES and CC cross sections the fitter evaluates;
 - the oscillated true-energy spectra (all interactions and the part above threshold), P_ee by day
   and night, and the regeneration;
@@ -156,12 +165,12 @@ the Asimov truth. It reads the `outFile` prefix the run wrote:
 1D quantities are drawn as filled histograms and 2D ones as filled contours, all in viridis. The flux
 and cross-section page needs a run made with the current fitter, which stores them.
 
+`utils/plotInputs.py` makes them, and can also be run on the outputs of any earlier run (run it
+from the repository root, so that the input paths in the run record resolve):
+
 ```bash
-python3 utils/plotInputs.py --help
 python3 utils/plotInputs.py outFileName [--detector HD] -o images/my_inputs   # → images/my_inputs.pdf
 ```
-
-Run it from the repository root, so that the input paths in the run record resolve.
 
 #### Bin diagnostic results (derived mode)
 
