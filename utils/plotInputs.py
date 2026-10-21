@@ -109,6 +109,14 @@ def filled_map(ax, x_edges, y_edges, Z, label, log=True, cmap=CMAP, nlev=15, vmi
     return m
 
 
+def square_one_to_one(ax, lo, hi):
+    """Same range on both axes, equal scaling and the E_reco = E_true line."""
+    ax.plot([lo, hi], [lo, hi], color="white", lw=1.2, ls="--", label=r"$E_{\rm reco} = E_{\rm true}$")
+    ax.set_xlim(lo, hi)
+    ax.set_ylim(lo, hi)
+    ax.set_aspect("equal")
+
+
 def reco_edges(df):
     """Finite E_reco edges for drawing: the under- and overflow bins are drawn one bin width wide."""
     lo, hi = df.Ereco_lo_MeV.to_numpy(float), df.Ereco_hi_MeV.to_numpy(float)
@@ -286,8 +294,8 @@ def page_backgrounds(pdf, breakdown, det):
 def page_response(pdf, d, breakdown):
     mats = [(k, lab) for k, lab, _ in CHANNELS if f"resp/{k}" in d]
     et = etrue_edges(d)
-    fig, axes = plt.subplots(2, len(mats), figsize=(6.5 * len(mats), 9), squeeze=False,
-                             gridspec_kw={"height_ratios": [3, 1.3]}, sharex="col")
+    fig, axes = plt.subplots(2, len(mats), figsize=(6.5 * len(mats), 9.5), squeeze=False,
+                             gridspec_kw={"height_ratios": [3, 1.2]})
     for j, (k, lab) in enumerate(mats):
         ch = "CC" if k == "CC" else "ES"
         R = d[f"resp/{k}"]                             # (E_true, E_reco), rows sum to 1
@@ -295,15 +303,18 @@ def page_response(pdf, d, breakdown):
             np.linspace(d[f"meta/Ereco_{ch}_min"], d[f"meta/Ereco_{ch}_max"], int(d[f"meta/Ereco_{ch}_n"]) + 1)
         ax = axes[0, j]
         filled_map(ax, et, er[1:], R[:, 1:].T, r"$P(E_{\rm reco}\,|\,E_{\rm true})$")   # below-threshold bin left out
-        ax.plot(et, et, color="white", lw=1, ls="--")
-        ax.set_ylim(er[1], er[-1])
+        lo, hi = 0.0, max(et[-1], er[-1])
+        square_one_to_one(ax, lo, hi)
+        ax.axhline(er[1], color="white", lw=0.8, ls=":")       # the threshold
         ax.set_title(f"{lab} response (fit bins)")
+        ax.set_xlabel(ETRUE)
         ax.set_ylabel(EREC)
         a = axes[1, j]
         fill, edge = (CC_FILL, CC_EDGE) if ch == "CC" else (ES_FILL, ES_EDGE)
         filled_stairs(a, et, R[:, 1:].sum(axis=1), fill, edge, alpha=0.6)
         a.set_ylabel("above threshold")
         a.set_xlabel(ETRUE)
+        a.set_xlim(lo, hi)
         a.set_ylim(0, 1.05)
     savepage(pdf, fig)
 
@@ -336,10 +347,12 @@ def page_raw(pdf, block, thr):
         x, y = df.Etrue.to_numpy() * 1e3, df.Ereco.to_numpy() * 1e3
         t = thr["CC" if k == "CC" else "ES"]
         ymax = max(np.percentile(y, 99.9), 1.5 * t)
-        H, xe, ye = np.histogram2d(x, y, bins=(80, 80), range=((x.min(), x.max()), (0, ymax)))
+        hi = max(x.max(), ymax)
+        H, xe, ye = np.histogram2d(x, y, bins=(80, 80), range=((0, hi), (0, hi)))
         ax = axes[0, j]
         filled_map(ax, xe, ye, H.T, "MC events", vmin=1)
-        ax.axhline(t, color="white", ls="--", lw=1)
+        square_one_to_one(ax, 0, hi)
+        ax.axhline(t, color="white", ls=":", lw=0.8)       # the threshold
         ax.set_xlabel(ETRUE)
         ax.set_ylabel(EREC)
         ax.set_title(f"{lab}: {len(df):,} MC events")
