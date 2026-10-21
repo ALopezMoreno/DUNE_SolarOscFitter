@@ -1,7 +1,12 @@
-# Step 4: 2D likelihood scans on an llh_bins × llh_bins grid, no sampling.
+# Step 4: 2D likelihood scans, no sampling. Every other parameter is held at its true value.
+# The ranges are the region of the default corner plot (sin²θ₁₃: the reactor prior ± 4σ).
 #   julia -t auto --project src/readConfig.jl tutorial_example/05_llh_scan.yaml
+#   python3 utils/plotLLH.py outputs/tutorial/scan          # → images/scan_llh.pdf
 base: configs/tutorial.yaml
 
 outFile: "outputs/tutorial/scan"
 RunMode: "LLH"
-llh_bins: 10
+llh_bins: 30
+llh_range_sin2_th12: [0.23, 0.43]
+llh_range_sin2_th13: [0.0192, 0.0248]
+llh_range_dm2_21: [2.0e-5, 1.4e-4]

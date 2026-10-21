@@ -16,18 +16,14 @@ Each cell holds 2·log L of all active detectors and channels (total_llh), with 
 parameter fixed at its Asimov true value: a conditional scan, not a marginalised or profiled
 one, so its contours are narrower than the posterior's. Plot 2·log L − max: the
 2-parameter 1/2/3σ contours are at −2.30, −6.18, −11.83 (utils/plotLLH.py).
-
-The earlier version summed ad-hoc ±FWHM shifts of selected systematics divided by a
-degrees-of-freedom count, and evaluated the full likelihood once per active channel, which
-counted it twice when both ES and CC were on.
 =#
 
 nbins = llhBins  # grid points per axis
 
-# Parameter ranges for scanning
-lim_th12 = [0.2, 0.4]      # sin²θ₁₂ range
-lim_th13 = [1e-4, 0.25]    # sin²θ₁₃ range
-lim_dm21 = [4e-5, 1.5e-4]  # Δm²₂₁ range (eV²)
+# Scanned ranges (config keys llh_range_*; Δm²₂₁ in eV²)
+lim_th12 = llh_range_sin2_th12
+lim_th13 = llh_range_sin2_th13
+lim_dm21 = llh_range_dm2_21
 
 vals_12 = range(lim_th12[1], stop=lim_th12[2], length=nbins)
 vals_13 = range(lim_th13[1], stop=lim_th13[2], length=nbins)

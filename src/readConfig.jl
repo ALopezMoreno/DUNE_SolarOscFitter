@@ -187,6 +187,7 @@ const TOP_LEVEL_CONFIG_KEYS = Set([
     "detectors", "active_detectors", "mc_stat_likelihood", "mc_stat_day_night",
     # MCMC / LLH / derived
     "nSteps", "nChains", "nTuning", "maxTuningAttempts", "llh_bins", "thinning",
+    "llh_range_sin2_th12", "llh_range_sin2_th13", "llh_range_dm2_21",
     # priors and nuisances
     "prior_sin2_th12", "prior_sin2_th13", "prior_dm2_21", "prior_8B_flux", "prior_HEP_flux",
     "fix_cc_xsec", "prior_cc_xsec_norm", "prior_cc_xsec_tilt", "prior_cc_xsec_curv",
@@ -538,8 +539,11 @@ function main()
     load_earth_normalisation_prior(config["earth_normalisation_prior_file"];
                                    required = Bool(config["earth_potential_uncertainties"]))
 
-    # LLH parameters
+    # LLH parameters: grid points per axis and the scanned range of each oscillation parameter
     global llhBins = config["llh_bins"]
+    global llh_range_sin2_th12 = Float64.(get(config, "llh_range_sin2_th12", [0.2, 0.4]))
+    global llh_range_sin2_th13 = Float64.(get(config, "llh_range_sin2_th13", [1e-4, 0.25]))
+    global llh_range_dm2_21    = Float64.(get(config, "llh_range_dm2_21", [4e-5, 1.5e-4]))
 
     # Derived parameters
     global thinning = config["thinning"]

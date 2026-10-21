@@ -117,6 +117,9 @@ Strings are evaluated as Julia `Distributions.jl` expressions.
 | Key | Type | Description |
 |-----|------|-------------|
 | `llh_bins` | Int | Bins per parameter dimension for 2D likelihood scans (`RunMode: LLH`). |
+| `llh_range_sin2_th12` | [Float, Float] | (default `[0.2, 0.4]`) Scanned sin²θ₁₂ range. |
+| `llh_range_sin2_th13` | [Float, Float] | (default `[1e-4, 0.25]`) Scanned sin²θ₁₃ range. |
+| `llh_range_dm2_21` | [Float, Float] | (default `[4e-5, 1.5e-4]`) Scanned Δm²₂₁ range [eV²]. |
 
 ---
 
