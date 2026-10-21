@@ -405,3 +405,15 @@ end
         @test h[1] == 1 && h[2] == 1                    # just below → underflow, at threshold → first fitted bin
     end
 end
+
+# ── inputs read by the plotting code are in git ──────────────────────────────
+# inputs/ is gitignored; a fresh clone has only the files added on purpose (git add -f).
+@testset "plotting inputs are tracked" begin
+    repo_root = joinpath(@__DIR__, "..")
+    tracked = Set(readlines(`git -C $repo_root ls-files -- inputs`))
+    py = [joinpath(d, f) for (d, _, fs) in walkdir(joinpath(repo_root, "utils", "plotting")) for f in fs if endswith(f, ".py")]
+    append!(py, joinpath.(repo_root, "utils", ["plotOutput.py", "compareOutput.py", "plotLLH.py", "plotInputs.py"]))
+    for f in py, m in eachmatch(r"[\"'](inputs/[A-Za-z0-9_./-]+\.\w+)[\"']", read(f, String))
+        @test m.captures[1] in tracked
+    end
+end
