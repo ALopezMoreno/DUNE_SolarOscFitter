@@ -145,7 +145,8 @@ python3 utils/compareOutput.py -a chainsA -b chainsB --labels "Run A" "Run B"
 
 To look at a configuration's inputs before fitting, call the fitter with `--plot`. It plots
 instead of running: it builds the likelihood (as `RunMode: SETUP`) under the prefix
-`<outFile>_inputs`, writes `<outFile>_inputs_<detector>.pdf` and stops.
+`<outFile>_inputs`, writes the plots to `images/<name>_inputs_<detector>.pdf` (`<name>` is the last
+part of `outFile`) and stops.
 
 ```bash
 julia -t auto --project src/readConfig.jl path/to/config.yaml --plot

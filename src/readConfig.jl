@@ -423,13 +423,15 @@ end
     write_input_report(prefix, detectors)
 
 `--plot` (plotMode): plot each detector's inputs from the SETUP outputs at `prefix` with
-utils/plotInputs.py, into `<prefix>_<det>.pdf`. PYTHON chooses the interpreter (default python3).
+utils/plotInputs.py, into `images/<basename(prefix)>_<det>.pdf`. PYTHON chooses the interpreter
+(default python3).
 """
 function write_input_report(prefix, detectors)
     python = get(ENV, "PYTHON", "python3")
     for d in detectors
-        run(`$python $(joinpath(@__DIR__, "..", "utils", "plotInputs.py")) $prefix --detector $d -o $(prefix)_$(d)`)
-        @logmsg Output "Input plots: $(prefix)_$(d).pdf"
+        out = joinpath(@__DIR__, "..", "images", "$(basename(prefix))_$(d)")
+        run(`$python $(joinpath(@__DIR__, "..", "utils", "plotInputs.py")) $prefix --detector $d -o $out`)
+        @logmsg Output "Input plots: $(normpath(out)).pdf"
     end
 end
 

@@ -97,7 +97,7 @@ julia -t auto --project src/readConfig.jl tutorial_example/01_setup.yaml
 Look in the log for the event counts, `S/B 0.5` per channel and the day-night asymmetries.
 To see the spectra, response matrices, P_ee and raw samples, add `--plot` to any run command,
 for example `julia -t auto --project src/readConfig.jl tutorial_example/02_mcmc.yaml --plot`.
-It plots instead of running and writes `outputs/tutorial/mcmc_inputs_VD.pdf`.
+It plots instead of running and writes `images/mcmc_inputs_VD.pdf`.
 `outputs/tutorial/setup_VD_{ES,CC}_breakdown.csv` hold signal and background per E_reco bin.
 Four warnings, "every event ... passes the selection", are expected: this is an ideal detector
 with a selection efficiency of 1.

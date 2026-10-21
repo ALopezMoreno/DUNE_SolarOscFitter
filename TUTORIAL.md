@@ -45,7 +45,7 @@ and plots instead of running. The plots cover the fluxes and cross sections, the
 signal and background spectra, the response matrices, the day-night asymmetry and the raw samples:
 
 ```bash
-julia -t auto --project src/readConfig.jl tutorial_example/02_mcmc.yaml --plot   # → outputs/tutorial/mcmc_inputs_VD.pdf
+julia -t auto --project src/readConfig.jl tutorial_example/02_mcmc.yaml --plot   # → images/mcmc_inputs_VD.pdf
 ```
 
 ## 4. Run the fit

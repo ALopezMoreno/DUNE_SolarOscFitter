@@ -99,9 +99,18 @@ def filled_map(ax, x_edges, y_edges, Z, label, log=True, cmap=CMAP, nlev=15, vmi
     return m
 
 
-def square_one_to_one(ax, lo, hi):
-    """Same range on both axes, equal scaling and the E_reco = E_true line."""
-    ax.plot([lo, hi], [lo, hi], color="white", lw=1.2, ls="--", label=r"$E_{\rm reco} = E_{\rm true}$")
+THR_COL = "#ff7f0e"
+
+
+def square_one_to_one(ax, lo, hi, thr):
+    """Same range on both axes, equal scaling, the E_reco = E_true line and the E_reco threshold."""
+    ax.axhspan(lo, thr, color="0.85", alpha=0.6, lw=0, zorder=0.5)
+    ax.axhline(thr, color=THR_COL, lw=2)
+    ax.text(lo + 0.03 * (hi - lo), thr - 0.02 * (hi - lo), rf"threshold {thr:g} MeV", color="#b35400",
+            ha="left", va="top", fontsize=14)
+    ax.plot([lo, hi], [lo, hi], color="k", lw=1.3)
+    ax.text(lo + 0.3 * (hi - lo), lo + 0.3 * (hi - lo) + 0.02 * (hi - lo), r"$E_{\rm reco} = E_{\rm true}$",
+            color="0.25", rotation=45, rotation_mode="anchor", ha="center", va="bottom", fontsize=13)
     ax.set_xlim(lo, hi)
     ax.set_ylim(lo, hi)
     ax.set_aspect("equal")
@@ -294,8 +303,7 @@ def page_response(pdf, d, breakdown):
         ax = axes[0, j]
         filled_map(ax, et, er[1:], R[:, 1:].T, r"$P(E_{\rm reco}\,|\,E_{\rm true})$")   # below-threshold bin left out
         lo, hi = 0.0, max(et[-1], er[-1])
-        square_one_to_one(ax, lo, hi)
-        ax.axhline(er[1], color="white", lw=0.8, ls=":")       # the threshold
+        square_one_to_one(ax, lo, hi, er[1])
         ax.set_title(f"{lab} response (fit bins)")
         ax.set_xlabel(ETRUE)
         ax.set_ylabel(EREC)
@@ -341,8 +349,7 @@ def page_raw(pdf, block, thr):
         H, xe, ye = np.histogram2d(x, y, bins=(80, 80), range=((0, hi), (0, hi)))
         ax = axes[0, j]
         filled_map(ax, xe, ye, H.T, "MC events", vmin=1)
-        square_one_to_one(ax, 0, hi)
-        ax.axhline(t, color="white", ls=":", lw=0.8)       # the threshold
+        square_one_to_one(ax, 0, hi, t)
         ax.set_xlabel(ETRUE)
         ax.set_ylabel(EREC)
         ax.set_title(f"{lab}: {len(df):,} MC events")
