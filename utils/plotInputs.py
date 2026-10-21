@@ -324,12 +324,12 @@ def page_night(pdf, d):
     cz = d["meta/cosz_edges"]
     pd_, pn = d["osc_probs/nue_8B_day"][None, :], d["osc_probs/nue_8B_night"]
     with np.errstate(divide="ignore", invalid="ignore"):
-        adn = 2 * (pd_ - pn) / (pd_ + pn)            # the fitter's convention: 2(D - N)/(D + N)
+        adn = 2 * (pn - pd_) / (pn + pd_)            # positive for regeneration (the fitter logs 2(D - N)/(D + N))
     fig, ax = plt.subplots(figsize=(9, 6.5))
     filled_map(ax, et, cz, adn, r"$A_{\rm DN}$", log=False, vmin=np.nanmin(adn), vmax=np.nanmax(adn), nlev=21)
     ax.set_xlabel(ETRUE)
     ax.set_ylabel(r"$\cos\theta_z$")
-    ax.set_title(r"$^8$B: $A_{\rm DN} = 2\,(P_{ee}^{\rm day} - P_{ee}^{\rm night})\,/\,(P_{ee}^{\rm day} + P_{ee}^{\rm night})$")
+    ax.set_title(r"$^8$B: $A_{\rm DN} = 2\,(P_{ee}^{\rm night} - P_{ee}^{\rm day})\,/\,(P_{ee}^{\rm night} + P_{ee}^{\rm day})$")
     savepage(pdf, fig)
 
 
