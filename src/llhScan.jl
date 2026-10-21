@@ -13,7 +13,7 @@ conditional scan). `nuisance: N`: each cell is 2 log of the likelihood averaged 
 the nuisances from their priors, the same throws for every cell: a Monte Carlo marginalisation,
 a quick picture of the posterior. Thrown: sin²θ₁₃ when not scanned, fluxes, CC cross section,
 backgrounds, Earth layers (jointly, with their covariance). `nuisance: {top: k, min_share: c, points: 3}`: at
-most k nuisances, those carrying a share ≥ c (default 0.1) of the sin²θ₁₂ or Δm²₂₁ variance in the Fisher matrix at the truth
+most k (default 4) nuisances, those carrying a share ≥ c (default 0.1) of the sin²θ₁₂ or Δm²₂₁ variance in the Fisher matrix at the truth
 (numerical Hessian of log L + log π) are averaged by a 3-point rule per nuisance (prior mean and
 ± √3 σ, weights 2/3, 1/6, 1/6; `points: 2`: ± 1 σ), all combinations; the rest stay at their true
 values. With `method: laplace` (the default for this form) the top k are instead marginalised by
@@ -116,12 +116,12 @@ laplace_mode() = llh_nuisance isa AbstractDict && get(llh_nuisance, "method", "l
 function top_nuisances(xkey, ykey)
     cut = Float64(get(llh_nuisance, "min_share", 0.1))
     ks = [k for (k, v) in RANKING if k ∉ (xkey, ykey) && v >= cut]
-    return ks[1:min(end, Int(llh_nuisance["top"]))]
+    return ks[1:min(end, Int(get(llh_nuisance, "top", 4)))]
 end
 
 const NUISANCE_LABEL = !(llh_nuisance isa AbstractDict) ? string(llh_nuisance) :
-    laplace_mode() ? "top $(llh_nuisance["top"]), share >= $(get(llh_nuisance, "min_share", 0.1)), Laplace" :
-    "top $(llh_nuisance["top"]), $(get(llh_nuisance, "points", 3)) points"
+    laplace_mode() ? "top $(get(llh_nuisance, "top", 4)), share >= $(get(llh_nuisance, "min_share", 0.1)), Laplace" :
+    "top $(get(llh_nuisance, "top", 4)), $(get(llh_nuisance, "points", 3)) points"
 
 function scan_throws(xkey, ykey)
     llh_nuisance === false && return NamedTuple[], Float64[]

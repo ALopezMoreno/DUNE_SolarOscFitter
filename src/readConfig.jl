@@ -546,8 +546,8 @@ function main()
     global llh_range_dm2_21    = Float64.(get(config, "llh_range_dm2_21", [4e-5, 1.5e-4]))
     # nuisance: false (conditional), N (average over N prior throws) or {top: k, points: 2|3}
     global llh_nuisance = get(config, "nuisance", false)
-    ok_dict = llh_nuisance isa AbstractDict && haskey(llh_nuisance, "top") && llh_nuisance["top"] isa Integer &&
-              llh_nuisance["top"] > 0 && get(llh_nuisance, "points", 3) in (2, 3) &&
+    ok_dict = llh_nuisance isa AbstractDict && get(llh_nuisance, "top", 4) isa Integer &&
+              get(llh_nuisance, "top", 4) > 0 && get(llh_nuisance, "points", 3) in (2, 3) &&
               get(llh_nuisance, "method", "laplace") in ("laplace", "grid") &&
               0 <= get(llh_nuisance, "min_share", 0.1) <= 1 &&
               issubset(keys(llh_nuisance), ("top", "points", "method", "min_share"))
