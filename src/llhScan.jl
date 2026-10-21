@@ -12,8 +12,8 @@ include(joinpath(@__DIR__, "priors.jl"))
 conditional scan). `nuisance: N`: each cell is 2 log of the likelihood averaged over N throws of
 the nuisances from their priors, the same throws for every cell: a Monte Carlo marginalisation,
 a quick picture of the posterior. Thrown: sin²θ₁₃ when not scanned, fluxes, CC cross section,
-backgrounds, Earth layers (jointly, with their covariance). `nuisance: {top: k, points: 3}`: the
-k nuisances that carry most of the sin²θ₁₂ and Δm²₂₁ variance in the Fisher matrix at the truth
+backgrounds, Earth layers (jointly, with their covariance). `nuisance: {top: k, min_share: c, points: 3}`: at
+most k nuisances, those carrying a share ≥ c (default 0.1) of the sin²θ₁₂ or Δm²₂₁ variance in the Fisher matrix at the truth
 (numerical Hessian of log L + log π) are averaged by a 3-point rule per nuisance (prior mean and
 ± √3 σ, weights 2/3, 1/6, 1/6; `points: 2`: ± 1 σ), all combinations; the rest stay at their true
 values. With `method: laplace` (the default for this form) the top k are instead marginalised by
@@ -64,9 +64,9 @@ const OSC_KEYS = (:sin2_th12, :sin2_th13, :dm2_21)
 """
     nuisance_ranking() -> Vector{Pair{Symbol,Float64}}
 
-Every free parameter but sin²θ₁₂ and Δm²₂₁, ranked by the fraction of their variance it carries:
-Σ_p C_pk² / (C_kk C_pp), p ∈ (sin²θ₁₂, Δm²₂₁), with C the inverse of minus the numerical Hessian
-of log L + log π at the truth (steps of 5% of each prior's standard deviation).
+Every free parameter but sin²θ₁₂ and Δm²₂₁, ranked by the largest fraction of their variance it
+carries: max_p C_pk² / (C_kk C_pp), p ∈ (sin²θ₁₂, Δm²₂₁), with C the inverse of minus the numerical
+Hessian of log L + log π at the truth (steps of 5% of each prior's standard deviation).
 """
 function nuisance_ranking()
     ks = collect(keys(SCAN_PRIORS))
@@ -86,7 +86,7 @@ function nuisance_ranking()
     end
     C = inv(Symmetric(-H))
     pois = [findfirst(==(k), ks) for k in (:sin2_th12, :dm2_21)]
-    score = Dict(ks[k] => sum(C[p, k]^2 / (C[k, k] * C[p, p]) for p in pois)
+    score = Dict(ks[k] => maximum(C[p, k]^2 / (C[k, k] * C[p, p]) for p in pois)
                  for k in 1:n if ks[k] ∉ (:sin2_th12, :dm2_21))
     return sort(collect(score), by = last, rev = true)
 end
@@ -105,17 +105,22 @@ end
 
 const RANKING = llh_nuisance isa AbstractDict ? nuisance_ranking() : nothing
 if RANKING !== nothing
-    @logmsg MCMC "Nuisances ranked by their share of the sin²θ₁₂ and Δm²₂₁ variance (Fisher at the truth):"
+    @logmsg MCMC "Nuisances ranked by their largest share of the sin²θ₁₂ or Δm²₂₁ variance (Fisher at the truth; cutoff $(get(llh_nuisance, "min_share", 0.1))):"
     for (k, v) in RANKING[1:min(end, 8)]
         @logmsg MCMC @sprintf("  %-24s %.3f", k, v)
     end
 end
 
 laplace_mode() = llh_nuisance isa AbstractDict && get(llh_nuisance, "method", "laplace") == "laplace"
-top_nuisances(xkey, ykey) = [k for (k, _) in RANKING if k ∉ (xkey, ykey)][1:Int(llh_nuisance["top"])]
+# The nuisances to marginalise: those with a Fisher share ≥ min_share, at most `top`, scanned axes excluded
+function top_nuisances(xkey, ykey)
+    cut = Float64(get(llh_nuisance, "min_share", 0.1))
+    ks = [k for (k, v) in RANKING if k ∉ (xkey, ykey) && v >= cut]
+    return ks[1:min(end, Int(llh_nuisance["top"]))]
+end
 
 const NUISANCE_LABEL = !(llh_nuisance isa AbstractDict) ? string(llh_nuisance) :
-    laplace_mode() ? "top $(llh_nuisance["top"]), Laplace" :
+    laplace_mode() ? "top $(llh_nuisance["top"]), share >= $(get(llh_nuisance, "min_share", 0.1)), Laplace" :
     "top $(llh_nuisance["top"]), $(get(llh_nuisance, "points", 3)) points"
 
 function scan_throws(xkey, ykey)

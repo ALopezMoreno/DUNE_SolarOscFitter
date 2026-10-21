@@ -549,9 +549,10 @@ function main()
     ok_dict = llh_nuisance isa AbstractDict && haskey(llh_nuisance, "top") && llh_nuisance["top"] isa Integer &&
               llh_nuisance["top"] > 0 && get(llh_nuisance, "points", 3) in (2, 3) &&
               get(llh_nuisance, "method", "laplace") in ("laplace", "grid") &&
-              issubset(keys(llh_nuisance), ("top", "points", "method"))
+              0 <= get(llh_nuisance, "min_share", 0.1) <= 1 &&
+              issubset(keys(llh_nuisance), ("top", "points", "method", "min_share"))
     (llh_nuisance === false || (llh_nuisance isa Integer && llh_nuisance > 0) || ok_dict) ||
-        error("nuisance must be false, a positive number of throws, or {top: k, method: laplace|grid, points: 2|3} (got $(repr(llh_nuisance)))")
+        error("nuisance must be false, a positive number of throws, or {top: k, min_share: c, method: laplace|grid, points: 2|3} (got $(repr(llh_nuisance)))")
 
     # Derived parameters
     global thinning = config["thinning"]
