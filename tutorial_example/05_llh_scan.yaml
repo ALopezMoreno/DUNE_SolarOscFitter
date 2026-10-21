@@ -2,7 +2,7 @@
 # (sin²θ₁₃: the reactor prior ± 4σ). The parameters not scanned are profiled approximately:
 # each grid point takes the best of 10 random throws of them from their priors.
 #   julia -t auto --project src/readConfig.jl tutorial_example/05_llh_scan.yaml
-#   python3 utils/plotLLH.py outputs/tutorial/scan          # → images/scan_llh.pdf
+#   python3 utils/plotLLH.py outputs/tutorial/scan --rebin 2   # → images/scan_llh.pdf (10 × 10)
 base: configs/tutorial.yaml
 
 outFile: "outputs/tutorial/scan"

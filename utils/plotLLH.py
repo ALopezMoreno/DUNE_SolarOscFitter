@@ -6,7 +6,7 @@ Off-diagonal: each scan as a colour map of χ²/ndof (χ² = chi2_ref − cell, 
 parameter of a scan, with the 1D 1/2/3σ levels; each parameter is in two scans, the second is
 dashed.
 
-    python3 utils/plotLLH.py outputs/tutorial/scan [-o name]   # → images/scan_llh.pdf
+    python3 utils/plotLLH.py outputs/tutorial/scan [--rebin 2] [-o name]   # → images/scan_llh.pdf
 """
 import argparse
 import os
@@ -32,8 +32,18 @@ CMAP = plotting.parula_map
 CHI2_MAX = 25.0                                # colour scale: χ² up to this, divided by ndof
 
 
-def read_scan(path):
-    """One scan file: grids, header fields, Δχ² from the minimum and χ² from the truth (n_x, n_y)."""
+def rebin(m, x, y, k):
+    """Average the likelihood exp(m/2) over k × k blocks of grid points (m = 2 log L per point)."""
+    nx, ny = (m.shape[0] // k) * k, (m.shape[1] // k) * k
+    m, x, y = m[:nx, :ny], x[:nx], y[:ny]
+    top = m.max()
+    L = np.exp((m - top) / 2).reshape(nx // k, k, ny // k, k).mean(axis=(1, 3))
+    return top + 2 * np.log(np.maximum(L, 1e-300)), x.reshape(-1, k).mean(1), y.reshape(-1, k).mean(1)
+
+
+def read_scan(path, k=1):
+    """One scan file: grids, header fields, Δχ² from the minimum and χ² from the truth (n_x, n_y),
+    with the likelihood averaged over k × k blocks of grid points."""
     head = {}
     with open(path) as f:
         for line in f:
@@ -42,8 +52,11 @@ def read_scan(path):
                 break
             head[key] = val.strip()
     lims = [[float(v) for v in head[k].split(", ")] for k in list(head)[:2]]
-    m = np.loadtxt(path, delimiter=",", skiprows=len(head), ndmin=2)   # 2(log L + log π), rows along x
-    s = {"x": np.linspace(*lims[0], m.shape[0]), "y": np.linspace(*lims[1], m.shape[1]),
+    m = np.loadtxt(path, delimiter=",", skiprows=len(head), ndmin=2)   # 2 log L per point, rows along x
+    x, y = np.linspace(*lims[0], m.shape[0]), np.linspace(*lims[1], m.shape[1])
+    if k > 1:
+        m, x, y = rebin(m, x, y, k)
+    s = {"x": x, "y": y,
          "truth": [float(v) for v in head["truth"].split(", ")] if "truth" in head else None,
          "dchi2": m.max() - m,
          "ndof": int(head["ndof"]) if "ndof" in head else None,
@@ -69,9 +82,9 @@ def draw_2d(ax, s, xk, yk):
                       vmin=0, vmax=CHI2_MAX / norm, shading="flat", rasterized=True)
     X, Y = np.meshgrid(xs, ys)
     ax.contour(X, Y, s["dchi2"].T, levels=LEVELS_2D, colors="white", linestyles=style.SIGMA_LINESTYLES[::-1],
-               linewidths=1.8)
+               linewidths=3)
     if s["truth"]:
-        ax.plot(scaled(xk, s["truth"][0]), scaled(yk, s["truth"][1]), "+", color="#a41007", markersize=12, mew=2)
+        ax.plot(scaled(xk, s["truth"][0]), scaled(yk, s["truth"][1]), "+", color="#a41007", markersize=16, mew=3)
     return m
 
 
@@ -79,14 +92,17 @@ def main():
     p = argparse.ArgumentParser(description="Corner plot of the RunMode LLH scans.")
     p.add_argument("input", help="the scan's outFile prefix, e.g. outputs/tutorial/scan")
     p.add_argument("-o", "--output", help="also save as <output>_llh.pdf")
+    p.add_argument("--rebin", type=int, default=1,
+                   help="average the likelihood over N x N blocks of grid points (e.g. 2: 20x20 -> 10x10)")
     args = p.parse_args()
 
-    scans = {k: read_scan(args.input + suffix) for k, suffix in SCANS.items()}
+    scans = {k: read_scan(args.input + suffix, args.rebin) for k, suffix in SCANS.items()}
     n = len(VARS)
     fig, axes = plt.subplots(n, n, figsize=(5 * n, 5 * n))
     for i, yk in enumerate(VARS):
         for j, xk in enumerate(VARS):
             ax = axes[i, j]
+            ax.set_box_aspect(1)
             if j > i:
                 ax.axis("off")
                 continue
@@ -98,18 +114,18 @@ def main():
                     grid = scaled(xk, s["x"] if first else s["y"])
                     L = np.exp(-0.5 * s["dchi2"]).sum(axis=1 if first else 0)
                     q = -2 * np.log(np.maximum(L / L.max(), 1e-300))
-                    ax.plot(grid, q, color=COLOR if m == 0 else "0.3", lw=2 if m == 0 else 1.5,
+                    ax.plot(grid, q, color=COLOR if m == 0 else "0.3", lw=3 if m == 0 else 2.5,
                             ls="-" if m == 0 else "--", label=f"integrated over {SHORT[other]}")
                     if s["truth"]:
-                        ax.axvline(scaled(xk, s["truth"][0 if first else 1]), color="#a41007", lw=1, ls=":")
+                        ax.axvline(scaled(xk, s["truth"][0 if first else 1]), color="#a41007", lw=2, ls=":")
                 for lev, lab in zip(LEVELS_1D, (r"1$\sigma$", r"2$\sigma$", r"3$\sigma$")):
-                    ax.axhline(lev, color="0.5", lw=0.8, ls=":")
-                    ax.text(0.02, lev, lab, transform=ax.get_yaxis_transform(), va="bottom", fontsize=11, color="0.4")
+                    ax.axhline(lev, color="0.5", lw=1.5, ls=":")
+                    ax.text(0.02, lev, lab, transform=ax.get_yaxis_transform(), va="bottom", fontsize=16, color="0.4")
                 ax.set_ylim(0, 12)
                 ax.yaxis.tick_right()
                 ax.yaxis.set_label_position("right")
                 ax.set_ylabel(r"$\Delta\chi^2$")
-                ax.legend(fontsize=11, loc="upper right", frameon=False)
+                ax.legend(fontsize=14, loc="upper right", frameon=False)
             else:
                 s = scans[(xk, yk)]
                 mesh = draw_2d(ax, s, xk, yk)
@@ -132,11 +148,11 @@ def main():
     axes[0, 2].text(0.95, 0.95, (f"Nuisances marginalised:\naverage over {s0['nuisance']} prior throws"
                                  if prof else "Conditional scans:\nother parameters at their true values"),
                     transform=axes[0, 2].transAxes, ha="right", va="top", fontsize=14, color="0.3")
-    cax = axes[0, 2].inset_axes([0.1, 0.4, 0.8, 0.07])
+    cax = axes[0, 2].inset_axes([0.1, 0.55, 0.8, 0.07])
     label = (rf"$\chi^2/{{\rm ndof}}$ (ndof = {s0['ndof']})" if s0["ndof"] else r"$\Delta\chi^2$")
     fig.colorbar(mesh, cax=cax, orientation="horizontal", extend="max", label=label)
-    axes[0, 2].text(0.5, 0.02, "contours: 1, 2, 3$\\sigma$\n($\\Delta\\chi^2$ = 2.30, 6.18, 11.83)",
-                    transform=axes[0, 2].transAxes, ha="center", va="bottom", fontsize=13, color="0.3")
+    axes[0, 2].text(0.5, 0.05, "contours: 1, 2, 3$\\sigma$\n($\\Delta\\chi^2$ = 2.30, 6.18, 11.83)",
+                    transform=axes[0, 2].transAxes, ha="center", va="bottom", fontsize=16, color="0.3")
     fig.tight_layout()
     if args.output:
         plotting.save_figure(fig, args.output + "_llh.pdf", dpi=300, format="pdf")

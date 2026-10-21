@@ -126,7 +126,7 @@ python3 utils/compareOutput.py -a outputs/tutorial/mcmc_ES_only -b outputs/tutor
 
 ```bash
 julia -t auto --project src/readConfig.jl tutorial_example/05_llh_scan.yaml
-python3 utils/plotLLH.py outputs/tutorial/scan
+python3 utils/plotLLH.py outputs/tutorial/scan --rebin 2   # 20 × 20 scan shown as 10 × 10
 ```
 
 **5. Derived quantities and per-bin diagnostics** from the step-2 chain:
