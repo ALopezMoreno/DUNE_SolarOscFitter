@@ -44,7 +44,7 @@ tutorial_example/
 ├── 04_mcmc_CC_only.yaml      base: 02_mcmc.yaml, singleChannel CC
 ├── 05_llh_scan.yaml          base: configs/tutorial.yaml, RunMode LLH
 ├── 06_derived.yaml           base: 02_mcmc.yaml, RunMode derived on the step-2 chain
-├── 07_mcmc_fast.yaml         base: [02_mcmc.yaml, configs/oscillation_fast.yaml], a test fit
+├── 07_mcmc_fast.yaml         base: [02_mcmc.yaml, configs/oscillation_fast.yaml], a ~4.5-minute test fit
 └── 08_quick_test.yaml        the same, 7 free parameters and 2 short chains: a 2-minute check
 ```
 
@@ -133,20 +133,27 @@ julia -t auto --project src/readConfig.jl tutorial_example/06_derived.yaml
 ```
 
 **Fast test fits.** `07_mcmc_fast.yaml` is the joint fit with an approximate oscillation
-calculation, for checking a setup before a real run (about 15 minutes on 4 threads, 2 GB of memory, half the time of step 2):
+calculation and short chains, for checking a setup before a real run. It takes about 4.5 minutes
+on 4 threads (2 GB of memory), against about 25 for step 2:
 
 ```bash
 julia -t 4 --project src/readConfig.jl tutorial_example/07_mcmc_fast.yaml
+python3 utils/plotOutput.py outputs/tutorial/mcmc_fast -o outputs/tutorial/corner_fast
 ```
 
-`configs/oscillation_fast.yaml` swaps NightOsc for the legacy per-path night calculation. That
-calculation samples one or two paths per cos z bin and two energies per E_true bin instead of
-averaging over each bin. It also uses 20 cos z bins with no fine zone, and ForwardDiff gradients.
-At the truth, every E_reco bin is within 4e-4 of the default, and the day-night asymmetries are
-within 1% of their value. On this tutorial its posteriors for sin²θ₁₂ and Δm²₂₁ agree with step 2
-within a quarter of a standard deviation, which is the sampling noise of chains this short. Use it
-for test fits only. Add `configs/oscillation_fast.yaml` to the
-`base:` list of any other run config to make it fast too.
+`configs/oscillation_fast.yaml` makes three changes:
+- It swaps NightOsc for the legacy per-path night calculation. That calculation samples one or
+  two paths per cos z bin and two energies per E_true bin instead of averaging over each bin.
+- It uses 30 E_true bins and 10 cos z bins, with no fine zone.
+- It uses ForwardDiff gradients, each about 3× cheaper than with the default grid in this mode.
+
+At the truth, 0.1% (ES) and 0.3% (CC) of the events move between E_reco bins compared with the
+default, and the day-night asymmetries are within about 1% of their value. E_true is not
+coarsened further, because it also bins the cross sections and the detector response: with 20
+bins, 1% of the CC events move and the asymmetries are off by 3–5%.
+
+The chains are 4 × 200 steps, so the posteriors are noisy. Use it for test fits only. Add
+`configs/oscillation_fast.yaml` to the `base:` list of any other run config to make it fast too.
 
 **A 2-minute check.** `08_quick_test.yaml` checks that everything runs. It uses the fast
 oscillation settings, fixes the Earth-density and CC cross-section nuisances (7 free parameters),

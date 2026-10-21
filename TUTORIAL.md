@@ -46,7 +46,7 @@ Choose one of the two configs:
 
 | Config | Time on 4 threads | Use it for |
 |---|---|---|
-| `tutorial_example/07_mcmc_fast.yaml` | ~15 minutes | test fits; approximate night calculation, precision ~1e-2 |
+| `tutorial_example/07_mcmc_fast.yaml` | ~4.5 minutes | test fits; approximate night calculation and coarser grid (precision ~1e-2), short chains |
 | `tutorial_example/02_mcmc.yaml` | ~25 minutes | the full calculation |
 
 ```bash

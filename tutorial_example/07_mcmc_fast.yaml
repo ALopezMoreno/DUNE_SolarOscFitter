@@ -1,7 +1,10 @@
-# Step 2, fast: the joint fit with the approximate oscillation calculation of
-# configs/oscillation_fast.yaml, for test fits. Two bases, merged in order: the joint fit, then
-# the oscillation settings on top.
+# A test fit in under 5 minutes: the joint ES + CC fit with the approximate oscillation
+# calculation of configs/oscillation_fast.yaml and short chains (4 × 200 steps, at most 2 tuning
+# cycles). Every parameter is free. Two bases, merged in order: the joint fit, then the fast
+# settings.
 #   julia -t 4 --project src/readConfig.jl tutorial_example/07_mcmc_fast.yaml
 base: [02_mcmc.yaml, configs/oscillation_fast.yaml]
 
 outFile: "outputs/tutorial/mcmc_fast"
+nSteps: 200
+maxTuningAttempts: 2

@@ -3,13 +3,14 @@
 #
 # Night: the legacy per-path calculation (NumOsc.Fast) instead of NightOsc: P_1e is sampled at
 # one or two paths per cos z bin and two energies per E_true bin, not averaged over the bin.
-# cos z: 20 bins on the legacy PREM-aligned grid, no horizon-refined fine zone.
-# E_true stays at 40 bins: it also bins the cross sections and the detector response, and 1 MeV
-# bins move about 1% of the CC events.
-# Against the default on this tutorial at the truth: event counts per E_reco bin within 4e-4,
-# day-night asymmetries within 1% of their value. Not for results.
+# Grid: 30 E_true bins (0.67 MeV) and 10 cos z bins on the legacy PREM-aligned grid, no fine zone.
+# The gradient is ~3x cheaper than with the default 40 x 50 grid in this mode. E_true also bins
+# the cross sections and the detector response: 20 bins would move ~1% of the CC events.
+# Against the default on this tutorial at the truth: 0.1% (ES) and 0.3% (CC) of the events move
+# between E_reco bins, day-night asymmetries within ~1% of their value. Not for results.
 
 nightOsc: false
 ad_backend: "ForwardDiff"   # the legacy calculation has no Enzyme rule
-nBins_cosz: 20
+nBins_Etrue: 30
+nBins_cosz: 10
 nBins_cosz_fine: 0
