@@ -9,8 +9,8 @@ Reads the files a run writes next to its ``outFile`` prefix:
 
 Pages: (1) solar fluxes and cross sections; (2) true-energy spectra, P_ee and the regeneration;
 (3) signal and background per E_reco bin with S/B; (4) each background spectrum; (5) response
-matrices P(E_reco | E_true) as the fitter bins them; (6) the night P_ee map; (7) the raw
-event-level samples. 1D quantities are filled histograms, 2D ones filled contours. Run from the
+matrices P(E_reco | E_true) as the fitter bins them; (6) the day-night asymmetry of P_ee by
+zenith bin; (7) the raw event-level samples. 1D quantities are filled histograms, 2D ones filled contours. Run from the
 repository root (input paths in the run record are relative to it)::
 
     julia --project src/readConfig.jl tutorial_example/01_setup.yaml
@@ -322,14 +322,14 @@ def page_response(pdf, d, breakdown):
 def page_night(pdf, d):
     et = etrue_edges(d)
     cz = d["meta/cosz_edges"]
-    diff = d["osc_probs/nue_8B_night"] - d["osc_probs/nue_8B_day"][None, :]
-    v = np.nanmax(np.abs(diff))
+    pd_, pn = d["osc_probs/nue_8B_day"][None, :], d["osc_probs/nue_8B_night"]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        adn = 2 * (pd_ - pn) / (pd_ + pn)            # the fitter's convention: 2(D - N)/(D + N)
     fig, ax = plt.subplots(figsize=(9, 6.5))
-    filled_map(ax, et, cz, diff, r"$P_{ee}^{\rm night} - P_{ee}^{\rm day}$ ($^8$B)", log=False,
-               cmap="RdBu_r", vmin=-v, vmax=v, nlev=21)
+    filled_map(ax, et, cz, adn, r"$A_{\rm DN}$", log=False, vmin=np.nanmin(adn), vmax=np.nanmax(adn), nlev=21)
     ax.set_xlabel(ETRUE)
     ax.set_ylabel(r"$\cos\theta_z$")
-    ax.set_title(r"Night $P_{ee}$ by zenith bin (analysis grid)")
+    ax.set_title(r"$^8$B: $A_{\rm DN} = 2\,(P_{ee}^{\rm day} - P_{ee}^{\rm night})\,/\,(P_{ee}^{\rm day} + P_{ee}^{\rm night})$")
     savepage(pdf, fig)
 
 

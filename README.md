@@ -149,10 +149,10 @@ the Asimov truth. It reads the `outFile` prefix the run wrote:
 - signal and each background per E_reco bin in the fit window, with S/B per bin;
 - each background spectrum on its own;
 - the response matrices P(E_reco | E_true) as binned by the fitter, and the fraction above threshold;
-- the night P_ee map by zenith bin;
+- the day-night asymmetry of P_ee, 2(D − N)/(D + N), by zenith and E_true bin;
 - the raw event-level samples, the background samples and the selection efficiency.
 
-1D quantities are drawn as filled histograms and 2D ones as filled contours (viridis). The flux
+1D quantities are drawn as filled histograms and 2D ones as filled contours, all in viridis. The flux
 and cross-section page needs a run made with the current fitter, which stores them.
 
 ```bash
