@@ -404,3 +404,11 @@ utils/osc_convergence_reference.jld2
 # Claude tooling and local notes: kept on disk, not in the repository (maintainer, 2026-10-20)
 .claude/
 docs/mcstat/
+
+# Binary outputs anywhere (plots, chains, profiles): keep them out of git so the repo does not
+# grow. Tracked model inputs (inputs/*.jld2) are unaffected; add a new one with git add -f.
+*.jld2
+*.jld
+*.pdf
+*.png
+*.bin
