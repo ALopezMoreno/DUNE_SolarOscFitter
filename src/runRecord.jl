@@ -5,8 +5,8 @@ runRecord.jl — the run record: the resolved configuration and its provenance, 
 has been parsed (globals set) and before the RunMode script runs, so a run that crashes or is
 killed still leaves its record. It writes `<outFile>_config.yaml` with three sections:
 
-  provenance:        config file path and SHA-256 (and of its `base:` files), git commit / branch / dirty state, Julia
-                     version, host, threads, timestamp, RunMode
+  provenance:        config file path and SHA-256 (and of its `base:` files), git commit / branch /
+                     dirty state, Julia version, host, threads, timestamp, RunMode
   defaults_applied:  the keys absent from the YAML, with the values readConfig.jl used for them
   config:            the resolved configuration = the YAML as loaded + defaults_applied.
                      `YAML.load_file(record)["config"]` is a complete config file for a re-run.

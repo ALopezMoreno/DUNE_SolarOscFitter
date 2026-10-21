@@ -1,12 +1,8 @@
 #=
-configFiles.jl — config inheritance: a config file may build on other config files.
+configFiles.jl — config inheritance through `base:` (one path or a list, relative to the file).
 
-A config names its bases under `base:`, one path or a list, relative to the file that names
-them. The bases are resolved first (recursively), in order, then the file itself on top:
-mappings are merged key by key at every depth, the later file wins, and any other value
-(a scalar, a list or a null) is replaced whole. A file reached twice (two bases sharing a base)
-is applied once, where it is first reached, so it cannot undo an override made after it. A
-config without `base:` loads exactly as YAML.load_file gives it.
+Bases are merged in order, the file on top: mappings merge at every depth, the later value wins,
+anything else (scalar, list, null) is replaced. A file reached twice is applied once.
 =#
 using YAML
 

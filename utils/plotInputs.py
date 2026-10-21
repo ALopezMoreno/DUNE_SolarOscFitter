@@ -1,20 +1,9 @@
-"""Plot what the fitter builds from its inputs, for one detector of a SETUP (or any) run.
+"""Plot a run's inputs as the fitter sees them, for one detector, at the Asimov truth.
 
-Reads the files a run writes next to its ``outFile`` prefix:
+Reads ``<prefix>_<det>_angular_stacks.jld2``, ``<prefix>_<det>_{ES,CC}_breakdown.csv`` and the run
+record ``<prefix>_config.yaml``. Usually called by ``readConfig.jl config.yaml --plot``; on its own,
+run it from the repository root (input paths in the run record are relative to it)::
 
-- ``<prefix>_<det>_{ES,CC}_breakdown.csv``: signal and backgrounds per E_reco bin at the truth;
-- ``<prefix>_<det>_angular_stacks.jld2``: fluxes, cross sections, response matrices, true-energy
-  spectra, P_ee;
-- ``<prefix>_config.yaml`` (run record): the event-level input files, for the raw-sample page.
-
-Pages: (1) solar fluxes and cross sections; (2) true-energy spectra, P_ee and the regeneration;
-(3) signal and background per E_reco bin with S/B; (4) each background spectrum; (5) response
-matrices P(E_reco | E_true) as the fitter bins them; (6) the day-night asymmetry of P_ee by
-zenith bin; (7) the raw event-level samples. 1D quantities are filled histograms, 2D ones filled contours. Usually
-called by the fitter's ``--plot`` flag; on its own, run it from the repository root (input paths
-in the run record are relative to it)::
-
-    julia --project src/readConfig.jl tutorial_example/02_mcmc.yaml --plot
     python3 utils/plotInputs.py outputs/tutorial/setup -o outputs/tutorial/inputs
 """
 import argparse

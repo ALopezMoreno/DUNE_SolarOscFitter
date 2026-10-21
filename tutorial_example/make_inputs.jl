@@ -1,31 +1,11 @@
 #=
-make_inputs.jl — idealised detector inputs for the tutorial.
+make_inputs.jl — idealised event-level inputs for the tutorial (see tutorial_example/README.md).
 
-    julia --project tutorial_example/make_inputs.jl            # samples + background calibration
-    julia --project tutorial_example/make_inputs.jl --no-calibrate
+    julia --project tutorial_example/make_inputs.jl [--no-calibrate]
 
-Run from the repository root. Writes event-level CSVs into tutorial_example/inputs/ (gitignored):
-
-  ES_nue_ideal.csv, ES_numutau_ideal.csv   ν–e scattering, E_true = E_ν uniform over range_Etrue,
-                                           recoil T drawn from the fitter's own dσ/dT (BKS95,
-                                           src/xsec.jl) on [TPC_threshold, T_max]
-  CC_nue_ideal.csv                         ν_e ⁴⁰Ar → e⁻ ⁴⁰K*: T_e = E_ν − Q − E_x, with the ⁴⁰K* level
-                                           drawn ∝ B · p_e E_e F(Z = 19, E_e) (allowed transitions,
-                                           marley_levels_Bhattacharya2009.dat)
-  ES_angular_ideal.csv                     cos of the ν_e ES electron angle, exact kinematics
-  ES_background_flat.csv, CC_background_flat.csv
-                                           flat in E_reco from 0 to the signal endpoint of the channel
-
-In every signal sample E_reco = T (1 + 0.1 g), g ~ N(0, 1), and every event is selected
-(mask = true, weight 1): an ideal detector. Energies are in GeV, as the fitter expects.
-
-Calibration (default) runs the fitter's SETUP on tutorial_example/01_setup.yaml twice. The first
-run gives each channel's signal endpoint: the E_reco bin edge below which SIGNAL_CONTAINED of the
-signal in the fit window lies (the upper edge of range_Ereco if it is not reached), and the
-backgrounds are rewritten flat up to it. The second run sets the two background normalisations in
-configs/detectors/VD.yaml so that, per channel, the background above Ereco_min is twice the signal
-at the Asimov truth (S/B = 0.5). With --no-calibrate the backgrounds end at the endpoints recorded
-in VD.yaml, so the norms there still hold for the same detector settings.
+ES ν_e, ES ν_μτ and CC samples with E_reco = T (1 + 0.1 g), and flat backgrounds; energies in GeV.
+The calibration runs SETUP twice: to find each channel's signal endpoint, then to set the
+background norms in configs/detectors/VD.yaml so that S/B = 0.5 above threshold.
 =#
 using Random, CSV, DataFrames, YAML, Printf
 
@@ -158,8 +138,7 @@ function recorded_endpoint_MeV()
 end
 
 # ── Background calibration from the fitter's own SETUP ──
-# Runs SETUP on 01_setup.yaml with the current inputs and norms; returns the per-bin breakdown
-# (signal, background) of each channel at the Asimov truth.
+# SETUP on 01_setup.yaml with the current inputs; returns each channel's per-bin breakdown at the truth.
 function run_setup(label)
     tmp = mktempdir()
     cfg = resolve_config(joinpath(TUT, "01_setup.yaml"))
