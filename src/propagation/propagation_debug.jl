@@ -281,6 +281,15 @@ function save_debug_data(unoscillatedSample, responseMatrices, params,
         f["unosc/ES_nuother_hep"] = Vector{Float64}(unoscillatedSample.ES_nuother_hep)
         f["unosc/CC_hep"]         = Vector{Float64}(unoscillatedSample.CC_hep)
 
+        # ── model inputs on a fine E_true grid, at the truth (for utils/plotInputs.py) ──
+        E = collect(range(Etrue_bins.min, Etrue_bins.max, length = 401))           # GeV
+        f["model/E_MeV"]          = E .* 1e3
+        f["model/flux_8B"]        = Float64[params.integrated_8B_flux * flux_8B(e) * 1e-3 for e in E]    # cm⁻² s⁻¹ MeV⁻¹
+        f["model/flux_hep"]       = Float64[params.integrated_HEP_flux * flux_hep(e) * 1e-3 for e in E]
+        f["model/xsec_ES_nue"]    = Float64[ES_xsec_nue(e) for e in E]                                    # cm² per electron
+        f["model/xsec_ES_nuother"] = Float64[ES_xsec_nuother(e) for e in E]
+        f["model/xsec_CC"]        = Float64[CC_xsec(e) for e in E]                                        # cm² per ⁴⁰Ar
+
         # ── response matrices ─────────────────────────────────────────────────
         det_flags.ES_mode      && (f["resp/ES_nue"]      = Matrix{Float64}(responseMatrices.ES.nue))
         det_flags.ES_mode      && (f["resp/ES_nuother"]  = Matrix{Float64}(responseMatrices.ES.nuother))

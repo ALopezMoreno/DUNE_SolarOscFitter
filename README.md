@@ -143,11 +143,17 @@ python3 utils/compareOutput.py -a chainsA -b chainsB --labels "Run A" "Run B"
 
 After any run (a `RunMode: SETUP` run is enough), `plotInputs.py` plots one detector's inputs at
 the Asimov truth. It reads the `outFile` prefix the run wrote:
+- the solar fluxes (⁸B, hep) and the ES and CC cross sections the fitter evaluates;
+- the oscillated true-energy spectra (all interactions and the part above threshold), P_ee by day
+  and night, and the regeneration;
 - signal and each background per E_reco bin in the fit window, with S/B per bin;
+- each background spectrum on its own;
 - the response matrices P(E_reco | E_true) as binned by the fitter, and the fraction above threshold;
-- the oscillated true-energy spectra, P_ee by day and night, and the regeneration;
 - the night P_ee map by zenith bin;
 - the raw event-level samples, the background samples and the selection efficiency.
+
+1D quantities are drawn as filled histograms and 2D ones as filled contours (viridis). The flux
+and cross-section page needs a run made with the current fitter, which stores them.
 
 ```bash
 python3 utils/plotInputs.py --help
