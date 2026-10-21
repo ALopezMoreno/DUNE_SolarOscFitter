@@ -43,6 +43,8 @@ pip install matplotlib numpy pandas scipy h5py seaborn mplhep cmasher cmap \
             networkx corner Pillow termcolor peanuts pyyaml
 ```
 
+Optional, for LaTeX-typeset plot labels: `apt install texlive-latex-extra texlive-fonts-recommended cm-super dvipng`. Without it, plots fall back to matplotlib's mathtext.
+
 `plotting/` (a package: shared style, corner plots, contours, layouts), `style.py`, `posteriorHelpers.py`, and `binImportanceHelpers.py` are local modules inside `utils/`. Run plotting scripts from within that directory, or set `PYTHONPATH`:
 
 ```bash

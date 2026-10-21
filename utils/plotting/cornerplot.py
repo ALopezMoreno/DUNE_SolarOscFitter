@@ -657,8 +657,9 @@ def plot_default_corner(data, diagnostics=False):
         If False, uses solid blue colors and fixed ranges
     """
     with mpl.rc_context(rc=mpl.rcParamsDefault): # Reset to default settings
-        plt.rcParams['text.usetex'] = True 
         hep.style.use("ATLAS")
+        plt.rcParams['text.usetex'] = style._have_latex()
+        plt.rcParams['mathtext.fontset'] = 'cm'
 
         # Extract metadata to avoid plotting it
         weights = data.pop('weights', None)

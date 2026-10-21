@@ -11,9 +11,13 @@ Usage::
     import style            # applies the style on import
     style.save_figure(fig, "images/foo.pdf", dpi=300)
 """
+import functools
 import os
+import shutil
+import sys
 
 import matplotlib.pyplot as plt
+from matplotlib.texmanager import TexManager
 import mplhep as hep
 
 
@@ -26,14 +30,37 @@ WHITE_MIX        = [0.15, 0.6]                 # 3-sigma, 2-sigma colour->white 
 COMPARE_COLORS    = ("#003CFF", "#FA2727FF")    # posterior A (prussian), B (vermillion)
 COMPARE_SOLAR     = "#FFD900"                   # global-solar contour colour (contrasts with A/B)
 
+@functools.cache
+def _have_latex():
+    """True if matplotlib's ``text.usetex`` works: tools on PATH and a test string compiles."""
+    if not all(shutil.which(cmd) for cmd in ("latex", "dvipng", "kpsewhich")):
+        return False
+    try:
+        TexManager().make_dvi(r"$x$", 12)   # fails on missing packages, e.g. type1ec (cm-super)
+    except Exception:
+        return False
+    return True
+
+
+_warned_no_latex = False
+
+
 def apply_style():
     """Apply the shared CMS/LaTeX rcParams used by all plotting scripts.
 
-    Note: ``text.usetex`` is always on — every plotting script depends on a
-    working LaTeX/dvipng toolchain being installed.
+    Labels are rendered with LaTeX when it is installed and with matplotlib's
+    built-in mathtext otherwise (same labels, slightly different fonts).
     """
-    plt.rcParams['text.usetex'] = True
+    global _warned_no_latex
     hep.style.use("CMS")
+    use_tex = _have_latex()
+    plt.rcParams['text.usetex'] = use_tex
+    if not use_tex:
+        plt.rcParams['mathtext.fontset'] = 'cm'
+        if not _warned_no_latex:
+            print("[info] LaTeX not found or incomplete: labels use matplotlib mathtext "
+                  "(see README for the TeX packages)", file=sys.stderr)
+            _warned_no_latex = True
     plt.rcParams.update({
         'font.size': 14,           # Default text size (affects all text)
         'axes.titlesize': 16,      # Title size
