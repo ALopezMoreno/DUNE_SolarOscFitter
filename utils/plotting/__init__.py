@@ -12,7 +12,7 @@ from .colormaps import (parula_map, parula_map_r, scaled_cmap,
                         create_sequential_colormap, fade_color_to_white)
 from .formatting import format_func, two_sig_figs_math, gaussian, sigma_to_prob
 from .contours import get_contours, overlay_contours, add_external_solar_data
-from .cornerplot import plot_corner, plot_default_corner
+from .cornerplot import plot_corner, plot_default_corner, corner_axes, finish_corner_layout
 from .covariance import plot_covariance
 from .predictive import plot_binmap, plot_predictive_spectrum, plot_binseries
 from .layout import (GroupSpec, GridLayout, build_grouped_layout,

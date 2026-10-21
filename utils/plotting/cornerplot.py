@@ -19,6 +19,45 @@ from .contours import add_external_solar_data, get_contours
 from .formatting import sigma_to_prob, two_sig_figs_math
 
 
+def corner_axes(n, size=5):
+    """Figure and n × n axes of a corner plot: square panels, upper triangle switched off."""
+    fig, axes = plt.subplots(n, n, figsize=(size * n, size * n))
+    for i in range(n):
+        for j in range(n):
+            axes[i, j].set_box_aspect(1)
+            if j > i:
+                axes[i, j].axis('off')
+    return fig, axes
+
+
+def finish_corner_layout(axes, labels):
+    """Axis labels, hidden inner tick labels, diagonal x ranges and panel spacing of a corner plot.
+
+    Shared by plot_corner (posterior samples) and utils/plotLLH.py (likelihood scans) so both
+    keep the same layout. Call after the panels are drawn and their limits set.
+    """
+    n = len(labels)
+    for i in range(n):
+        for j in range(n):
+            if i > j:
+                if i == n - 1:
+                    axes[i, j].set_xlabel(labels[j])
+                    axes[i, j].xaxis.set_label_coords(0.6 if (j < 2 or j > 4) else 0.9, -0.2)
+                else:
+                    axes[i, j].set_xticklabels([])
+                if j == 0:
+                    axes[i, j].set_ylabel(labels[i])
+                    axes[i, j].yaxis.set_label_coords(-0.3, 0.6 if (i < 2 or i > 4) else 0.9)
+                else:
+                    axes[i, j].set_yticklabels([])
+            elif i == j:
+                axes[i, j].set_xlim(axes[n - 1, j].get_xlim())
+                if i == n - 1:
+                    axes[i, j].set_xlim(axes[n - 1, 0].get_ylim())
+                    axes[i, j].xaxis.set_label_coords(0.9, -0.2)
+    plt.subplots_adjust(hspace=0.0, wspace=-0.015)
+
+
 def plot_corner(variables, data_dict, externalContours=False, colorlist=['b', 'purple', 'red'], linecolors=['red', 'white', 'blue'], fill=True, bins2D=60, cbar=None, diagnostics=None, smooth=1.0):
     """
     Create a corner plot of 2D histograms for the given variables.
@@ -559,34 +598,7 @@ def plot_corner(variables, data_dict, externalContours=False, colorlist=['b', 'p
             axes[i, j].set_box_aspect(1)
 
 
-    for i in range(num_vars):
-        for j in range(num_vars):
-            if i > j:
-                if i == num_vars - 1:
-                    axes[i, j].set_xlabel(variables[j])
-                    if j < 2 or j > 4:
-                        axes[i, j].xaxis.set_label_coords(0.6, -0.2)  # Center the x-label
-                    else:
-                        axes[i, j].xaxis.set_label_coords(0.9, -0.2)  # Center the x-label                        
-                else:
-                    axes[i, j].set_xticklabels([])
-                if j == 0:
-                    axes[i, j].set_ylabel(variables[i])
-                    if i < 2 or i > 4:
-                        axes[i, j].yaxis.set_label_coords(-0.3, 0.6)  # Center the y-label
-                    else:
-                        axes[i, j].yaxis.set_label_coords(-0.3, 0.9)  # Center the x-label
-                else:
-                    axes[i, j].set_yticklabels([])
-
-            elif i == j:
-                axes[i, j].set_xlim(axes[num_vars - 1, j].get_xlim())
-                if i == num_vars-1:
-                    axes[i, j].set_xlim(axes[num_vars - 1, 0].get_ylim())
-                    axes[i, j].xaxis.set_label_coords(0.9, -0.2)
-
-    # Adjust spacing between plots
-    plt.subplots_adjust(hspace=0.0, wspace=-0.015)
+    finish_corner_layout(axes, variables)
 
     if use_cmap:
         _bg = plt.get_cmap(_cmap_name)(0.0)

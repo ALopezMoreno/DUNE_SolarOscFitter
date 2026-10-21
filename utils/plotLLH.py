@@ -126,43 +126,25 @@ def main():
 
     scans = {k: read_scan(args.input + suffix, args.rebin) for k, suffix in SCANS.items()}
     n = len(VARS)
-    fig, axes = plt.subplots(n, n, figsize=(5 * n, 5 * n))
+    fig, axes = plotting.corner_axes(n)
     for i, yk in enumerate(VARS):
         for j, xk in enumerate(VARS):
             ax = axes[i, j]
             if j > i:
-                ax.axis("off")
-            elif i == j:
+                continue
+            if i == j:
                 draw_1d(ax, scans, xk)
+                if i < n - 1:
+                    ax.set_xticklabels([])
             else:
                 s = scans[(xk, yk)]
                 mesh = draw_2d(ax, s, xk, yk)
                 ax.set_xlim(edges(scaled(xk, s["x"]))[[0, -1]])
                 ax.set_ylim(edges(scaled(yk, s["y"]))[[0, -1]])
-            ax.xaxis.set_major_formatter(ticker.FuncFormatter(plotting.two_sig_figs_math))
-            if i != j:
                 ax.yaxis.set_major_formatter(ticker.FuncFormatter(plotting.two_sig_figs_math))
-            ax.set_box_aspect(1)
-
-    # Labels and spacing as in plotting.plot_corner
-    for i in range(n):
-        for j in range(i + 1):
-            ax = axes[i, j]
-            if i == n - 1:
-                ax.set_xlabel(LABELS[VARS[j]])
-                ax.xaxis.set_label_coords(0.6 if j < n - 1 else 0.9, -0.2)
-            else:
-                ax.set_xticklabels([])
-            if i > j:
-                if j == 0:
-                    ax.set_ylabel(LABELS[VARS[i]])
-                    ax.yaxis.set_label_coords(-0.3, 0.6)
-                else:
-                    ax.set_yticklabels([])
-    for j in range(n - 1):
-        axes[j, j].set_xlim(axes[n - 1, j].get_xlim())
-    axes[n - 1, n - 1].set_xlim(axes[n - 1, 0].get_ylim())
-    plt.subplots_adjust(hspace=0.0, wspace=-0.015)
+            ax.xaxis.set_major_formatter(ticker.FuncFormatter(plotting.two_sig_figs_math))
+    axes[n - 1, n - 1].set_xlabel(LABELS[VARS[-1]])
+    plotting.finish_corner_layout(axes, [LABELS[v] for v in VARS])
     for i in range(n):                                 # dark map background: white ticks and inner edges
         for j in range(i):
             ax = axes[i, j]
