@@ -23,6 +23,8 @@ pip install matplotlib numpy pandas scipy h5py seaborn mplhep cmasher cmap \
             networkx corner Pillow termcolor peanuts pyyaml
 ```
 
+LaTeX is optional: without it, plot labels use matplotlib's mathtext (see README).
+
 ## 2. Build the inputs (about 2 minutes)
 
 ```bash
