@@ -1,12 +1,13 @@
 #=
 modelInputs.jl — loaders for the tabulated model inputs (solar model and spectra, exposure, Earth),
 built on TabulatedInput. Function definitions only. The CC cross section is read in xsec.jl; the
-NightOsc Earth model has its own reader (night/earth_model.jl).
+NightOsc Earth model reads tables itself (night/earth_model.jl); PREM comes from prem.jl.
 =#
 using QuadGK
 using JLD2
 include(joinpath(@__DIR__, "core.jl"))
 include(joinpath(@__DIR__, "tabulated.jl"))
+include(joinpath(@__DIR__, "prem.jl"))
 
 if !@isdefined(EARTH_RADIUS_KM)
     const EARTH_RADIUS_KM = 6371.0
@@ -149,12 +150,21 @@ function exposure_day_night_fractions(expo::TabulatedInput)
 end
 
 """
-    load_earth_model(path) -> Dict(:radius, :potential, :source)
+    load_earth_model(path) -> Dict(:radius, :potential, :source[, :boundaries])
 
-Earth model table (r/R⊕, density [g/cm³], electron fraction; no header). Radii in km, stretched by
-1e-10 so surface points stay inside the table; potential in eV²/GeV.
+Earth model table (r/R⊕, density [g/cm³], electron fraction; no header), or the analytic PREM
+with continental crust for `path == "PREM"` (prem.jl), which also gives its jump radii as
+`:boundaries`. Radii in km, the surface stretched by 1e-10 so surface points stay inside the table;
+potential in eV²/GeV.
 """
 function load_earth_model(path::AbstractString)
+    if path == "PREM"
+        r, density, e_fraction = prem_table()
+        r[end] *= 1.0000000001   # only the surface point, so the jumps stay on the boundaries
+        return Dict{Symbol,Any}(:radius => r, :potential => density .* e_fraction .* MATTER_POTENTIAL_CONST,
+                                :boundaries => copy(PREM_BOUNDARIES_KM),
+                                :source => "PREM (Dziewonski & Anderson 1981), continental crust")
+    end
     r_frac, density, e_fraction = read_numeric_table(path; name = "Earth model", ncols = 3, header = false, delim = nothing)
     validate_table(r_frac, density; name = "Earth density", source = path, nonnegative = true)
     validate_table(r_frac, e_fraction; name = "Earth electron fraction", source = path, nonnegative = true)

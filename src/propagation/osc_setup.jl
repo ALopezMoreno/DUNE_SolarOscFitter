@@ -45,7 +45,7 @@ function build_osc_setup(; night_osc::Bool, fast::Bool, earth_uncertainty::Bool,
     end
 
     night = if night_osc
-        earth = NightOsc.EarthModel(earth_model_file; potential_const=MATTER_POTENTIAL_CONST)
+        earth = night_earth_model(earth_model_file)
         if earth_uncertainty && n_earth_norms != NightOsc.n_layers(earth)
             error("nightOsc: Earth model $earth_model_file has $(NightOsc.n_layers(earth)) layers, " *
                   "but the Earth-uncertainty prior has $n_earth_norms normalisations")
@@ -61,6 +61,18 @@ function build_osc_setup(; night_osc::Bool, fast::Bool, earth_uncertainty::Bool,
         NumOscNight{fast}(legacy_paths, legacy_lookup)
     end
     return OscSetup{typeof(night),earth_uncertainty,fast}(night)
+end
+
+"""
+    night_earth_model(earth_model_file) -> NightOsc.EarthModel
+
+A table file (layers from its density steps), or `"PREM"` with its exact boundaries.
+"""
+function night_earth_model(earth_model_file::AbstractString)
+    earth_model_file == "PREM" ||
+        return NightOsc.EarthModel(earth_model_file; potential_const=MATTER_POTENTIAL_CONST)
+    m = load_earth_model("PREM")
+    return NightOsc.EarthModel(m[:radius], m[:potential], m[:boundaries])
 end
 
 # makePaths and NightOsc must cross the same layers in the same order (so earth_norm_i

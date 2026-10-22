@@ -21,7 +21,7 @@ Two marks on one item (e.g. 🟢🟡) mean part of it is tested and part is not;
 | Section | 🟢 | 🟡 | 🟣 | 🔴 |
 |---|:---:|:---:|:---:|:---:|
 | [1. Oscillation probabilities](#1-oscillation-probabilities) | 3 | 3 | 2 | – |
-| [2. Earth model](#2-earth-model) | 6 | 2 | – | – |
+| [2. Earth model](#2-earth-model) | 7 | 2 | 1 | – |
 | [3. Cross sections](#3-cross-sections) | 5 | – | – | – |
 | [4. Detector response and event rates](#4-detector-response-and-event-rates) | 10 | 1 | 2 | – |
 | [5. Likelihood](#5-likelihood) | 7 | 3 | 1 | – |
@@ -50,6 +50,7 @@ Partly tested items count in both columns.
 | [2.5](#25) | 🟢 | `earth_norm_i` outside [0, 2] gives −Inf |
 | [2.6](#26) | 🟢🟡 | Earth-norm priors use the full covariance |
 | [2.7](#27) | 🟢 | Parameter names sort numerically |
+| [2.8](#28) | 🟢🟣 | Analytic PREM with continental crust, 8 layers |
 | [3.1](#31) | 🟢 | ES couplings (BKS95, PDG 2024), 5e-4 |
 | [3.2](#32) | 🟢 | ES σ = 0 below threshold |
 | [3.2a](#32a) | 🟢 | ES recoil quadrature vs analytic, 1e-12 |
@@ -185,6 +186,18 @@ Earth-norm priors use the full covariance of `earth_normalisation_prior_file`.
 #### 🟢 2.7 · Parameter-name order
 Parameter names sort numerically (`earth_norm_2` before `earth_norm_10`).
 > ✅ `test_response_and_backgrounds.jl`
+
+<a id="28"></a>
+#### 🟢🟣 2.8 · Analytic PREM
+`earth_model_file: "PREM"` gives PREM (Dziewonski & Anderson 1981) with the ocean replaced by upper
+crust (2.6 g/cm³) and the full 220 km jump: the nominal Earth of EarthModels/parchita (θ = 0).
+- n_e equals parchita's profile at θ = 0 to **1e-12** relative, away from the jumps.
+- **7 density jumps** at the PREM radii (ICB, CMB, 670, 400, 220, Moho, upper/lower crust), taken
+  from the model, not detected from the table: **8 layers**, numbered from 1 (upper crust).
+- The tabulated potential matches the formulas to **1e-6** relative.
+- makePaths and NightOsc cross the same 8 layers (2.3).
+> ✅ `test_prem.jl` (reference `tests/fixtures/prem_parchita.csv`). *(Inferred: drafted with the
+> Earth rework; confirm.)*
 
 ---
 
