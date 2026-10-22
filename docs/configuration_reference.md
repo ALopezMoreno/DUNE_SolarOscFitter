@@ -88,7 +88,7 @@ Strings are evaluated as Julia `Distributions.jl` expressions.
 | `prior_sin2_th12` | Prior on sin²θ₁₂. Default: `Uniform(0.15, 0.5)`. |
 | `prior_sin2_th13` | Prior on sin²θ₁₃. Default: `truncated(Normal(0.022, 0.0007), 0.005, 0.035)` (reactor constraint). |
 | `prior_dm2_21` | Prior on Δm²₂₁ (eV²). Default: `Uniform(2e-5, 3e-4)`. |
-| `prior_8B_flux` | Prior on integrated ⁸B flux (ν/cm²/s). Default: `truncated(Normal(5.25e6, 0.28e6), 1.5e6, 1e7)`. |
+| `prior_8B_flux` | Prior on integrated ⁸B flux (ν/cm²/s). Default: `truncated(Normal(5.25e6, 0.20e6), 1.5e6, 1e7)`. |
 | `prior_HEP_flux` | Prior on integrated HEP flux (ν/cm²/s). Default: `Uniform(0, 2e4)`. |
 | `prior_cc_xsec_norm` | Prior on the CC cross-section normalisation (relative to MARLEY). Default: `truncated(Normal(1.0, 0.1), 0.1, 2.0)`. |
 | `prior_cc_xsec_tilt` | Prior on the CC cross-section tilt, applied as `exp(tilt·p₁)`, `p₁ = L − ⟨L⟩`, `L = ln(E/E_pivot)` (orthogonal basis, see [mcmc_and_priors.md](mcmc_and_priors.md)). Default: `Normal(0.0, 0.1)`. |
