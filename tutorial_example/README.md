@@ -122,13 +122,14 @@ python3 utils/compareOutput.py -a outputs/tutorial/mcmc_ES_only -b outputs/tutor
     --labels "ES only" "CC only" -o outputs/tutorial/ES_vs_CC.pdf
 ```
 
-**4. A likelihood scan** (RunMode LLH, 20 × 20 points per parameter pair, about 8.5 minutes on
-10 threads). The nuisances that matter most are marginalised at every grid point (Laplace
+**4. A likelihood scan** (RunMode LLH, 15 × 15 points per parameter pair, about 10 minutes on
+4 threads). The nuisances that matter most are marginalised at every grid point (Laplace
 approximation over those with a Fisher share ≥ 0.1, at most 4), so the contours have about the
-width of the posterior; the log lists the ranking:
+width of the posterior; the log lists the ranking. The plot overlays the global solar fit
+(nuFit; `--no-external` omits it):
 
 ```bash
-julia -t 10 --project src/readConfig.jl tutorial_example/05_llh_scan.yaml
+julia -t auto --project src/readConfig.jl tutorial_example/05_llh_scan.yaml
 python3 utils/plotLLH.py outputs/tutorial/scan   # → images/scan_llh.pdf
 ```
 
