@@ -3,15 +3,17 @@ posterior corner plots (utils/plotting/cornerplot.py).
 
 Off-diagonal: each scan as a colour map of χ²/ndof (χ² = chi2_ref − cell, zero at the truth;
 Δχ² from the best point for older files), best point yellow, with the 2-parameter 1/2/3σ
-contours (Δχ² = 2.30, 6.18, 11.83) and dotted lines to the best point. Diagonal: the Δχ² curve of
+contours (Δχ² = 2.30, 6.18, 11.83) and dotted lines to the best point; the (sin²θ₁₂, Δm²₂₁) panel
+also shows the global solar fit (nuFit, 1/2/3σ) unless --no-external. Diagonal: the Δχ² curve of
 each parameter, the likelihood integrated over the other parameter of a scan, with the 1D
 1/2/3σ levels; each parameter is in two scans, the second is dashed.
 
-    python3 utils/plotLLH.py outputs/tutorial/scan [--rebin 2] [-o name]   # → images/scan_llh.pdf
+    python3 utils/plotLLH.py outputs/tutorial/scan [--rebin 2] [--no-external] [-o name]   # → images/scan_llh.pdf
 """
 import argparse
 import os
 
+import matplotlib.patheffects as pe
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import numpy as np
@@ -21,6 +23,7 @@ import style
 
 COLOR = "#0894bc"                              # the default corner-plot colour (plotOutput.py)
 LINE = "red"                                   # contours and best-point lines
+GLOBAL = "white"                               # global solar fit contours, readable on the map
 DM21_SCALE = 1e4                               # Δm²₂₁ is drawn in 10⁻⁴ eV²
 VARS = ["sin2_th12", "sin2_th13", "dm2_21"]
 LABELS = {"sin2_th12": r"$\sin^2\theta_{12}$", "sin2_th13": r"$\sin^2\theta_{13}$",
@@ -122,6 +125,7 @@ def main():
     p.add_argument("-o", "--output", help="also save as <output>_llh.pdf")
     p.add_argument("--rebin", type=int, default=1,
                    help="average the likelihood over N x N blocks of grid points (e.g. 2: 20x20 -> 10x10)")
+    p.add_argument("--no-external", action="store_true", help="omit the global solar fit contours")
     args = p.parse_args()
 
     scans = {k: read_scan(args.input + suffix, args.rebin) for k, suffix in SCANS.items()}
@@ -143,6 +147,18 @@ def main():
                 ax.set_ylim(edges(scaled(yk, s["y"]))[[0, -1]])
                 ax.yaxis.set_major_formatter(ticker.FuncFormatter(plotting.two_sig_figs_math))
             ax.xaxis.set_major_formatter(ticker.FuncFormatter(plotting.two_sig_figs_math))
+    if not args.no_external:
+        ax = axes[VARS.index("dm2_21"), VARS.index("sin2_th12")]
+        lims, nlines = (ax.get_xlim(), ax.get_ylim()), len(ax.lines)
+        handles = plotting.add_external_solar_data(ax, experiments=("solar",), color=GLOBAL)
+        ax.set_xlim(lims[0]), ax.set_ylim(lims[1])
+        outline = [pe.withStroke(linewidth=5, foreground="black")]   # white with a black edge reads on any colour
+        for line in ax.lines[nlines:] + handles:
+            line.set_path_effects(outline)
+        handles[0].set_label("Global solar fit (nuFit)")
+        handles.append(plt.Line2D([0], [0], color=LINE, lw=3, label="This scan"))
+        axes[0, 1].legend(handles=handles, fontsize=20, frameon=False, loc="center right",
+                          labelcolor="0.3", handlelength=1.5)
     axes[n - 1, n - 1].set_xlabel(LABELS[VARS[-1]])
     plotting.finish_corner_layout(axes, [LABELS[v] for v in VARS])
     for i in range(n):                                 # dark map background: white ticks and inner edges
