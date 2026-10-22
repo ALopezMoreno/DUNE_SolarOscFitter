@@ -105,16 +105,7 @@ def create_sequential_colormap(start_color, end_color, num_steps=256):
 
 
 def fade_color_to_white(color, alpha):
-    """
-    Fades a given color towards white based on the alpha-like parameter.
-
-    Args:
-        color (str or tuple): The input color in any valid matplotlib format (e.g., 'red', '#FF5733', (0.2, 0.4, 0.6)).
-        alpha (float): The fade parameter, where 0.0 means no fading (original color) and 1.0 means completely white.
-
-    Returns:
-        tuple: A tuple representing the faded color in RGB format.
-    """
+    """`color` faded towards white by `alpha` (0 = unchanged, 1 = white), as RGB."""
     # Convert the input color to RGB tuple
     rgb_color = colors.to_rgba(color)[:3]
 

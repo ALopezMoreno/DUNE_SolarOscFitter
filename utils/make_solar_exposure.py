@@ -3,23 +3,11 @@
 
     python3 utils/make_solar_exposure.py [--latitude 44.35] [--nodes 702] [-o inputs/solarExposure_v2.csv]
 
-The Sun's direction over a year at a site of latitude phi, with Earth on a Kepler orbit:
-- time samples uniform in the mean anomaly (uniform in time); eccentric anomaly from Kepler's
-  equation; ecliptic longitude lambda = true anomaly + longitude of perihelion; declination
-  sin(delta) = sin(eps) sin(lambda);
-- on each day the hour angle is uniform, so cos z = a + b cos H (a = sin phi sin delta,
-  b = cos phi cos delta) has the exact CDF F(c) = 1 - arccos((c - a) / b) / pi.
-
-Columns (cos z < 0 is night, the Sun below the horizon):
-- time_weight: fraction of time per unit cos z. What the backgrounds (rates fixed in time) need.
-- flux_weight: the same weighted by the solar flux, (1 AU / r)^2, normalised the same way. What
-  the signal needs. By Kepler's second law dt ∝ r^2 d(lambda), so this is uniform in lambda:
-  its night fraction is 0.5 up to the sampling.
-
-Each node value is the mean density over the cell around it (half cells at the ends), so the
-linear interpolant integrates to the cell contents up to O(h^2). Both columns integrate to 1
-over the table. Ignored: refraction, the Sun's angular size, the equation of time (it shifts
-H, not the distribution of cos z), and precession over the run.
+Earth on a Kepler orbit, sampled uniformly in time; on each day the hour angle is uniform, so
+cos z = a + b cos H has an exact CDF. `time_weight` (backgrounds) is the fraction of time per unit
+cos z; `flux_weight` (signal) weights it by (1 AU / r)², uniform in solar longitude by Kepler's
+second law (night fraction 0.5). Node values are cell-mean densities; both columns integrate to 1.
+Ignored: refraction, the solar disc, the equation of time, precession.
 """
 import argparse
 

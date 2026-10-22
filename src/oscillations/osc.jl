@@ -1,30 +1,12 @@
 #=
-osc.jl
+osc.jl — solar-neutrino oscillations (after P. Eller's Newthrino).
 
-Neutrino Oscillation Calculations for the Solar Oscillation Fitter.
-
-This module implements comprehensive neutrino oscillation calculations for solar
-neutrinos, including both daytime (solar matter effects) and nighttime (Earth
-matter effects) propagation.
-
-Contents:
-- Day: adiabatic MSW survival probability in the Sun (`mswProb`), at the mean
-  production density or averaged over the production region (`osc_prob_day_c2m`)
-- Night: the IYSW relation P_N = P_D + c₁₃² cos2θ₁₂ᵐ (P₁ₑ − c₁₂²c₁₃²)
-  (`osc_prob_both_fast`, `osc_prob_both_slow`)
-- NumOsc: 3-flavour numerical Earth propagation per path (the `nightOsc: false`
-  calculation, and the reference that NightOsc is tested against)
-- nu4NumOsc: 4-state (one sterile) numerical propagation, not wired into the fit
-
-The default night-time Earth crossing is NightOsc (osc_night.jl).
-
-Oscillation framework adapted from Newthrino by Philipp Eller (special thanks
-for his support and openness when sharing his code):
-(add_github_repo_when_public)
-
-Modifications to calculate the solar night-time propagation added by Andres Lopez Moreno
-
-Author: Andres Lopez Moreno, based on Philipp Eller's Newthrino
+- Day: adiabatic MSW survival probability in the Sun (`mswProb`), at the mean production density
+  or averaged over the production region (`osc_prob_day_c2m`).
+- Night: P_N = P_D + c₁₃² cos2θ₁₂ᵐ (P₁ₑ − c₁₂²c₁₃²) (Ioannisian, Yu, Smirnov, Wyler).
+- NumOsc: 3-flavour numerical Earth propagation per path (`nightOsc: false`, and NightOsc's test
+  reference). The default night calculation is NightOsc (osc_night.jl).
+- nu4NumOsc: 4-state (one sterile) propagation, kept for sterile/HNL work, not used by the fit.
 =#
 module Osc
 using LinearAlgebra
@@ -76,18 +58,16 @@ function get_matrices(params)
 end
 
 
-# MSW survival probability P(νe→νe) averaged over the solar production region.
-# Wolfenstein (1978), Mikheyev & Smirnov (1985); adiabatic two-flavour approximation
-# with θ₁₃ correction from Barger et al. See also eq. (2) of SNO solar analysis.
+# Adiabatic MSW survival probability P(νe→νe) at density n_e, two-flavour with the θ₁₃ correction
+# (Barger et al.; eq. (2) of the SNO solar analysis).
 function mswProb(energy, mixingPars, n_e)
     s2th13 = sin(mixingPars.θ₁₃)^2
     @inbounds begin
         c2th12 = cos.(2 .* mixingPars.θ₁₂)
         Acc = 2 .* sqrt(2) .* n_e .* G_f .* energy .* (1 .- s2th13)  
         beta = Acc ./ mixingPars.Δm²₂₁ 
-        # Calculate the modified cosine of twice the angle theta_12 in matter
         c2th12m = (c2th12 .- beta) ./ sqrt.((c2th12 .- beta).^2 .+ (1 .- c2th12.^2))
-        # Matter effect is weak enough to ignore the matter contribution to θ₁₃
+        # matter effect on θ₁₃ neglected
         s13m = sqrt.(s2th13)
         probs = 1 ./ 2 .* (1 .- s2th13) .* (1 .- s13m.^2) .* (1 .+ c2th12 .* c2th12m) .+ s2th13 .* s13m.^2 
     end
@@ -95,13 +75,10 @@ function mswProb(energy, mixingPars, n_e)
 end
 
 
-# Use relationship between P_1e and P_day from Ioannisian, Yu, Smirnov and Wyler:
-# P_night = P_day + DeltaP where
-# DeltaP = c_13^2*cos(2th12_sol)*(P_1e - P_0) and
-# P_0 = c12^2cos^2th12
+# P_night = P_day + c₁₃² cos2θ₁₂ᵐ (P₁ₑ − c₁₂²c₁₃²), averaged over the production region (slow) or
+# at the mean production density (fast).
 
 function osc_prob_both_slow(E::AbstractVector{<:Real}, matrix_p_1e::AbstractMatrix, mixingPars, solarModel; process="8B")
-    # Get daytime probability at each n_e over the production region
     results = mswProb.(E, Ref(mixingPars), solarModel.n_e')
     n_energies = length(E)
     n_densities = length(solarModel.n_e)
@@ -115,17 +92,14 @@ function osc_prob_both_slow(E::AbstractVector{<:Real}, matrix_p_1e::AbstractMatr
         cos2θ₁₂_sol[i, j] = results[i, j][2]
     end
 
-    # Select the appropriate production fraction based on the process
     prodFraction = process == "8B" ? solarModel.prodFractionBoron :
                    process == "hep" ? solarModel.prodFractionHep :
                    error("Invalid process specified. Please use '8B' or 'hep'.")
 
-    # Precompute constants
     cos2_θ₁₃ = cos(mixingPars.θ₁₃)^2
     P_0 = cos(mixingPars.θ₁₂)^2 * cos2_θ₁₃
     n_paths = size(matrix_p_1e, 1)
     
-    # Pre-allocate for the final integrated night probabilities (same shape as matrix_p_1e)
     prob_night_integrated = zeros(T, n_paths, n_energies)
 
     @inbounds for i in 1:n_densities
@@ -147,34 +121,26 @@ end
 
 
 function osc_prob_both_fast(E::AbstractVector{<:Real}, matrix_p_1e::AbstractMatrix, mixingPars, solarModel; process="8B")
-    # Get average density over production region
     n_e = process == "8B" ? solarModel.avgNeBoron :
           process == "hep" ? solarModel.avgNeHep :
           error("Invalid process specified. Please use '8B' or 'hep'.")
 
-    # Get daytime probability at average n_e
     prob_day, cos2θ₁₂_sol = mswProb(E, mixingPars, n_e)
 
-    # Precompute constants
     cos2_θ₁₃ = cos(mixingPars.θ₁₃)^2
     P_0 = cos(mixingPars.θ₁₂)^2 * cos2_θ₁₃
     
-    # Use transpose for efficient broadcasting (avoids reshape allocation)
-    # This creates a view, not a copy
     cos2θ₁₂_sol_t = cos2θ₁₂_sol'
     prob_day_t = prob_day'
     
-    # Fused broadcasting operation
     @inbounds prob_night = prob_day_t .+ cos2_θ₁₃ .* cos2θ₁₂_sol_t .* (matrix_p_1e .- P_0)
 
     return prob_day, prob_night
 end
 
 
-# Day-time P(νe→νe) and the production-averaged cos2θ₁₂ᵐ that multiplies the night
-# regeneration term, at energies E. fast=true evaluates both at the production-weighted mean
-# density; fast=false averages them over the production region (exact, since the night term is
-# linear in cos2θ₁₂ᵐ).
+# Day P(νe→νe) and the cos2θ₁₂ᵐ of the night term at energies E: at the mean production density
+# (fast) or averaged over the production region (exact, the night term being linear in cos2θ₁₂ᵐ).
 function osc_prob_day_c2m(E::AbstractVector{<:Real}, mixingPars, solarModel; process="8B", fast::Bool=true)
     if fast
         n_e = process == "8B" ? solarModel.avgNeBoron :
@@ -272,9 +238,7 @@ module NumOsc
         using ...Osc: oscPars, get_matrices
         using ..NumOsc: get_H, osc_kernel
 
-        # Like osc_reduce but indexes directly into a pre-allocated lookup buffer,
-        # avoiding the allocation from lookup_matrices[indices] in the original map path.
-        # Returns only the [1,1] element (ν_e→ν_e probability).
+        # osc_reduce on a preallocated lookup buffer; returns P(νe→νe) only.
         @inline function osc_reduce_from_lookup(Mix_dagger, lookup_buf, indices, path, e)
             @inbounds begin
                 first_mn = lookup_buf[indices[1]]
@@ -301,7 +265,6 @@ module NumOsc
             n_paths  = length(paths)
             n_lookup = length(lookup_density)
 
-            # Pre-allocate output and reusable eigendecomposition buffer
             p1e        = Matrix{real(eltype(H_eff))}(undef, n_paths, n_E)
             lookup_buf = Vector{typeof(get_H(H_eff, E[1], lookup_density[1], anti))}(undef, n_lookup)
 
@@ -329,7 +292,6 @@ module nu4NumOsc
     using LinearAlgebra, StaticArrays
     import ..G_f, ..PHASE_CONST
 
-    # we need to redefine the mixing matrix an oscpars to accept new parameters:
     struct oscPars
         Δm²₂₁::Float64
         θ₁₂::Float64
@@ -343,7 +305,7 @@ module nu4NumOsc
         θ₁₄::Float64
         θ₂₄::Float64
         θ₃₄::Float64
-        # We are ignoring the sterile complex phases because we are not sensitive to them
+        # sterile phases ignored
     end
 
     # Constructor with default values
@@ -425,36 +387,28 @@ module nu4NumOsc
         Hh = Hermitian(SMatrix(Hm))
         tmp = get_eigen(Hh)
 
-        # Ensure correct ordering of eigenvalues: if mixing
-        # non-zero then crossings are allowed: we order by same as vacuum
-        # otherwise, match the sterile to its constant mass
+        # Order eigenvalues as in vacuum; with no sterile mixing, match the sterile to its mass
         tol = 1e-10
         reference_masses = diag(massMatrix)
         
-        # Step 1: Get sorting indices for reference masses
         ref_sort_indices = sortperm(reference_masses)
         rank_order = invperm(ref_sort_indices)
         
-        # Step 2: Sort eigenvalues and eigenvectors
         eig_sort_indices = sortperm(tmp.values)
         sorted_vals = tmp.values[eig_sort_indices]
         sorted_vecs = tmp.vectors[:, eig_sort_indices]
         
-        # Step 3: Apply rank ordering
         final_vals = sorted_vals[rank_order]
         final_vecs = sorted_vecs[:, rank_order]
         
-        # Step 4: Check for matches and swap (optimized)
         final_vals_arr = Vector(final_vals)
         final_vecs_arr = Matrix(final_vecs)
         
         n = length(final_vals_arr)
-        matched_indices = falses(n)  # Track which indices have been matched
+        matched_indices = falses(n)
         
-        # Precompute differences for efficiency
         for j in 1:n
             ref_mass_j = reference_masses[j]
-            # Find the best match for reference_masses[j]
             best_match_idx = 0
             best_match_diff = Inf
             
@@ -469,10 +423,8 @@ module nu4NumOsc
             end
             
             if best_match_idx > 0 && best_match_idx != j
-                # Swap eigenvalues
                 final_vals_arr[j], final_vals_arr[best_match_idx] = final_vals_arr[best_match_idx], final_vals_arr[j]
                 
-                # Swap eigenvectors
                 for k in 1:size(final_vecs_arr, 1)
                     final_vecs_arr[k, j], final_vecs_arr[k, best_match_idx] = final_vecs_arr[k, best_match_idx], final_vecs_arr[k, j]
                 end

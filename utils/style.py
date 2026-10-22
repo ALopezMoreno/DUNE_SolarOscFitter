@@ -1,10 +1,7 @@
 """Shared plotting style and figure-saving helpers for the SolarOscFitter utils.
 
-This module is the single source of truth for the publication look used across
-the plotting scripts (CMS/mplhep base + LaTeX rendering + larger tick/axis
-sizes). Importing it applies the style as a side effect, matching the previous
-import-time behaviour of ``plotting.py``; call :func:`apply_style` explicitly to
-re-apply after any local ``rcParams`` override.
+The publication look of all plotting scripts (CMS/mplhep + LaTeX). Importing it applies the style;
+call :func:`apply_style` to re-apply after a local ``rcParams`` override.
 
 Usage::
 
@@ -80,22 +77,12 @@ def apply_style():
 
 
 def ensure_parent_dir(path):
-    """Create the parent directory of ``path`` if it does not exist.
-
-    Use before opening a writer that does not create directories itself
-    (e.g. ``matplotlib.backends.backend_pdf.PdfPages``), so writes to
-    ``images/`` never crash on a fresh checkout.
-    """
+    """Create the parent directory of ``path`` if needed (e.g. before ``PdfPages``)."""
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
 
 
 def save_figure(fig, path, **kwargs):
-    """Save ``fig`` to ``path``, creating the parent directory if needed.
-
-    A thin wrapper over ``fig.savefig`` that guarantees the destination
-    directory exists, so writes to ``images/`` never crash on a fresh checkout.
-    Extra keyword arguments are forwarded to ``savefig`` (e.g. ``dpi=300``).
-    """
+    """``fig.savefig(path, **kwargs)``, creating the parent directory if needed."""
     ensure_parent_dir(path)
     fig.savefig(path, **kwargs)
 

@@ -1,6 +1,6 @@
-using ElasticArrays    # For dynamic array handling
-using ProgressMeter    # For progress tracking
-using JLD2            # For data file operations
+using ElasticArrays
+using ProgressMeter
+using JLD2
 using LinearAlgebra, Statistics, Distributions, StatsBase, BAT, DensityInterface, IntervalSets
 using ForwardDiff
 import AutoDiffOperators: ADSelector
@@ -42,21 +42,13 @@ end
 
 
 #=
-Derived mode (RunMode: derived). Reads a finished chain (prevFile) and, for EVERY active
-detector, computes per step the day-night asymmetries and, on thinned steps, the per-bin
-log-likelihood diagnostics and posterior-predictive rates. The parameter moments and the
-best-fit oscillation map are shared by all detectors.
-
-Output (written into prevFile.jld2, replacing any earlier derived_* keys):
-  derived_detectors           "VD,HD": active detectors, in config order
-  derived_<DET>_<key>         per-detector quantities (keys as in the single-detector era)
-  derived_<key>               shared quantities (cosz_edges, oscmap_*, exposure_weights_signal/_bg, signal_/bg_ day/night fractions)
-utils/posteriorHelpers.py selects a detector and strips the prefix, so the plotting code reads
-the same key names as before, and older single-detector files still load.
+Derived mode (RunMode: derived): from a finished chain (prevFile), per active detector, the day-night
+asymmetries per step and, on thinned steps, per-bin log-likelihood diagnostics and posterior-
+predictive rates. Written into prevFile.jld2 as `derived_detectors`, `derived_<DET>_<key>` and the
+shared `derived_<key>`; utils/posteriorHelpers.py strips the detector prefix.
 =#
 
-# Overwrite all derived_* keys: a re-derive with different detectors must not leave stale keys.
-# Errors propagate (a failed write must not look like a successful derive).
+# Replaces all derived_* keys, so a re-derive leaves no stale ones.
 function saveDerivedChain(per_det::AbstractDict, shared::AbstractDict)
     fileName = prevFile * ".jld2"
     jldopen(fileName, "a+") do f
@@ -95,7 +87,7 @@ struct DerivedDetector
     has_CC::Bool                  # CC channel present (not pure inclusive)
     iES::Int
     iCC::Int
-    ref::Any                      # per-bin log L at the Asimov truth (see centring note below)
+    ref::Any                      # per-bin log L at the Asimov truth
     true_params::Any
     cfg::Any                      # detector config block
     asym_ES::Vector{Float64}
@@ -110,10 +102,8 @@ function DerivedDetector(dname)
     cfg = detector_configs[dname]
     li  = out.likelihood_inputs
     perbin = detector_perbin_fns[dname]
-    # Reference per-bin log-likelihood at the Asimov truth. In background-dominated bins the
-    # per-bin LLH is O(1e6), so the two-pass variance Var = E[ℓ²] − E[ℓ]² loses all precision
-    # to catastrophic cancellation. Subtracting this per-bin reference makes the accumulated
-    # deviations O(1); variance and covariance are invariant under a per-bin constant shift.
+    # Moments are accumulated relative to the per-bin log L at the truth: background-dominated bins
+    # have log L ~ 1e6, and E[ℓ²] − E[ℓ]² would cancel catastrophically.
     ref = perbin(true_params)
     return DerivedDetector(dname, li, perbin, cfg.angular_reco, !cfg.inclusive_analysis,
                            li.index_ES, li.index_CC, ref, out.true_params, cfg,
@@ -121,8 +111,7 @@ function DerivedDetector(dname)
                            Vector{Vector{Float64}}(), Vector{Vector{Float64}}())
 end
 
-# Day-night asymmetry of the signal above threshold, per unit (flux-weighted) exposure; the background
-# is removed with its time-weighted split. dn_asymmetry is in propagation_core.jl (SPEC 4.6).
+# Signal day-night asymmetry above threshold (propagation_core.jl, SPEC 4.6)
 dn_asymmetry(day, night, BG, idx) = dn_asymmetry(day, night, BG, idx, SIGNAL_FRACTIONS, BG_TOTAL_FACTORS)
 
 # One chain step for one detector. `thinned` steps also feed the diagnostics.
@@ -146,8 +135,8 @@ function process_step!(dd::DerivedDetector, pars, osc, w, θ1, θ2, thinned::Boo
         acc_add!(acc, Symbol(ch, "night_m2"), w .* n0 .^ 2)
     end
 
-    # Total day rates above threshold per sample; background is subtracted after the loop with
-    # the posterior-mean background, so the bg-norm spread widens the quantile band.
+    # Day totals per sample; the posterior-mean background is subtracted after the loop, so the
+    # background-norm spread widens the band.
     push!(dd.ESday_samples, dd.angular ? vec(sum(@view(r.ES_day[:, dd.iES:end]), dims=1)) :
                                          r.ES_day[dd.iES:end])
     acc_add!(acc, :BGESday_m1, w .* (BG_DAY_FRACTION .* r.BG_ES_tot))
@@ -250,16 +239,15 @@ function finalize_detector(dd::DerivedDetector, N, mean_sin2, var_sin2, mean_dm2
         out[Symbol(ch, "night_pp_shape")] = collect(size(night_mean))
         out[Symbol("BG", ch, "day_pp_mean")] = bg_mean
         out[Symbol("BG", ch, "day_pp_var")]  = max.(acc[Symbol("BG", ch, "day_m2")] ./ N .- bg_mean .^ 2, 0.0)
-        # Night bg per (cosz, Ereco) = (f_night^bg/f_day^bg)·exposure_weights_bg ⊗ day bg (day bg is
-        # f_day^bg·BG, night bg f_night^bg·BG·exposure_weights_bg; time-weighted, SPEC 4.6).
+        # night background from the day one with the background split (SPEC 4.6)
         out[Symbol("BG", ch, "night_pp_mean")] = (BG_NIGHT_FRACTION / BG_DAY_FRACTION) .* (exposure_weights_bg .* bg_mean')
         n_E = ch == "ES" && dd.angular ? size(day_mean, 2) : length(day_mean)
         samples = ch == "ES" ? dd.ESday_samples : dd.CCday_samples
         for (k, v) in quantile_bands(samples, bg_mean, idx, n_E, sample_weights)
             out[Symbol(ch, "day_pp_", k)] = v
         end
-        # Clean signal-only (oscillated, no bkg) rates at the Asimov truth, full reco range.
-        # (data − bkg is unusable: bkg can be ~1e11 below threshold.) Angular ES keeps the bkg.
+        # Signal-only rates at the truth (data − background is unusable below threshold, where the
+        # background can be ~1e11). Angular ES keeps the background.
         BG = getfield(r_true, Symbol("BG_", ch, "_tot"))
         day_t, night_t = getfield(r_true, Symbol(ch, "_day")), getfield(r_true, Symbol(ch, "_night"))
         if ch == "ES" && dd.angular
@@ -280,8 +268,7 @@ function finalize_detector(dd::DerivedDetector, N, mean_sin2, var_sin2, mean_dm2
 
     if dd.has_CC
         out[:CC_asymmetry] = dd.asym_CC
-        # Per-component CC background day spectra at the Asimov truth, for stacked plots,
-        # mirroring normalize_backgrounds (f_day^bg day factor, CC_conv × norm for free norms).
+        # CC background day spectra per component at the truth (as normalize_backgrounds)
         comps = Vector{Vector{Float64}}()
         ni = 1
         for (i, beh) in enumerate(li.BG.CC_par_counts)
@@ -301,7 +288,6 @@ function finalize_detector(dd::DerivedDetector, N, mean_sin2, var_sin2, mean_dm2
 end
 
 
-######## BEGIN EXECUTION ########
 
 println(" ")
 prevFile === nothing && error("Please specify an input chain (prevFile)")
@@ -327,7 +313,7 @@ for i in 1:n_total
     pars = NamedTuple{Tuple(param_fields)}((param_data[field][i] for field in param_fields))
     # Fixed parameters (e.g. backgrounds with sys = 0) are not in the chain: fill from the truth.
     pars = merge(true_params, pars)
-    osc  = compute_shared_osc_probs(pars, solarModel)    # once per step, shared by all detectors
+    osc  = compute_shared_osc_probs(pars, solarModel)    # shared by all detectors
     thinned = i % thinning == 0
     w = float(weights[i])
     θ1, θ2 = pars.sin2_th12, pars.dm2_21
@@ -355,15 +341,11 @@ _bestfit_means = NamedTuple{Tuple(param_fields)}(
     Tuple(sum(param_data[f][i] * weights[i] for i in 1:n_total) / _wtot for f in param_fields))
 _oscmap        = compute_shared_osc_probs(merge(true_params, _bestfit_means), solarModel)
 shared = Dict{Symbol,Any}(
-    # cosz grid is piecewise-uniform (PREM segments) over the exposure support, not uniform [-1, 0]
     :cosz_edges         => collect(COARSE_COSZ_EDGES),
     :oscmap_8B_day      => collect(Float64.(_oscmap.nue_8B_day)),
     :oscmap_8B_night    => Matrix{Float64}(_oscmap.nue_8B_night),
     :oscmap_Etrue_edges => collect(range(Etrue_bins.min, Etrue_bins.max, length=Etrue_bins.bin_number + 1)) .* 1e3,
-    # Exposure (SPEC 4.6), for the plotting utils: per-cos z night weights (Σ = 1) and day/night splits,
-    # signal (flux-weighted; turns night signal into a day-night survival ratio) and backgrounds
-    # (time-weighted). Older files have one set, derived_exposure_weights / derived_day_fraction /
-    # derived_night_fraction, which the readers take for both.
+    # Exposure weights and day/night splits of signal and backgrounds (SPEC 4.6), for the plots
     :exposure_weights_signal => collect(Float64.(vec(exposure_weights_signal))),
     :exposure_weights_bg     => collect(Float64.(vec(exposure_weights_bg))),
     :signal_day_fraction     => SIGNAL_DAY_FRACTION,

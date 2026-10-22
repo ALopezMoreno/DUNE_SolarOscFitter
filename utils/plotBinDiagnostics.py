@@ -66,9 +66,7 @@ VAR_EPS = 1e-12
 ### ENERGY THRESHOLD AND LIMITS ###
 threshold = 5
 
-# Energy x-positions: bin centres of length n_E (used as centres for the 1D day
-# series/spectra; plot_binmap only uses first/last for its extent). Prefer the
-# real reco edges saved by `RunMode: derived`; fall back to hard-coded ranges.
+# Reco-energy bin centres from the saved edges, else a uniform fallback range
 def _energy_centres(key, fb_lo, fb_hi, n_E):
     if key in diagnostics:
         e = np.asarray(diagnostics[key], dtype=float)        # n_E+1 edges, MeV
@@ -127,10 +125,7 @@ def _underlay_day_events(ax, E_edges, ch, fade=0.30, span=0.96, floor=1e-3):
             where="post", color="blue", lw=2.5, alpha=0.9 * fade, zorder=0.1)
     ax.set_xlim(xlim); ax.set_ylim(ylo, yhi)        # underlay must not alter the panel's own ranges
 
-# Diagonal-hatch style for the day diagnostic bars (variance AND driver-score panels) so
-# the translucent underlay shows through them. Hatch line thickness is the global
-# hatch.linewidth rcParam (set in style.apply_style); the patch linewidth controls
-# the bar outline.
+# Hatched day bars, so the translucent underlay shows through
 _DIAG_BAR = dict(facecolor="none", edgecolor="C0", hatch="///", linewidth=1.2)
 
 # cosz y-edges for the 2D night maps (piecewise-uniform over the exposure
@@ -167,24 +162,15 @@ def Znight(Z):
 
 
 def _cosz_density(Z, cosz_edges, power=1):
-    """Night maps (n_cosz, n_E) of EXTENSIVE quantities scale with the cos z bin width, so
-    with non-uniform bins the per-bin colour dips in the narrow (fine) bins purely from
-    geometry. Divide each row by Δcos z**power to show a DENSITY that is continuous across
-    the binning change: rates ∝ Δcz (power=1), per-bin Var(logL) ∝ Δcz² (power=2), driver
-    score = √Var·|corr| ∝ Δcz (power=1). power=0 is a no-op for INTENSIVE quantities
-    (correlations and probabilities — already binning-independent)."""
+    """Divide each night row by Δcos z**power, so extensive quantities show as a density across the
+    non-uniform bins: rates and scores power 1, Var(log L) power 2, intensive quantities 0."""
     if power == 0:
         return np.asarray(Z, dtype=float)
     w = np.diff(np.asarray(cosz_edges, dtype=float))      # (n_cosz,)
     return np.asarray(Z, dtype=float) / (w[:, None] ** power)
 
 
-# ----------------------------
-# Pull maps from bin_maps -- We work with a -llh so the correlations flip sign
-# Night variance/score scale with cos z bin width (Var ∝ Δcz², score ∝ Δcz); divide it out
-# so the colour is a density, continuous across the non-uniform bins. Correlations are
-# intensive (ratio) and the day panels use uniform E, so neither is rescaled.
-# ----------------------------
+# Maps from bin_maps (−log L, so correlations flip sign); night variance and scores as densities
 esnight_var        = _cosz_density(bin_maps["ESnight"]["var_llh"], yedges, 2)
 esnight_corr_sin2  = -bin_maps["ESnight"]["corr_sin2"]
 esnight_corr_dm2   = -bin_maps["ESnight"]["corr_dm2"]
@@ -242,15 +228,8 @@ SIDEBAR_RECT = (0.915, 0.16, 0.06, 0.77)  # fixed sidebar in right margin
 sidebar_order = ("ESnight", "ESday") if inclusive_mode else ("CCnight", "CCday", "ESnight", "ESday")
 
 
-# ============================================================
-# OSCILLATED-SAMPLE PAGE(S) (rendered first), one per channel
-#   2 rows  : signal-only (oscillated, no bkg)  /  signal + background
-#   2 cols  : day = 1D rate vs reconstructed energy
-#             night = 2D map (E_reco on x, cos θ_z solar angle on y, events in colour)
-#   Full reco energy range; red vertical line at the analysis energy threshold.
-#   "signal" = Asimov sample − posterior-mean background (the oscillated+reco signal);
-#   "signal+bkg" = the full Asimov sample.
-# ============================================================
+# ── Oscillated-sample pages, one per channel: rows signal / signal + background, columns day
+#    (vs E_reco) / night (E_reco × cos z) ──
 def _logsafe(arr):
     """Copy with non-positive entries set to NaN (blank on log scale / pcolormesh)."""
     a = np.array(arr, dtype=float)
@@ -380,16 +359,8 @@ def add_sample_page(pdf, ch, E_edges, idx):
 
 
 def add_oscmap_dn_page(pdf):
-    """Best-fit (posterior-mean) 8B oscillation map P(νe→νe) and day-night asymmetry on one
-    2×2 page, using the same grouped layout as the other diagnostic pages:
-
-        row 0 — probabilities:  day survival curve P(E_true)  |  night regeneration map (E_true × cos z)
-        row 1 — asymmetry A = 2(P_day−P_night)/(P_day+P_night):  truth (E_true)  |  reconstructed (E_reco)
-
-    Forming the asymmetry cancels flux × cross-section and the per-cos z exposure, leaving the Earth
-    day-night structure; the reco panel shows how much survives the energy reconstruction. The
-    probability row is drawn whenever the osc-map keys exist; the asymmetry row is added only when the
-    signal/exposure keys are present (otherwise a probabilities-only 1×2 page is produced)."""
+    """Best-fit ⁸B P(νe→νe), day and night, and the day-night asymmetry in E_true and E_reco (the
+    asymmetry row needs the signal and exposure keys)."""
     if "derived_oscmap_8B_night" not in diagnostics:
         return
 
@@ -487,12 +458,8 @@ def _saved(*keys):
 
 
 def _night_day_exposure_ratio(ch, kind):
-    """f_night / f_day of the signal (kind="signal", flux-weighted) or of the backgrounds (kind="bg",
-    time-weighted), SPEC 4.6. Read from derived_<kind>_day_fraction / _night_fraction; older files
-    have one pair, derived_day_fraction / derived_night_fraction, taken for both. Files older still
-    recover it from the background arrays, which the derive writes as BG_night(c, e) =
-    (f_night/f_day) · exposure_weights(c) · BG_day(e) with Σ_c exposure_weights = 1 (exact for the
-    background split; those files had one split for both). Without any it falls back to 1 (50/50)."""
+    """f_night / f_day of the signal or the backgrounds (SPEC 4.6), from the saved fractions, else
+    from older files' shared pair or background arrays, else 1."""
     fd = _saved(f"derived_{kind}_day_fraction", "derived_day_fraction")
     fn = _saved(f"derived_{kind}_night_fraction", "derived_night_fraction")
     if fd is not None and fn is not None:
@@ -514,12 +481,8 @@ def _night_day_exposure_ratio(ch, kind):
 
 
 def _recover_exposure_weights(ch, kind):
-    """Night cos z weights (Σ = 1) of the signal (kind="signal", flux-weighted) or of the backgrounds
-    (kind="bg", time-weighted). Prefer the saved arrays (derived_exposure_weights_<kind>; older files
-    have one, derived_exposure_weights, taken for both); else recover them from the saved background,
-    since the derive builds BG_night(c,e) = (f_night/f_day) · exposure_weights(c) · BG_day(e) exactly,
-    so exposure_weights ∝ BG_night[:, e0] / BG_day[e0] for any e0 with appreciable background
-    (normalised to Σ = 1; those files had one set for both)."""
+    """Night cos z weights (Σ = 1) of the signal or the backgrounds: the saved arrays, else recovered
+    from the saved background (BG_night[:, e] ∝ weights · BG_day[e])."""
     w = _saved(f"derived_exposure_weights_{kind}", "derived_exposure_weights")
     if w is not None:
         return w
@@ -545,11 +508,7 @@ with PdfPages(out_pdf) as pdf:
     add_sample_page(pdf, "ES", es_E_edges, idx_es)
     add_oscmap_dn_page(pdf)   # osc map P(nu_e->nu_e) + day-night asymmetry (combined 2x2 page)
 
-    # ============================================================
-    # PAGE 1: VARIANCE (night 2D + day 1D) + narrow totals sidebar
-    #   Non-inclusive: CC row + ES row
-    #   Inclusive:     ES row only
-    # ============================================================
+    # ── Page 1: variance, night map + day spectrum + totals (rows CC, ES; ES only if inclusive) ──
     nrows_p1 = 1 if inclusive_mode else 2
 
     fig = plt.figure(figsize=(11, 8.5), constrained_layout=True)
@@ -634,11 +593,7 @@ with PdfPages(out_pdf) as pdf:
     pdf.savefig(fig, dpi=300)
     plt.close(fig)
 
-    # ============================================================
-    # PAGE 2: NIGHT CORRELATIONS (2D, ONE shared colorbar)
-    #   Non-inclusive: 2 columns (CC, ES) × 2 rows (sin2, dm2)
-    #   Inclusive:     1 column (ES)       × 2 rows
-    # ============================================================
+    # ── Page 2: night correlations with sin²θ₁₂ and Δm²₂₁ (columns CC, ES) ──
     fig = plt.figure(figsize=(11, 8.5), constrained_layout=True)
     fig.set_constrained_layout_pads(w_pad=0.01, h_pad=0.01, wspace=0.01, hspace=0.02)
     fig.get_layout_engine().set(rect=PAGE_RECT)
@@ -724,11 +679,7 @@ with PdfPages(out_pdf) as pdf:
     pdf.savefig(fig, dpi=300)
     plt.close(fig)
 
-    # ============================================================
-    # PAGE 3: NIGHT DRIVER SCORES (2D, within-sample normalized)
-    #   Non-inclusive: CC col + ES col, 2 rows (sin2, dm2)
-    #   Inclusive:     ES col only
-    # ============================================================
+    # ── Page 3: night driver scores (normalised within each sample) ──
     if not inclusive_mode:
         vmax_score_sin2 = float(np.nanmax([np.nanmax(Znight(ccnight_score_sin2)),
                                            np.nanmax(Znight(esnight_score_sin2))]))
@@ -802,11 +753,7 @@ with PdfPages(out_pdf) as pdf:
     plt.close(fig)
 
 
-    # ============================================================
-    # PAGE 4: DAY DRIVER SCORES (1D, within-sample normalized)
-    #   Non-inclusive: CC col + ES col, 2 rows
-    #   Inclusive:     ES col only
-    # ============================================================
+    # ── Page 4: day driver scores ──
     fig = plt.figure(figsize=(11, 8.5), constrained_layout=True)
     fig.set_constrained_layout_pads(w_pad=0.01, h_pad=0.01, wspace=0.01, hspace=0.02)
     fig.get_layout_engine().set(rect=PAGE_RECT)
@@ -864,11 +811,7 @@ with PdfPages(out_pdf) as pdf:
     pdf.savefig(fig, dpi=300)
     plt.close(fig)
 
-    # ============================================================
-    # PAGES 5–6: P-PREDICTIVE RATES (mean on p5, variance on p6)
-    #   Each page: night 2D + day 1D, matching pages 1–4 layout
-    #   Non-inclusive: CC row + ES row; Inclusive: ES row only
-    # ============================================================
+    # ── Pages 5–6: posterior-predictive rates, mean and variance ──
     esday_pp_mean   = pp_maps["ESday"]["pp_mean"]
     esday_pp_var    = pp_maps["ESday"]["pp_var"]
     esday_pp_lo     = pp_maps["ESday"].get("pp_lo")

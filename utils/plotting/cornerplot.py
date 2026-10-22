@@ -109,15 +109,9 @@ def plot_corner(variables, data_dict, externalContours=False, colorlist=['b', 'p
     global_min = [np.min(d) for d in data]
     global_max = [np.max(d) for d in data]
 
-    # N_eff-per-bin stability metric.  For each histogram bin we compute the effective
-    # number of independent posterior samples it contains:
-    #   N_eff_bin = ESS_total × (fraction of posterior in bin) / tau
-    # where ESS_total accounts for importance-weight imbalance and tau for autocorrelation.
-    # Thresholds from MCMC literature (Gelman/Vehtari):
-    #   N_eff < 5  → bin too sparse to trust (red)
-    #   5 ≤ N_eff < 25 → marginal (amber)
-    #   N_eff ≥ 25 → reliable for contour estimation (blue)
-    _stab_t1, _stab_t2 = 5, 25   # N_eff thresholds
+    # Per-bin stability: N_eff = ESS × (posterior fraction in the bin) / τ; < 5 unreliable (red),
+    # 5–25 marginal (amber), ≥ 25 reliable (blue)
+    _stab_t1, _stab_t2 = 5, 25
     _stab_colors = ['#d6604d', '#fdcc8a', '#4393c3']   # red / amber / blue
     _stab_cmap = mpl.colors.ListedColormap(_stab_colors, name='stab_diag')
     # Use zone-index [0,1,2] as the image data so the colorbar scale is uniform
@@ -146,9 +140,7 @@ def plot_corner(variables, data_dict, externalContours=False, colorlist=['b', 'p
                     data[i], bins=bins2D, range=(global_min[i], global_max[i]),
                     color=color, alpha=0.0, density=False, weights=weights)
 
-                # Pre-compute marginal sigma boundaries from the data (these are used
-                # for both the vertical lines and to assign bins to sigma regions so
-                # the colours match the vlines exactly).
+                # marginal σ boundaries, shared by the lines and the region colours
                 sorted_data = np.sort(data[i])
                 cdf = np.arange(1, len(sorted_data) + 1) / len(sorted_data)
                 sigma_levels = style.SIGMA_LEVELS  # 1σ, 2σ, 3σ
@@ -162,9 +154,7 @@ def plot_corner(variables, data_dict, externalContours=False, colorlist=['b', 'p
                     upper_bound_hist = bins[np.argmin(np.abs(bins - upper_bound))]
                     sigma_bounds.append((lower_bound_hist, upper_bound_hist))
 
-                # Now build region colours from the Wilks-like transform evaluated at
-                # the bin counts at the sigma boundaries. This way the colour assigned
-                # to each region corresponds to the colour at the boundary above it.
+                # each region takes the colour at the boundary above it
                 if use_cmap:
                     _cmap_fn = plt.get_cmap(_cmap_name)
                     counts = np.array(n, dtype=float)
@@ -579,14 +569,8 @@ def plot_corner(variables, data_dict, externalContours=False, colorlist=['b', 'p
 
                 # Set scientific notation for tick labels
                 axes[i, j].xaxis.set_major_formatter(ticker.FuncFormatter(two_sig_figs_math))
-                #axes[i, j].xaxis.set_major_formatter(ScalarFormatter(useMathText=True))
-                #axes[i, j].xaxis.get_major_formatter().set_scientific(True)
-                #axes[i, j].xaxis.get_major_formatter().set_powerlimits((-3, 3))
 
                 axes[i, j].yaxis.set_major_formatter(ticker.FuncFormatter(two_sig_figs_math))
-                #axes[i, j].yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
-                #axes[i, j].yaxis.get_major_formatter().set_scientific(True)
-                #axes[i, j].yaxis.get_major_formatter().set_powerlimits((-3, 3))
 
 
 
@@ -657,17 +641,8 @@ def plot_corner(variables, data_dict, externalContours=False, colorlist=['b', 'p
 
 
 def plot_default_corner(data, diagnostics=False):
-    """
-    Generate a corner plot with standardized styling.
-    
-    Parameters:
-    -----------
-    data : dict
-        Dictionary of arrays with parameter samples, including 'weights' key
-    diagnostics : bool
-        If True, uses cmasher.tropical_r colormap and data ranges
-        If False, uses solid blue colors and fixed ranges
-    """
+    """Corner plot of the standard parameters. `diagnostics`: colormap and data ranges instead of
+    solid fills and fixed ranges."""
     with mpl.rc_context(rc=mpl.rcParamsDefault): # Reset to default settings
         hep.style.use("ATLAS")
         plt.rcParams['text.usetex'] = style._have_latex()

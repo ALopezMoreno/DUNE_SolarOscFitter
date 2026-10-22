@@ -39,9 +39,7 @@ function EarthModel(file::AbstractString; potential_const::Real, jump_threshold:
     return EarthModel(r_out, v_out, sort(boundaries))
 end
 
-# The input-table contract of SPEC 8.1 (src/tabulated.jl's validate_table, which this module
-# does not load): a numeric table of 3 columns and at least 2 rows, finite values, strictly
-# increasing radii in [0, 1], density ≥ 0 and electron fraction ≥ 0.
+# The input-table contract of SPEC 8.1 (this module does not load tabulated.jl)
 function _validate_earth_table(data, file)
     w = "EarthModel ($file)"
     (data isa AbstractMatrix{<:Real} && size(data, 2) == 3) ||
@@ -60,11 +58,8 @@ end
 
 n_layers(earth::EarthModel) = length(earth.layer_boundaries) + 1
 
-# Matter potential at radius r [km], linear interpolation clamped at the ends. Kept as is
-# rather than ported to TabulatedInput: the jump steps entered above are load-bearing and this
-# formula, y[i] + t (y[i+1] - y[i]), is not bit-identical to Interpolations.jl's. The clamp is
-# not reached: chord radii lie in [0, r_det] with r_det < radius[end] (measured: 225–6370.9994 km on
-# the shipped cos z grids, 2026-10-18).
+# Matter potential at radius r [km], linear and clamped at the ends (never reached: chords stay
+# below r_det). Not a TabulatedInput: its formula is not bit-identical to Interpolations.jl's.
 function potential(earth::EarthModel, r::Real)
     x, y = earth.radius, earth.potential_grid
     r <= x[1] && return y[1]

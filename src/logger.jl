@@ -1,13 +1,11 @@
 using Printf
 using Logging
 
-# Define custom log levels for different analysis stages
-# We keep built-in Info, Warn, Error but override Info output behavior
-const MCMC = LogLevel(1)    # For MCMC sampling progress and diagnostics
-const Setup = LogLevel(2)   # For initialization and configuration messages  
-const Output = LogLevel(3)  # For final results and output generation
+# Custom levels for the analysis stages; Info prints as MCMC
+const MCMC = LogLevel(1)
+const Setup = LogLevel(2)
+const Output = LogLevel(3)
 
-# Utility function to format numbers in scientific notation
 function sci_notation(x; digits=4) 
     if x == 0
         return "0"
@@ -18,13 +16,12 @@ function sci_notation(x; digits=4)
     end
 end  
 
-# Names of the custom and built-in levels, for ColoredLogger only. (This used to be a
-# Base.show method for LogLevel, which changed how every package's log levels print.)
+# Level names for ColoredLogger only (a Base.show method would change every package's output)
 function level_name(level::LogLevel)
     level == Setup         && return "Setup"
     level == MCMC          && return "MCMC"
     level == Output        && return "Output"
-    level == Logging.Info  && return "MCMC"   # Info is shown as MCMC for consistency
+    level == Logging.Info  && return "MCMC"
     level == Logging.Warn  && return "Warn"
     level == Logging.Error && return "Error"
     return string(Int32(level.level))
@@ -34,67 +31,58 @@ struct ColoredLogger <: AbstractLogger
     min_level::LogLevel
 end
 
-# Required method for AbstractLogger interface
 function Logging.handle_message(logger::ColoredLogger, level, message, _module, group, id,
     file, line; kwargs...)
 
-    # Convert Info level to MCMC for consistency
     use_level = (level == Logging.Info) ? MCMC : level
 
-    # Define colors using 256-color palette
-    light_blue = 45    # Light blue in 256-color palette
-    bright_green = 46  # Bright green in 256-color palette
-    orange = 208       # Orange in 256-color palette
-    red = 196          # Red in 256-color palette
+    # 256-colour palette
+    light_blue = 45
+    bright_green = 46
+    orange = 208
+    red = 196
 
-    # Direct printing with printstyled
     if use_level == Setup
         printstyled("=> ", color=light_blue, bold=true)
         printstyled(level_name(level), ": ", color=light_blue, bold=true)
         printstyled(message, color=:default, bold=false)
-        println()  # Newline
+        println()
     elseif use_level == MCMC
         printstyled("=> ", color=:yellow, bold=true)
         printstyled(level_name(level), ": ", color=:yellow, bold=true)
         printstyled(message, color=:default, bold=false)
-        println()  # Newline
+        println()
     elseif use_level == Output
         printstyled("=> ", color=bright_green, bold=true)
         printstyled(level_name(level), ": ", color=bright_green, bold=true)
         printstyled(message, color=bright_green, bold=false)
-        println()  # Newline
+        println()
     elseif use_level == Logging.Warn
         printstyled("=> ", color=orange, bold=true)
         printstyled(level_name(level), ": ", color=orange, bold=true)
         printstyled(message, color=orange, bold=true)
-        println()  # Newline
+        println()
     elseif use_level == Logging.Error
         printstyled("=> ", color=red, bold=true)
         printstyled(level_name(level), ": ", color=red, bold=true)
         printstyled(message, color=red, bold=true)
-        println()  # Newline
+        println()
     else
         printstyled("=> ", color=:default)
         printstyled(level_name(level), ": ", color=:default)
         printstyled(message, color=:default)
-        println()  # Newline
+        println()
     end
 end
 
-# Required method for AbstractLogger interface - Important change here!
 function Logging.shouldlog(logger::ColoredLogger, level, _module, group, id)
-    # Allow our custom levels and standard levels
     return true
 end
 
-# Required method for AbstractLogger interface
 Logging.min_enabled_level(logger::ColoredLogger) = min(MCMC, Setup, Output, Logging.Info)
 
-# Required method for AbstractLogger interface
 Logging.catch_exceptions(logger::ColoredLogger) = false
 
-# Constructor with default minimum level
 ColoredLogger() = ColoredLogger(MCMC)
 
-# Set up the logger
 global_logger(ColoredLogger())

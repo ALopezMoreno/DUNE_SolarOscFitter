@@ -24,11 +24,8 @@ function print_negatives_2d(arr, parameters)
         end
     end
 end
-# Correlation term of a multivariate-normal Earth prior. BAT samples earth_norm_i under
-# independent (truncated) normal priors; adding
-#     -½ Δxᵀ (C⁻¹ - diag(C)⁻¹) Δx,   Δx = earth_norms - μ,
-# to the log-density turns their product into the full MvNormal(μ, C) up to a constant.
-# M = C⁻¹ - diag(C)⁻¹ is precomputed. Plain loops keep it Enzyme-differentiable.
+# Correlation term −½ Δxᵀ M Δx, M = C⁻¹ − diag(C)⁻¹, that turns the independent earth_norm_i priors
+# into the full MvNormal(μ, C). Plain loops for Enzyme.
 function earth_prior_correlation(parameters, M::AbstractMatrix, μ::AbstractVector)
     x = _params_by_prefix(parameters, Val(:earth_norm_))
     acc = zero(eltype(x))

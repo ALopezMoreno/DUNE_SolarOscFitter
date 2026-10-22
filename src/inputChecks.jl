@@ -1,33 +1,24 @@
 #=
 inputChecks.jl — sanity checks on a detector's input samples, and a per-bin rate breakdown.
 
-check_input_files(det) runs before the samples are used and logs a per-file table (rows,
-selected rows, weight range, selected events at or above the threshold). It warns about:
-  - samples that look pre-binned (Ereco on a regular grid): the fitter needs event-level
-    samples and re-bins them, so a pre-binned input aliases;
-  - signal and ES background samples in which every event passes the selection (their
-    efficiency needs the unselected events; CC background files may hold only selected ones);
-  - byte-identical input files (e.g. a "smeared" sample that was never smeared).
-
-save_rate_breakdown writes, per channel, the Asimov data, signal and each background component
-per Ereco bin at the true parameters (CSV next to the other outputs), and logs the in-window totals.
+check_input_files(det) logs a per-file table and warns about samples that look pre-binned (they
+alias when re-binned), signal or ES background samples without unselected events (the efficiency
+needs them) and byte-identical files. save_rate_breakdown writes the per-bin Asimov breakdown.
 =#
 using CSV, DataFrames, Printf
 
 """
     looks_prebinned(E; min_step = 1e-5) -> Bool
 
-True when `E` looks like a histogram saved as bin centres: (at least 5) distinct values with
-about one row per value, all on one regular grid whose step is at least `min_step` (GeV;
-10 keV). Event samples stored with limited precision (keV rounding, Float32) also sit on a
-grid, but a much finer one, and repeat values; neither is flagged. The grid tolerance accepts
-bin centres that went through Float32. Log-spaced histograms are not detected.
+True when `E` looks like bin centres of a histogram: at least 5 distinct values, about one row
+each, on one regular grid of step ≥ `min_step` (GeV). Rounded event samples sit on a finer grid
+and repeat values. Log-spaced histograms are not detected.
 """
 function looks_prebinned(E::AbstractVector; min_step = 1e-5)
     v = collect(skipmissing(E))
     u = sort!(unique(v))
     length(u) >= 5 || return false
-    length(u) >= 0.9 * length(v) || return false       # histograms have one row per bin
+    length(u) >= 0.9 * length(v) || return false
     d = diff(u)
     step = minimum(d)
     step >= min_step || return false
@@ -69,7 +60,6 @@ function input_file_summary(path, role, window)
 end
 
 function check_input_files(det)
-    # the fit uses everything reconstructed at or above the threshold (the last bin holds the overflow)
     win_ES = (det.E_threshold.ES, Inf)
     win_CC = (det.E_threshold.CC, Inf)
     n_ES = min(length(det.ES_filepaths_BG), length(det.ES_bg_norms), length(det.ES_bg_sys))
@@ -94,8 +84,7 @@ function check_input_files(det)
         r.prebinned && @warn "[$(det.name)] $(r.file) ($(r.role)) looks pre-binned: its Ereco values lie " *
                              "on a regular grid. The fitter needs event-level samples; a histogram " *
                              "re-binned into the analysis bins aliases."
-        # Signal samples and ES backgrounds need the unselected events too (efficiency =
-        # selected / total). CC background files may legitimately hold only the selected events.
+        # the efficiency needs the unselected events (CC background files may omit them)
         if r.role in ("ES νe signal", "ES νμτ signal", "CC signal", "ES background") &&
            r.has_mask && r.selected == r.rows && r.rows > 0
             @warn "[$(det.name)] every event of $(r.file) ($(r.role)) passes the selection (mask = true " *
@@ -112,10 +101,9 @@ end
     save_rate_breakdown(path_prefix, det_name, channel, edges_GeV, index, data_total, BG_raw,
                         conv, par_counts, norms_true, names, night_factor; mc = nothing)
 
-Write `<path_prefix>_<det>_<channel>_breakdown.csv`: per Ereco bin the Asimov data (day + all
-night bins), each background component at its true normalisation, their sum and the signal
-(data − backgrounds). Logs the in-window totals. `night_factor` = f_day^bg + f_night^bg·Σ exposure_weights_bg (time-weighted)
-turns a background spectrum into its day + night total.
+Write `<path_prefix>_<det>_<channel>_breakdown.csv`: per Ereco bin the Asimov data (day + night),
+each background at its true norm, their sum and the signal; log the in-window totals.
+`night_factor` turns a background spectrum into its day + night total.
 """
 function save_rate_breakdown(path_prefix, det_name, channel, edges_GeV, index, data_total, BG_raw,
                              conv, par_counts, norms_true, names, night_factor; mc = nothing)
@@ -136,7 +124,7 @@ function save_rate_breakdown(path_prefix, det_name, channel, edges_GeV, index, d
     for (nm, c) in zip(names, comps)
         df[!, "bg_" * nm] = c
     end
-    if mc !== nothing   # MC statistics of the prediction (src/likelihoods/mcstat.jl)
+    if mc !== nothing
         df[!, "mc_effective_count"] = mc.a
         df[!, "mc_rel_uncertainty"] = [isfinite(a) && a > 0 ? 1 / sqrt(a) : 0.0 for a in mc.a]
     end

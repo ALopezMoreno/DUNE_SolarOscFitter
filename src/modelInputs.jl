@@ -1,27 +1,22 @@
 #=
-modelInputs.jl — loaders for the tabulated model inputs, built on TabulatedInput (tabulated.jl).
-No top-level computation: solarFlux.jl, exposure.jl and earthProfile.jl call these with the
-configured files, and tests/test_tabulated.jl calls them directly. The CC cross section is read
-in xsec.jl (read_cc_xsec_table). The NightOsc Earth model keeps its own reader and interpolation
-(src/oscillations/night/earth_model.jl), validated to the same contract.
+modelInputs.jl — loaders for the tabulated model inputs (solar model and spectra, exposure, Earth),
+built on TabulatedInput. Function definitions only. The CC cross section is read in xsec.jl; the
+NightOsc Earth model has its own reader (night/earth_model.jl).
 =#
 using QuadGK
 using JLD2
-include(joinpath(@__DIR__, "core.jl"))         # MATTER_POTENTIAL_CONST
+include(joinpath(@__DIR__, "core.jl"))
 include(joinpath(@__DIR__, "tabulated.jl"))
 
 if !@isdefined(EARTH_RADIUS_KM)
-    const EARTH_RADIUS_KM = 6371.0  # Earth radius in kilometers
+    const EARTH_RADIUS_KM = 6371.0
 end
 
 """
     solar_flux_spectra(energies, flux8B, fluxHep, E_max; source) -> NamedTuple
 
-The ⁸B and hep spectra (energies in GeV, from flux_model_file), normalised to unit integral.
-Two modelling points complete the table; they are part of it, not an extrapolation: zero flux
-at E = 0 and, when the analysis range ends above the last tabulated energy (E_max >
-energies[end]), zero flux at E_max (a linear ramp from the last tabulated value down to 0).
-Evaluating outside [0, max(energies[end], E_max)] is an error.
+The ⁸B and hep spectra (energies in GeV), normalised to unit integral. The table is completed by
+zero flux at E = 0 and, if E_max > energies[end], at E_max. Evaluating outside it is an error.
 """
 function solar_flux_spectra(energies, flux8B, fluxHep, E_max; source::AbstractString = "")
     E = [0.0; energies]
@@ -73,10 +68,9 @@ end
 """
     load_solar_model(path) -> (model::NamedTuple, flux_hep)
 
-Reads a solar-model JLD2 file (keys `radii`, `n_e`, `prodFractionBoron`, `prodFractionHep`),
-validates it (`validate_solar_model`) and adds the production-weighted mean densities used by
-fastFit. `flux_hep` is the model's hep flux when the file stores it (SF-III files), else `nothing`;
-it is returned separately so the model tuple passed to the oscillation code keeps its type.
+Read and validate a solar-model JLD2 file and add the production-weighted mean densities (fastFit).
+`flux_hep` is the file's hep flux (SF-III files), else `nothing`; returned separately so the model
+tuple keeps its type.
 """
 function load_solar_model(path::AbstractString)
     isfile(path) || error("Solar model file not found: $path")
@@ -93,18 +87,10 @@ end
 """
     load_exposure(path) -> (time = TabulatedInput, flux = TabulatedInput)
 
-Solar exposure vs cos z (SPEC 4.6): a CSV with the header row `cosz,time_weight,flux_weight` ('#'
-comment lines allowed), made by `utils/make_solar_exposure.py`; every row is a point, cos z < 0 is
-night (Sun below the horizon).
-- `time_weight`: fraction of time the Sun spends per unit cos z. Backgrounds (rates fixed in time).
-- `flux_weight`: the same weighted by the solar flux, (1 AU / r)². The signal.
-
-The two columns are read as two TabulatedInputs on the same nodes. Evaluating outside the table is
-an error. (It used Flat() extrapolation before.) The integrals start at the lowest night cos z of
-this file (exposure.jl), and NightOsc clamps its zenith nodes to the bin range, which they can miss by
-1 ulp (night/binning.jl). The table must reach both sides of cos z = 0: the day/night splits come from
-it (exposure_day_night_fractions). The legacy single-weight file (headerless `cos z, exposure`) is an
-error: one column for both would give the signal the wrong weighting.
+Solar exposure vs cos z (SPEC 4.6) from a CSV with header `cosz,time_weight,flux_weight`
+(`utils/make_solar_exposure.py`; cos z < 0 is night): `time_weight` for the backgrounds,
+`flux_weight` (× (1 AU / r)²) for the signal. Evaluating outside the table is an error. A legacy
+single-weight file is rejected.
 """
 function load_exposure(path::AbstractString)
     isfile(path) || error("solar exposure: table not found: $path")
@@ -130,14 +116,9 @@ end
 """
     exposure_day_night_fractions(expo::TabulatedInput) -> (day = f_day, night = f_night)
 
-Day/night split of one exposure column (SPEC 4.6): f_night = ∫ exposure over cos z < 0 divided by ∫
-exposure over the whole table, f_day = 1 − f_night (night = Sun below the horizon, cos z < 0). Applied
-to the flux-weighted column it gives the signal split, to the time-weighted one the background split.
-
-The integrals are exact for the linear interpolant: trapezoids on the nodes plus cos z = 0, each side
-summed outward from cos z = 0, so a table mirror-symmetric in cos z gives exactly 0.5. Errors if the
-table does not reach both sides of the horizon, or has no exposure on one side (a night-only file
-cannot fix the split).
+Day/night split of one exposure column (SPEC 4.6): f_night = ∫_{cos z<0} / ∫, f_day = 1 − f_night.
+Exact for the linear interpolant, summed outward from cos z = 0 so a symmetric table gives exactly
+0.5. Errors unless the table has exposure on both sides of the horizon.
 """
 function exposure_day_night_fractions(expo::TabulatedInput)
     x, y = expo.x, expo.y
@@ -170,9 +151,8 @@ end
 """
     load_earth_model(path) -> Dict(:radius, :potential, :source)
 
-Earth model table: whitespace-delimited (r/R⊕, density [g/cm³], electron fraction), no header
-row. Radii are in km, stretched by 1e-10 so that points on the surface (r = 6371 km up to
-rounding, e.g. the end of a makePaths track) stay inside the table; potential in eV²/GeV.
+Earth model table (r/R⊕, density [g/cm³], electron fraction; no header). Radii in km, stretched by
+1e-10 so surface points stay inside the table; potential in eV²/GeV.
 """
 function load_earth_model(path::AbstractString)
     r_frac, density, e_fraction = read_numeric_table(path; name = "Earth model", ncols = 3, header = false, delim = nothing)

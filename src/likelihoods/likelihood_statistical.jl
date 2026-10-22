@@ -1,5 +1,4 @@
-# Out of line: logging macros contain try/catch, which inside the likelihood loop forces
-# variables into boxes that Enzyme's activity analysis rejects.
+# Out of line: a logging macro's try/catch would box variables Enzyme rejects.
 @noinline _warn_negative_bin(i, e) =
     (@warn "poissonLogLikelihood: bin $i negative within numerical noise (e=$e)"; nothing)
 
@@ -47,12 +46,7 @@ function perbin_poissonLogLikelihood(nExpected::AbstractArray,
         m < 0 && throw(ArgumentError("perbin_poissonLogLikelihood: bin $I measured count negative (m=$m)"))
 
         if m > 0
-            # Use the same floor as poissonLogLikelihood so the per-bin diagnostic
-            # is consistent with what the aggregate LLH gradient exposes to the sampler.
-            # A 1e-300 floor (vs 1e-12 in the aggregate) lets the sampler roam freely
-            # below 1e-12 (flat aggregate gradient) while the per-bin formula assigns
-            # wildly different log values there — producing spurious variance/score,
-            # especially in low-count overflow bins.
+            # same floor as poissonLogLikelihood, so per-bin values match the total
             e_safe = 0.5 * (e + 1e-9 + sqrt((e - 1e-9)^2 + 1e-18))
             out[I] = -(e - m * log(e_safe))
         else
@@ -64,20 +58,8 @@ function perbin_poissonLogLikelihood(nExpected::AbstractArray,
 end
 
 
+# Poisson log-likelihood with Barlow–Beeston treatment of the uncertainty of the expectation
 function barlowBeestonLogLikelihood(nExpected, nMeasured, sigmaVar)
-    """
-    Calculate the Poisson log likelihood given expected and measured counts with uncertainties in the expectation.
-
-    # Arguments
-    - `nExpected::Vector{Float64}`: A vector of expected counts.
-    - `nMeasured::Vector{Float64}`: A vector of measured counts.
-
-    # Returns
-    - `Float64`: The calculated log-likelihood.
-
-    # Errors
-    - Throws an error if any input is negative or if the vectors have different lengths.
-    """
     if !all(x -> x >= 0, nExpected) || !all(x -> x >= 0, nMeasured)
         throw(ArgumentError("Inputs must be non-negative"))
     end
@@ -104,9 +86,7 @@ function barlowBeestonLogLikelihood(nExpected, nMeasured, sigmaVar)
                     llh += beta * e - m + m * log(m / (beta*e)) + (beta - 1)^2 / (2*s^2) 
                 end
             elseif e == 0
-                # BB formula is undefined at e=0; substitute half a count (the effective 1σ
-                # scale of an empty Poisson bin) so the penalty stays finite.
-                # NOTE: intentional regularisation — revisit once a proper background floor is added.
+                # undefined at e = 0: half a count keeps the penalty finite (until a background floor exists)
                 e = 0.5
                 if s == 0
                     llh += (e - m + m * log(m / e))
@@ -120,9 +100,7 @@ function barlowBeestonLogLikelihood(nExpected, nMeasured, sigmaVar)
             if e == 0
                 llh += 0
             else
-                # BB formula is undefined at m=0; substitute half a count (the effective 1σ
-                # scale of an empty Poisson bin) so the penalty stays finite.
-                # NOTE: intentional regularisation — revisit once a proper background floor is added.
+                # undefined at m = 0: half a count, as above
                 m = 0.5
                 if s == 0
                     llh += (e - m + m * log(m / e))

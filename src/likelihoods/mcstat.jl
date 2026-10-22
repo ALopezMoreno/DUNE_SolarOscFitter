@@ -1,33 +1,9 @@
 #=
-mcstat.jl — MC statistical uncertainty of the predictions in the likelihood.
-
-The predicted rates come from finite MC samples (signal response matrices, background
-templates). Following Dembinski & Abdelmotteleb (arXiv:2206.12346) and Conway
-(arXiv:1103.0354), as in MaCh3's `GetTestStatLLH`, each prediction μ is allowed to move by a
-factor β constrained by the MC: the MC is summarised per E_reco bin by its effective count
-
-    a = M² / Var_MC(M)        (M = predicted events in that E_reco bin, day + night)
-
-and β is profiled analytically.
-
-  DembinskiAbdelmotteleb:  −log L = Σ_b P(n_b; β μ_b) + P(a; β a),        β = (N + a)/(M + a)
-  BarlowBeeston (Conway):  −log L = Σ_b P(n_b; β μ_b) + a (β − 1)² / 2,   a β² + (M − a) β − N = 0
-
-with P(n; μ) = μ − n + n ln(n/μ) (Baker–Cousins), N = Σ_b n_b and M = Σ_b μ_b. The day bin and
-all night (cos z) bins of one E_reco bin come from the same MC events (exactly for backgrounds,
-night = day template × exposure; approximately for signal, whose night bins weight the same
-response with different oscillated E_true rates), so by default ("shared") one β per E_reco bin
-multiplies all of them. "independent" gives every bin its own β with the same a, as MaCh3 does
-per bin: it treats the night copies of one MC fluctuation as independent, which understates the
-normalisation uncertainty but lets the MC absorb day/night shape differences, diluting the
-day-night (Δm²₂₁) information.
-
-What is frozen: the effective count a, i.e. the RELATIVE MC uncertainty 1/√a, computed once at the
-Asimov truth. MaCh3 (UpdateW2 = false) instead freezes Σw², the absolute uncertainty, and
-recomputes a = μ²/Σw² from the current prediction; the two agree at the truth only.
-Not modelled: correlations of one MC sample across channels (the CC MC feeds both semi-inclusive
-channels; the ES MC also feeds the mis-ID term) and per-component shape fluctuations within one
-E_reco bin (one β covers all cos θ bins). Method: docs/likelihood.md.
+mcstat.jl — MC statistical uncertainty of the predictions in the likelihood (Dembinski &
+Abdelmotteleb, arXiv:2206.12346; Conway, arXiv:1103.0354). Each prediction is scaled by β,
+constrained by the effective MC count a = M²/Var_MC(M) of its E_reco bin (frozen at the Asimov
+truth) and profiled in closed form; by default one β covers the day and night bins of an E_reco
+bin, which share their MC. Formulas and limitations: docs/likelihood.md, section 3b.
 =#
 using Printf
 using Statistics: median

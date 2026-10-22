@@ -1,27 +1,13 @@
 #!/usr/bin/env julia
 #=
-make_solar_model_inputs.jl — build the fitter's solar-model files from the SF-III (B23) package.
-
-Source: Herrera & Serenelli, "Standard Solar Models B23 / SF-III", Zenodo record 10822316, v1.2,
-SolarModels_ICE2023_v1.2.zip (the tables parchita uses). Download and unzip it, then run
+make_solar_model_inputs.jl — the fitter's solar-model files from the SF-III (B23) package
+(Herrera & Serenelli, Zenodo 10822316 v1.2, SolarModels_ICE2023_v1.2.zip):
 
     julia --project utils/make_solar_model_inputs.jl <unzipped dir>/SolarModels
 
-It writes, for a high-Z and a low-Z composition,
-
-    inputs/SF3_GS98.jld2       GS98 (Grevesse & Sauval 1998), high-Z
-    inputs/SF3_AGSS09met.jld2  AGSS09met (Asplund et al. 2009), low-Z
-
-with the keys solarModel.jl reads (radii, n_e, prodFractionBoron, prodFractionHep) and provenance:
-the model's 8B and hep fluxes at Earth with fractional errors, the source files and their SHA-256.
-
-Conventions (same as the B16 files AGSS09_high_z.jld2 / GS98_low_z.jld2 it replaces):
-- radii: R/R_sun on the model's 5e-4 grid, (0, 0.5]. Beyond 0.5 R_sun the model has < 1e-8 of the
-  hep and < 1e-24 of the 8B production.
-- n_e: free electron density [N_A/cm^3], 10^log_ne.
-- prodFraction*: dP/d(R/R_sun) from nu_8B / nu_hep. The fitter normalises them itself.
-  The only negatives in the source (spline noise, |x| < 1e-10) are in the r = 0 row, which is cut;
-  the clip to 0 is a guard and changes nothing in the shipped files.
+writes inputs/SF3_GS98.jld2 (high-Z) and inputs/SF3_AGSS09met.jld2 (low-Z): radii (R/R_sun, (0, 0.5],
+beyond which < 1e-8 of the production lies), n_e = 10^log_ne [N_A/cm³], prodFraction* = dP/d(R/R_sun),
+plus the model's ⁸B and hep fluxes and the source files' SHA-256.
 =#
 using JLD2, SHA, Printf
 

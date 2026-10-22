@@ -1,41 +1,29 @@
 # Earth model (load_earth_model in modelInputs.jl) and the cos z grids
-include(joinpath(@__DIR__, "modelInputs.jl"))   # load_earth_model, create_interpolated_model, EARTH_RADIUS_KM
+include(joinpath(@__DIR__, "modelInputs.jl"))
 
-# Load and process Earth model
 earth_model = load_earth_model(earthModelFile)
 global earth = create_interpolated_model(earth_model)
 
-# Set up zenith angle arrays for neutrino path calculations.
-#
-# Coarse grid is piecewise-uniform with bin edges at PREM discontinuities so no
-# bin straddles a density jump.  Bins are allocated only within the compact
-# support of the solar exposure (the range of cos(zenith) the detector actually
-# sees); PREM boundaries outside that support are dropped.
-#
-# N_COSZ_SUB fine midpoints per coarse bin are used for oscillation computation,
-# then block-averaged back to coarse resolution.  N_COSZ_SUB=2 is needed only
-# when nBins_cosz < 40; at ≥ 40 the coarse grid already meets the Nyquist
-# requirement set by the slowest oscillation in the fit range.
+# cos z grids. The coarse (analysis) grid is piecewise uniform with edges at the core boundaries, so
+# no bin straddles a density jump, and covers only the exposure's support. Oscillations are computed
+# at N_COSZ_SUB midpoints per coarse bin and block-averaged back.
 
-# Detect the two largest density discontinuities from the loaded potential profile.
-# potential = density × e_fraction × const, so its jumps track density jumps.
-# Returns the two boundary cosz values sorted ascending (most negative = deepest first).
+# cos z of the inner-core and core-mantle boundaries: the two largest jumps of the potential
 const _IC_COSZ, _CM_COSZ = let
     r      = earth_model[:radius]      # km, centre→surface
     p      = earth_model[:potential]
     jumps  = abs.(diff(p))
-    top2   = sort(sortperm(jumps, rev=true)[1:2])   # indices of two largest jumps
+    top2   = sort(sortperm(jumps, rev=true)[1:2])
     r_bdry = [(r[i] + r[i+1]) / 2.0 for i in top2]
     cosz_v = sort([-sqrt(max(0.0, 1.0 - (rb / EARTH_RADIUS_KM)^2)) for rb in r_bdry])
     cosz_v[1], cosz_v[2]   # (inner-core boundary, core-mantle boundary)
 end
 
-# Lower bound of the exposure compact support on the night side.
-# Falls back to cosz_bins.min for scripts that don't set solarExposureFile.
+# Lowest night cos z of the exposure table (cosz_bins.min without solarExposureFile)
 const _COSZ_EXP_MIN = let
     cosz_floor = cosz_bins.min
     if @isdefined(solarExposureFile) && isfile(solarExposureFile)
-        cz = load_exposure(solarExposureFile).time.x   # both weightings share the cos z nodes
+        cz = load_exposure(solarExposureFile).time.x
         night_cosz = filter(c -> c <= 0.0, cz)
         isempty(night_cosz) ? cosz_floor : minimum(night_cosz)
     else
@@ -44,9 +32,7 @@ const _COSZ_EXP_MIN = let
 end
 
 function _alloc_cosz_bins(n_total, seg_lengths)
-    # max.(1, …) forces ≥1 bin per segment, so a zone with fewer bins than PREM
-    # segments would overflow (sum(counts) > n_total) and the correction loop below,
-    # whose range goes empty, could not claw it back → wrong total edge count.
+    # at least one bin per segment
     n_total >= length(seg_lengths) ||
         error("_alloc_cosz_bins: $n_total bins cannot cover $(length(seg_lengths)) PREM " *
               "segments (need ≥1 each). Lower nBins_cosz_fine or raise nBins_cosz.")
@@ -78,19 +64,15 @@ function _prem_breaks(lo, hi)
     breaks
 end
 
-# Fine cos(z) edges from `edge` (negative) up to 0. The day-night regeneration is an
-# OSCILLATION in cos(z) whose frequency encodes Δm²₂₁; estimating a frequency cleanly
-# requires UNIFORM sampling, so the fine zone is uniform (p=1) — graded spacing is a
-# varying sample rate that would distort the frequency content. (p>1 horizon-weights the
-# bins; kept as an option but not recommended for this measurement.)
+# Fine cos z edges from `edge` up to 0. Keep p = 1 (uniform): the regeneration oscillates in cos z
+# with a frequency set by Δm²₂₁, and graded spacing would distort it.
 function _graded_fine_edges(edge, n; p=1.0)
     a = abs(edge)
-    [-(a * (j / n)^p) for j in n:-1:0]     # increasing: edge … 0; p=1 ⇒ uniform spacing
+    [-(a * (j / n)^p) for j in n:-1:0]
 end
 
-# Coarse cos(z) edges. With nBins_cosz_fine>0: a graded fine zone in [cosz_fine_edge, 0]
-# (horizon-refined for the day-night first-peak) plus a PREM-aligned coarse zone below;
-# otherwise the legacy uniform-piecewise grid. Total stays at cosz_bins.bin_number.
+# Analysis cos z edges: with nBins_cosz_fine > 0 a fine zone [cosz_fine_edge, 0] above a
+# PREM-aligned coarse zone, otherwise the uniform-piecewise grid; nBins_cosz bins in total.
 const COARSE_COSZ_EDGES = let
     n_tot = cosz_bins.bin_number
     if nBins_cosz_fine > 0 && _COSZ_EXP_MIN < cosz_fine_edge < cosz_bins.max
@@ -106,17 +88,15 @@ const COARSE_COSZ_EDGES = let
     end
 end
 
-# The coarse grid must have exactly nBins_cosz+1 edges, else cosz, cosz_calc and
-# exposure_weights desync (silent mis-binning / shape errors downstream).
+# cosz, cosz_calc and the exposure weights all assume this
 @assert length(COARSE_COSZ_EDGES) == cosz_bins.bin_number + 1 "COARSE_COSZ_EDGES has $(length(COARSE_COSZ_EDGES)) edges, expected $(cosz_bins.bin_number + 1)"
 
-# Number of analysis cos(z) bins, frozen for type-stable (Enzyme-differentiable) code.
+# const for type stability (Enzyme)
 const N_COSZ_BINS = cosz_bins.bin_number
 
-# N_COSZ_SUB=2 only when the coarse grid is too sparse to meet Nyquist alone.
+# 2 only where the coarse grid alone would undersample the slowest oscillation
 const N_COSZ_SUB = cosz_bins.bin_number < 40 ? 2 : 1
 
-# Fine grid: N_COSZ_SUB midpoints per coarse bin
 global cosz_calc = let
     cz = Float64[]
     for i in 1:cosz_bins.bin_number
@@ -127,5 +107,4 @@ global cosz_calc = let
     cz
 end
 
-# Coarse bin centres for analysis-resolution arrays
 global cosz = [(COARSE_COSZ_EDGES[i] + COARSE_COSZ_EDGES[i+1]) / 2 for i in 1:cosz_bins.bin_number]

@@ -1,30 +1,14 @@
 #=
-regression_likelihood.jl
+regression_likelihood.jl — end-to-end regression of total_llh at fixed points on the frozen fixture
+config (tests/fixtures/regression_config.yaml: two detectors, ES and CC, fixed and free backgrounds,
+semi-inclusive angular ES) against tests/regression_reference.toml.
 
-End-to-end regression of the full likelihood: builds tests/fixtures/regression_config.yaml
-(RunMode SETUP, in a temporary output directory) and compares total_llh at a few fixed
-parameter points with tests/regression_reference.toml. The config uses frozen synthetic
-detector samples (tests/fixtures/), so changes to the real inputs do not move it; it covers
-ES and CC, two detectors, fixed and free backgrounds, and semi-inclusive angular ES.
+    julia --project tests/regression_likelihood.jl [variant] [--update] [--grad]
 
-    julia --project tests/regression_likelihood.jl [variant] [--update]
-
-variant: "night"  (default night calculation, NightOsc)
-         "legacy" (3-flavour per-path NumOsc night calculation)
-         "night_da", "night_bb", "night_da_indep" (night with the MC statistical uncertainty:
-          Dembinski–Abdelmotteleb or Conway's Barlow–Beeston, shared or independent day/night)
-         "night_sym" (night with tests/fixtures/solarExposure_symmetric.csv: the legacy night
-          exposure mirrored onto the day side, both weight columns equal, so signal and background
-          splits are 0.5 exactly, SPEC 4.6. Its
-          reference was set to the "night" values of the hard-coded 0.5/0.5 split (bf9ffec) and
-          reproduced to rtol 1e-12 when the split moved to the exposure file; since the night
-          weights are normalised by their own sum it differs from them by ≤ 6e-9 relative.)
---update rewrites the reference for this variant instead of checking it.
---grad   also checks the Enzyme reverse-mode gradient of the likelihood against ForwardDiff
-         at the "near" point with the CC xsec nuisances moved (variant "night" only; the first Enzyme call compiles for minutes).
-
-Each variant runs in its own process (the setup defines constants). runtests.jl runs both
-when JULIA_REGRESSION=1.
+variants: night (NightOsc), legacy (NumOsc), night_da / night_bb / night_da_indep (MC statistics:
+Dembinski–Abdelmotteleb or Barlow–Beeston, shared or independent day/night), night_sym (symmetric
+exposure, splits 0.5 exactly; matches the old hard-coded 0.5/0.5 split to 6e-9). --update rewrites
+the reference; --grad checks Enzyme against ForwardDiff (night only). One process per variant.
 =#
 using YAML, TOML, Printf
 
@@ -96,10 +80,8 @@ points = Dict(
 )
 llh_values = Dict(name => Float64(Base.invokelatest(total_llh, p)) for (name, p) in points)
 
-# MC-statistics variants: the per-bin diagnostic (derived mode) at the displaced point. Every piece
-# is a finite −Q/2 ≤ 0 (Baker–Cousins form), and per detector the pieces add up to the detector's
-# total minus its overflow E_reco bin, which the diagnostic leaves out (computed here on its own).
-# (The plain Poisson diagnostic is −(μ − n ln μ), not Baker–Cousins, so it is not checked.)
+# MC-statistics variants: per-bin pieces at the displaced point are finite, ≤ 0, and add up to the
+# detector's total minus its overflow bin.
 for dname in (haskey(VARIANTS[variant], "mc_stat_likelihood") ? Base.invokelatest(() -> collect(keys(detector_perbin_fns))) : String[])
     p   = points["near"]
     pb  = Base.invokelatest(detector_perbin_fns[dname], p)

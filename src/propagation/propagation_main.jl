@@ -6,44 +6,6 @@ include(joinpath(@__DIR__, "propagation_debug.jl"))
 
 using .PropagationDebug
 
-"""
-    propagateSamples(unoscillatedSample, responseMatrices, params, solarModel,
-                     bin_edges, raw_backgrounds)
-
-Main function to propagate unoscillated neutrino samples through oscillations
-and detector response to calculate expected event rates.
-
-Arguments:
-- unoscillatedSample: Unoscillated MC event rates by channel and process
-- responseMatrices: Detector response matrices for energy reconstruction
-- angularResponseMatrices: Angular reconstruction matrices for background discrimination
-- params: Oscillation and systematic parameters
-- solarModel: Solar neutrino production model
-- bin_edges: Energy bin edges for analysis (bin centres computed elsewhere)
-- raw_backgrounds: Background event samples
-
-Returns:
-- eventRate_ES_day
-- eventRate_CC_day
-- eventRate_ES_night
-- eventRate_CC_night
-- BG_ES
-- BG_CC
-"""
-
-"""
-    propagateSamples(unoscillatedSample, responseMatrices, params, solarModel,
-                     bin_edges, raw_backgrounds, det_flags; verbose=false)
-
-Propagate unoscillated samples through oscillations and detector response.
-`det_flags` is a named tuple with fields:
-  ES_mode, CC_mode, angular_reco, inclusive_analysis, angular_cos_cut, det_name
-
-Returns 7 values:
-  eventRate_ES_day, eventRate_CC_day, eventRate_ES_night, eventRate_CC_night,
-  BG_ES, BG_CC, CC_incl_spectrum
-where `CC_incl_spectrum` is `nothing` when `inclusive_analysis` is false.
-"""
 @noinline function _log_unoscillated_rates(unoscillatedSample, params, det_flags)
     println()
     @logmsg Setup "── [$(det_flags.det_name)] Unoscillated event rates (true-E, pre-efficiency) ──"
@@ -78,11 +40,19 @@ function compute_shared_osc_probs(params, solarModel)
     )
 end
 
+"""
+    propagateSamples(unoscillatedSample, responseMatrices, params, solarModel, bin_edges,
+                     raw_backgrounds, det_flags; precomputed_osc = nothing, verbose = false)
+        -> (ES_day, CC_day, ES_night, CC_night, BG_ES, BG_CC, CC_incl_spectrum)
+
+Expected event rates of one detector: oscillation, detector response and backgrounds.
+`CC_incl_spectrum` is `nothing` unless the analysis is (semi-)inclusive.
+"""
 function propagateSamples(unoscillatedSample, responseMatrices, params, solarModel,
                           bin_edges, raw_backgrounds, det_flags;
                           precomputed_osc=nothing, verbose=false)
 
-    # Oscillation probabilities — shared across detectors; skip if pre-supplied
+    # oscillation probabilities, shared across detectors
     oscProbs = if precomputed_osc === nothing
         compute_shared_osc_probs(params, solarModel)
     else
@@ -92,8 +62,7 @@ function propagateSamples(unoscillatedSample, responseMatrices, params, solarMod
     # 3) Backgrounds (detector-specific)
     BG_ES, BG_CC = normalize_backgrounds(raw_backgrounds, params, det_flags)
 
-    # 5) Verbose unoscillated rate logging (separate function: logging macros contain
-    #    try/catch, which would force this function's variables into boxes Enzyme rejects)
+    # 5) logging in a separate function: its try/catch would box variables Enzyme rejects
     verbose && _log_unoscillated_rates(unoscillatedSample, params, det_flags)
 
     oscillatedSample = compute_oscillated_samples(unoscillatedSample, params, oscProbs,
@@ -114,10 +83,9 @@ function propagateSamples(unoscillatedSample, responseMatrices, params, solarMod
         f_above = responseMatrices.CC_split.above
         f_below = responseMatrices.CC_split.below
 
-        # Forward hemisphere: inclusive CC (scaled to above-cut fraction, no double-counting)
+        # forward hemisphere: inclusive CC, scaled to the forward fraction
         cc_incl_day, cc_incl_night =
             compute_CC_inclusive_event_rates(oscillatedSample.CC, responseMatrices, det_flags)
-        # CC_incl_spectrum reflects the f_above-scaled contribution actually added to ES rates.
         CC_incl_spectrum = f_above .* if det_flags.angular_reco
             vec(sum(cc_incl_day, dims=1)) .+ vec(sum(cc_incl_night, dims=(1, 3)))
         else
@@ -126,9 +94,7 @@ function propagateSamples(unoscillatedSample, responseMatrices, params, solarMod
         eventRate_ES_day   .+= f_above .* cc_incl_day
         eventRate_ES_night .+= f_above .* cc_incl_night
 
-        # Backward hemisphere: CC signal + backgrounds (scaled to below-cut fraction) + mis-ID ES.
-        # Scaling by f_below applies uniformly to CC signal and CC backgrounds
-        # (both assumed isotropically distributed in angle).
+        # backward hemisphere: CC signal and backgrounds × f_below (both isotropic) + ES mis-ID
         eventRate_CC_day, eventRate_CC_night =
             compute_CC_event_rates(oscillatedSample.CC, responseMatrices, BG_CC, det_flags)
         eventRate_CC_day   .*= f_below

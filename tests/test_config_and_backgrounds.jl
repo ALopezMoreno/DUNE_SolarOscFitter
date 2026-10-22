@@ -8,12 +8,7 @@ using Distributions
 include(joinpath(@__DIR__, "..", "src", "readConfig.jl"))
 include(joinpath(@__DIR__, "..", "src", "backgrounds.jl"))
 
-# ── warn_if_bg_arrays_mismatched ─────────────────────────────────────────────
-# build_backgrounds zips the background file list against its normalisation/
-# systematic arrays, so a shorter norms/sys array is a *supported* way to only
-# use the first N background files (confirmed by the maintainer). The risk is
-# that this silent truncation looks identical to an accidental typo in a
-# hand-edited config — a mismatch must now be visible in the logs.
+# ── warn_if_bg_arrays_mismatched: shorter norms/sys arrays (allowed) must show in the log ──
 @testset "warn_if_bg_arrays_mismatched" begin
     @test_logs (:warn,) warn_if_bg_arrays_mismatched(
         "ES", ["a", "b", "c"], [1.0, 2.0], [0.1, 0.2],
@@ -23,11 +18,7 @@ include(joinpath(@__DIR__, "..", "src", "backgrounds.jl"))
     )
 end
 
-# ── config schema smoke test ─────────────────────────────────────────────────
-# These YAML files are hand-edited and copy-pasted (the array-length mismatch
-# above was found this way); a cheap parse-only pass over every maintained
-# config catches structural typos (missing keys, wrong types) before a
-# multi-hour MCMC run fails or silently misbehaves.
+# ── every maintained config parses (catches typos before a long run) ──
 function parses_ok(config)
     if haskey(config, "detectors")
         active = get(config, "active_detectors", collect(keys(config["detectors"])))
@@ -40,9 +31,7 @@ function parses_ok(config)
     return true
 end
 
-# Pre-angular-reco flat-format example configs — these predate the
-# `reconstruction_sample_ES_angle` key and are already known to fail; kept as
-# @test_broken so a future fix (or removal) is noticed instead of re-silenced.
+# Old flat example configs without `reconstruction_sample_ES_angle`: @test_broken until fixed or removed
 const KNOWN_STALE_CONFIGS = Set([
     "config.yaml",   # configs/config.yaml (flat legacy example, not the root one)
     "config1.yaml", "config2.yaml", "config3.yaml", "config4.yaml",
@@ -78,8 +67,8 @@ const KNOWN_STALE_CONFIGS = Set([
 end
 
 # ── unknown config keys ──────────────────────────────────────────────────────
-# A misspelled key used to be ignored silently (its default was used instead). It must stop the
-# run, naming the key, its section and the closest known key; obsolete keys only warn.
+# A misspelled key stops the run, naming the key, its section and the closest known key; obsolete
+# keys only warn.
 @testset "validate_config_keys" begin
     repo_root = joinpath(@__DIR__, "..")
     root = load_parameters(joinpath(repo_root, "config.yaml"))

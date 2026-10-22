@@ -107,6 +107,25 @@ response counts and the background weights. Method: Dembinski & Abdelmotteleb,
 [arXiv:2206.12346](https://arxiv.org/abs/2206.12346); tests in `tests/test_mcstat.jl` and the
 regression variants `night_da`, `night_bb`, `night_da_indep`.
 
+With P(n; μ) = μ − n + n ln(n/μ) (Baker–Cousins), N = Σ_b n_b and M = Σ_b μ_b over the bins b that
+share one β:
+
+    DembinskiAbdelmotteleb:  −log L = Σ_b P(n_b; β μ_b) + P(a; β a),        β = (N + a)/(M + a)
+    BarlowBeeston (Conway):  −log L = Σ_b P(n_b; β μ_b) + a (β − 1)² / 2,   a β² + (M − a) β − N = 0
+
+The day bin and the night bins of one E_reco bin come from the same MC events (exactly for
+backgrounds, night = day template × exposure; approximately for the signal, whose night bins weight
+the same response with other oscillated rates), hence one β per E_reco bin by default.
+`mc_stat_day_night: independent` gives every bin its own β with the same a, as MaCh3 does: it treats
+the night copies of one MC fluctuation as independent, understating the normalisation uncertainty
+and letting the MC absorb day/night shape differences, which dilutes the Δm²₂₁ information.
+
+The effective count a, i.e. the relative MC uncertainty 1/√a, is frozen at the Asimov truth. MaCh3
+(`UpdateW2 = false`) freezes Σw² instead and recomputes a = μ²/Σw²; the two agree at the truth
+only. Not modelled: correlations of one MC sample across channels (the CC MC feeds both
+semi-inclusive channels; the ES MC also feeds the mis-ID term) and shape fluctuations within one
+E_reco bin (one β covers all cos θ bins).
+
 ## 4. Barlow–Beeston log-likelihood (old CC-night-only function, not used)
 
 Superseded by §3b; `llh_CC_barlowBeeston` is kept only as the formula reference it was.

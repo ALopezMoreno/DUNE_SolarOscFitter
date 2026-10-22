@@ -13,17 +13,7 @@ def two_sig_figs_math(x, pos):
 
 
 def gaussian(x, mu, sigma):
-    """
-    Calculate the value of a Gaussian function at x.
-
-    Parameters:
-    x (float): The point at which to evaluate the Gaussian.
-    mu (float): The mean (center) of the Gaussian.
-    sigma (float): The standard deviation of the Gaussian.
-
-    Returns:
-    float: The value of the Gaussian function at x.
-    """
+    """Normalised Gaussian density at x."""
     return (1 / (sigma * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((x - mu) / sigma) ** 2)
 
 

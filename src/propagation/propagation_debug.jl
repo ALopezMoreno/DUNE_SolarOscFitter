@@ -8,14 +8,13 @@ export debug_plot_CC_backgrounds,
        debug_heatmap_CC_night,
        plot_angular_stacks
 
-# --- Vibrant but Balanced Palette (Hex) ---
-const ES_COL   = "#ff6b6b" # Vibrant Coral/Red
-const ES_LINE  = "#b33939" # Deep Crimson boundary
-const CC_COL   = "#70a1ff" # Bright Sky Blue
-const CC_LINE  = "#1e3799" # Royal Blue boundary
-const BG_COL   = :gray     # Gray
-const BG_LINE  = :black    # Black boundary
-const LINE_W   = 1.8       # Slightly thicker for visibility
+const ES_COL   = "#ff6b6b"
+const ES_LINE  = "#b33939"
+const CC_COL   = "#70a1ff"
+const CC_LINE  = "#1e3799"
+const BG_COL   = :gray
+const BG_LINE  = :black
+const LINE_W   = 1.8
 
 function debug_plot_CC_backgrounds(backgrounds; E_min::Real = 5, E_max::Real = 25)
     @assert !isempty(backgrounds.CC) "backgrounds.CC is empty"
@@ -117,9 +116,6 @@ end
 
 end # module
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Global Scope Functions
-# ─────────────────────────────────────────────────────────────────────────────
 using JLD2
 
 function compute_angular_components(unoscillatedSample, responseMatrices, params, solarModel,
@@ -237,8 +233,7 @@ function save_debug_data(unoscillatedSample, responseMatrices, params,
         f["BG_angular"] = det_flags.angular_reco ? d.BG_angular : zeros(0, 0)
         f["Ereco_min"]  = Float64(Ereco_bins_ES.min * 1e3)
         f["Ereco_max"]  = Float64(Ereco_bins_ES.max * 1e3)
-        # analysis threshold = lower edge of the first fitted bin (Ereco_min is the underflow bin's
-        # nominal lower edge, threshold − bin width)
+        # analysis threshold: lower edge of the first fitted bin
         f["Ereco_threshold"] = Float64(hasproperty(Ereco_bins_ES, :threshold) ? Ereco_bins_ES.threshold * 1e3 :
                                                                                 Ereco_bins_ES.min * 1e3)
         f["cos_min"]    = det_flags.angular_reco ? Float64(cos_scatter_bins.min) : 0.0
@@ -260,7 +255,7 @@ function save_debug_data(unoscillatedSample, responseMatrices, params,
         f["meta/cosz_min"]         = Float64(cosz_bins.min)
         f["meta/cosz_max"]         = Float64(cosz_bins.max)
         f["meta/cosz_n"]           = cosz_bins.bin_number
-        f["meta/cosz_edges"]       = collect(Float64.(COARSE_COSZ_EDGES))   # real (possibly non-uniform) night bin edges
+        f["meta/cosz_edges"]       = collect(Float64.(COARSE_COSZ_EDGES))
         f["meta/has_CC"]           = has_CC
         f["meta/has_CC_inclusive"] = has_CC_incl
         f["meta/has_angular"]      = det_flags.angular_reco

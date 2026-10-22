@@ -1,29 +1,16 @@
 #=
-tabulated.jl — one helper for tabulated model inputs (SPEC 8.1).
+tabulated.jl — one validated helper for tabulated model inputs (SPEC 8.1).
 
     t = TabulatedInput(x, y; name, source, units, extrapolation = :error, nonnegative = false)
-    t(q)            # linear interpolation at q (a scalar), or at each element of a vector
+    t(q)            # linear interpolation (Interpolations.jl) at a scalar or each element of a vector
     domain(t)       # (x[1], x[end])
-    used_range(t)   # (min, max) of the values queried so far, (NaN, NaN) if none
+    used_range(t)   # (min, max) queried so far
 
-Construction validates the table: equal lengths, at least two points, finite values, strictly
-increasing x (sorted, no repeated nodes), and y ≥ 0 when `nonnegative = true`. Errors name the
-input and its source. The extrapolation policy is explicit per input:
-    :error  evaluating outside [x[1], x[end]] throws a TabulatedDomainError (default);
-    :flat   the end value is returned (same as Interpolations' Flat());
-    :zero   zero is returned.
-Interpolation is Interpolations.jl's linear interpolation on the given nodes, so the value at
-an in-domain point is the one `linear_interpolation(x, y)` gives, bit for bit.
-
-Every scalar evaluation records the queried range and counts queries outside the domain, also
-under :flat and :zero, so no extrapolation is silent. Named inputs (register = true) are listed
-once at the end of setup by log_tabulated_inputs(). The helper is for setup only: no interpolant
-is evaluated on the likelihood path (it is not type-stable for Enzyme by design, and the range
-bookkeeping mutates state).
-
-`read_numeric_table(path; ...)` reads a delimited numeric table: '#' comment and blank lines are
-skipped, and the header row is either required (a numeric first row is then an error, so a
-headerless file cannot lose its first point) or forbidden (a non-numeric first row is an error).
+Construction validates the table (validate_table). Outside the domain, `:error` throws a
+TabulatedDomainError, `:flat` returns the end value, `:zero` returns 0; queries outside are counted
+in every mode and named inputs are listed by log_tabulated_inputs() after setup. Setup only: not
+type-stable for Enzyme and it mutates its usage record. `read_numeric_table` reads delimited numeric
+tables with a required or forbidden header row.
 =#
 using Interpolations
 using Logging

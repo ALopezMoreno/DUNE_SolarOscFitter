@@ -1,20 +1,9 @@
 #=
-osc_night.jl
-
-Night-time Earth crossing for the Solar Oscillation Fitter.
-
-Computes P(ν₁→νₑ) averaged over each (cos z, E_true) analysis bin, in the two-flavour
-approximation, for any radial Earth model. Each chord is cut into steps with their own
-average potential and slope; the fast oscillating terms are integrated over the bins in
-closed form. Differentiable with ForwardDiff and Enzyme in Δm²₂₁, θ₁₂, θ₁₃ and the
-per-layer density normalisations.
-
-Files in night/: earth_model.jl (Earth model, chords), kernels.jl (propagator, Filon
-quadrature), binning.jl (BinnedP1e), ad.jl (derivative rules).
-
-Port of SnuPpy's binned night calculation.
-
-Author: Andres Lopez Moreno
+osc_night.jl — NightOsc: P(ν₁→νₑ) averaged over each (cos z, E_true) bin, two-flavour, for any
+radial Earth. Chords are cut into steps with their own potential and slope, and the fast terms are
+integrated over the bins in closed form; differentiable (ForwardDiff, Enzyme) in Δm²₂₁, θ₁₂, θ₁₃
+and the layer densities. Port of SnuPpy's binned night calculation. night/: earth_model.jl,
+kernels.jl, binning.jl (BinnedP1e), ad.jl (derivative rules).
 =#
 module NightOsc
 

@@ -1,33 +1,16 @@
 #=
-runRecord.jl — the run record: the resolved configuration and its provenance, saved with every run.
-
-`write_run_record(outFile, yaml_file, config)` is called by readConfig.jl's main() once the config
-has been parsed (globals set) and before the RunMode script runs, so a run that crashes or is
-killed still leaves its record. It writes `<outFile>_config.yaml` with three sections:
-
-  provenance:        config file path and SHA-256 (and of its `base:` files), git commit / branch /
-                     dirty state, Julia version, host, threads, timestamp, RunMode
-  defaults_applied:  the keys absent from the YAML, with the values readConfig.jl used for them
-  config:            the resolved configuration = the YAML as loaded + defaults_applied.
-                     `YAML.load_file(record)["config"]` is a complete config file for a re-run.
-
-An existing record is never overwritten: it is renamed to `<outFile>_config.old<k>.yaml`.
-Derived mode writes into `<prevFile>.jld2`, so main() passes `<prevFile>_derived` as the prefix.
-Input files are pinned by SHA-256 (`provenance: input_sha256`): most of inputs/ is gitignored, so
-the git commit alone does not identify them.
-MCMC runs also store the same text in the chain file (key `run_config`, see store_run_record!).
-
-`defaults_applied` is built from the globals readConfig.jl set, so its key lists below must
-follow the `get(config, key, default)` calls there; tests/test_run_record.jl checks that every
-such key is covered.
+runRecord.jl — the resolved configuration and its provenance, written before each run as
+`<outFile>_config.yaml` (and into MCMC chain files as `run_config`). Sections: `provenance`
+(config, `base:` and input-file SHA-256, git state, Julia, host, RunMode), `defaults_applied`, and `config`
+(the YAML plus those defaults, a complete config for a re-run). Existing records are moved aside,
+never overwritten. The default lists below follow readConfig.jl's `get(config, key, default)`
+calls (checked by tests/test_run_record.jl).
 =#
 using YAML, Dates, SHA, JLD2
 using DataStructures: OrderedDict
 include(joinpath(@__DIR__, "configFiles.jl"))   # resolve_config, config_files (`base:` inheritance)
 
-# Top-level keys with a default in readConfig.jl main() → value used (in config-file units),
-# as thunks: only the defaults actually applied are evaluated. `nothing` (mcmc_seed) means
-# "not set: random seed".
+# Top-level defaults (config-file units), as thunks so only applied defaults are evaluated.
 function _toplevel_defaults_used()
     return OrderedDict{String,Function}(
         "TPC_threshold"      => () -> tpc_threshold * 1e3,              # MeV in the config, GeV internally
@@ -70,9 +53,7 @@ function _detector_defaults_used(det)
     )
 end
 
-# Keys that have a default but are deliberately not recorded: absent means "off/none" and the
-# value has no effect on the run (prevFile: no resume; nuFast/binnedNight: removed/renamed keys;
-# proposal_matrix: ignored).
+# Defaults not recorded: absent means "off" and has no effect on the run.
 const RUN_RECORD_UNRECORDED_KEYS = ("prevFile", "nuFast", "binnedNight", "proposal_matrix")
 
 """
@@ -166,8 +147,8 @@ function run_provenance(yaml_file::AbstractString; run_mode = "unknown", repo::A
     return p
 end
 
-# Meaning of the CC xsec tilt/curv parameters (SPEC 3.3). Change it whenever their meaning changes,
-# so that a chain from before is flagged when it is resumed, warm-started from or derived.
+# Meaning of the CC xsec tilt/curv parameters (SPEC 3.3); change it with their meaning, so reused
+# chains from another basis are flagged.
 const CC_XSEC_SHAPE_BASIS = "orthogonal-v1: norm·exp(tilt·p1 + curv·p2), SPEC 3.3"
 
 """
