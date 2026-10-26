@@ -18,29 +18,30 @@ end
     A = randn(rng, nl, nl) .* 0.02
 
     @testset "exact layer-scale draws" begin
-        θ = A * randn(rng, nl, ndraw)
+        θ = 0.01 .+ A * randn(rng, nl, ndraw)          # offset from the nominal counts as spread
         p = earth_prior_covariance(J, J * θ, w)
-        @test maximum(abs.(p.cov_projection .- cov(θ; dims=2))) < 1e-10 * maximum(abs.(cov(θ; dims=2)))
-        @test maximum(p.extra_variance) < 1e-10 * maximum(diag(cov(θ; dims=2)))
+        M2 = θ * θ' ./ ndraw
+        @test maximum(abs.(p.cov_projection .- M2)) < 1e-10 * maximum(abs.(M2))
+        @test maximum(p.extra_variance) < 1e-10 * maximum(diag(M2))
         @test p.mean ≈ vec(mean(θ; dims=2)) atol = 1e-12
     end
 
     # heteroscedastic noise the scales cannot represent
-    D = J * (A * randn(rng, nl, ndraw)) .+ 3e-4 .* randn(rng, nbin, ndraw) .* (0.2 .+ 3 .* rand(rng, nbin))
+    D = J * (0.01 .+ A * randn(rng, nl, ndraw)) .+ 3e-4 .* randn(rng, nbin, ndraw) .* (0.2 .+ 3 .* rand(rng, nbin))
     p = earth_prior_covariance(J, D, w)
 
     @testset "weighted projection" begin
         θw = (J' * (w .* J)) \ (J' * (w .* D))
-        @test p.cov_projection ≈ cov(θw; dims=2) rtol = 1e-10
+        @test p.cov_projection ≈ θw * θw' ./ ndraw rtol = 1e-10
         @test p.mean ≈ vec(mean(θw; dims=2)) rtol = 1e-10
         θu = J \ D                                     # unweighted: must differ
-        @test !isapprox(p.cov_projection, cov(θu; dims=2); rtol=1e-3)
+        @test !isapprox(p.cov_projection, θu * θu' ./ ndraw; rtol=1e-3)
     end
 
     @testset "added variances match the per-bin variance" begin
         sw = sqrt.(w)
         Aw = sw .* J .^ 2
-        bw = sw .* (vec(var(D; dims=2)) .- bin_variance(J, p.cov_projection))
+        bw = sw .* (vec(mean(D .^ 2; dims=2)) .- bin_variance(J, p.cov_projection))
         @test all(>=(0), p.extra_variance) && any(>(0), p.extra_variance)
         @test kkt_violation(Aw, bw, p.extra_variance) < 1e-8
         @test isposdef(p.cov)
@@ -54,10 +55,18 @@ end
         q = earth_prior_covariance(J, Dn, w)
         sw = sqrt.(w)
         Aw = sw .* J .^ 2
-        bw = sw .* (vec(var(Dn; dims=2)) .- bin_variance(J, q.cov_projection))
+        bw = sw .* (vec(mean(Dn .^ 2; dims=2)) .- bin_variance(J, q.cov_projection))
         @test any(<(0), Aw \ bw)                      # the constraint is active
         @test any(iszero, q.extra_variance)
         @test kkt_violation(Aw, bw, q.extra_variance) < 1e-8
+    end
+
+    @testset "coverage scaling" begin
+        blocks = [1:100, 101:200, 201:300]
+        k, Σ = cover(J, D, w[1:100], p.cov, blocks, 1.1)
+        c = [sum(w[1:100] .* bin_variance(J[r, :], Σ)) / sum(w[1:100] .* vec(mean(D[r, :] .^ 2; dims=2))) for r in blocks]
+        @test minimum(c) ≈ 1.1 rtol = 1e-12
+        @test Σ ≈ k .* p.cov
     end
 
     @testset "nnls optimality" begin

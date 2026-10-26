@@ -203,22 +203,24 @@ crust (2.6 g/cm³) and the full 220 km jump: the nominal Earth of EarthModels/pa
 <a id="29"></a>
 #### 🟢🟣 2.9 · Layer-scale prior from Earth draws
 `utils/make_earth_prior.jl` builds the prior of the layer scales from parchita draws of the full Earth
-model, on a fixed E_true × cos z grid (34 × 40, not the analysis binning): each draw's binned night P₁ₑ
-deviation from PREM is projected onto the scales by weighted least squares (CC-event weights W), and
-independent per-layer variances ≥ 0 are added so that diag(J Σ Jᵀ) matches the draws' per-bin variance
-(non-negative least squares, same weights). Layers no path crosses get no parameter.
+model, on a fixed E_true × cos z grid (34 × 40, not the analysis binning), weighted by CC events (W).
+The prior is **centred at PREM** (all scales 1), and spreads are second moments about PREM, so the
+draws' offset from PREM counts as uncertainty. Each draw's binned night P₁ₑ deviation from PREM is
+projected onto the scales by weighted least squares; independent per-layer variances ≥ 0 are added so
+that diag(J Σ Jᵀ) matches the draws' per-bin mean square (non-negative least squares, same weights);
+the result is scaled so that the event-weighted per-bin variance is **1.1 × the draws'** at the worst
+Δm²₂₁ evaluated (it covers, with a small margin). Layers no path crosses get no parameter.
 - 🟢 The projection is (JᵀWJ)⁻¹JᵀW D, to **1e-10** relative; draws that are exact layer-scale
-  perturbations give their sample covariance with no added variance.
+  perturbations give their second moment with no added variance.
 - 🟢 The added variances satisfy the non-negative least-squares optimality conditions of that match,
   to **1e-8** relative.
-- 🟢 The prior covariance is positive definite and is the projection covariance plus a non-negative
-  diagonal.
+- 🟢 After scaling, the smallest coverage over the Δm²₂₁ blocks is the target, to **1e-12**.
+- 🟢 The prior covariance is positive definite.
 - 🟣 The file records the draws (SHA-256, seed, parchita commit), the grids, the Δm²₂₁ values, the
-  fitter commit (both marked `-dirty` when built from uncommitted code), the per-bin variance ratio
-  on fitted and other Δm²₂₁, and a bootstrap error per width.
-> ✅ `test_earth_prior.jl` (synthetic draws). *(Inferred: drafted with the Earth rework; confirm.)*
-> Open for the maintainer: the prior centre (PREM or the draws' mean, ~1% lower in the deep layers)
-> and the accepted range of the per-bin variance ratio (now 0.80 fitted, 0.89 other Δm²₂₁).
+  fitter commit (both marked `-dirty` when built from uncommitted code), the coverage per Δm²₂₁, the
+  scale factor, and a bootstrap error per width.
+> ✅ `test_earth_prior.jl` (synthetic draws). Centre at PREM and overshooting coverage: maintainer,
+> 26 Oct 2026; the 1.1 margin is Claude's reading of "slightly overshoot". *(Rest inferred: confirm.)*
 
 ---
 

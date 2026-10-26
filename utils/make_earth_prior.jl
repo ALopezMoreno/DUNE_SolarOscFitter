@@ -5,7 +5,9 @@ Each draw's night P₁ₑ per (cos z, E) bin is computed by NightOsc on its own 
 covariance of the layer scales is built from them by `earth_prior_covariance` (src/earthPrior.jl),
 fitted on several Δm²₂₁ at once and checked on others. Bins are weighted by expected CC events
 (exposure × ⁸B flux × σ_CC). Layers no path crosses get no parameter. A bootstrap over the draws gives
-the statistical uncertainty of each width.
+the statistical uncertainty of each width. The prior is centred at PREM; spreads are about PREM, and
+the covariance is scaled to cover the draws' per-bin spread with a small margin (COVERAGE) at every
+Δm²₂₁ evaluated.
 
     python3 utils/make_earth_draws.py --draws 1000 --out inputs/earth_draws_parchita.h5
     julia -t auto --project utils/make_earth_prior.jl [draws.h5] [out.jld2]
@@ -24,6 +26,7 @@ const DM2_FIT    = [5e-5, 7.5e-5, 1e-4]
 const DM2_CHECK  = [4e-5, 6e-5, 8.5e-5, 1.3e-4]
 const TH12, TH13 = asin(sqrt(0.307)), asin(sqrt(0.022))
 const N_BOOT     = 200
+const COVERAGE   = 1.1     # prior per-bin variance / draws', at the worst Δm²₂₁: slightly over
 const FLUX_FILE  = joinpath(ROOT, "inputs", "fluxes.jld2")
 const XSEC_FILE  = joinpath(ROOT, "inputs", "CC_nue_40Ar_total_marley_v2.0.0.csv")
 const EXPOSURE_FILE = joinpath(ROOT, "inputs", "solarExposure_v2.csv")
@@ -83,43 +86,41 @@ function main()
         D[:, d] = p1e(engine(draw_model(rad[:, d], ne[:, d], bnd[:, d])), dm2_all) .- P0
     end
     nb = N_CZ * N_E
-    rows(ms) = reduce(vcat, [(findfirst(==(m), dm2_all) - 1) * nb .+ (1:nb) for m in ms])
+    rows(m) = (findfirst(==(m), dm2_all) - 1) * nb .+ (1:nb)
     w_ev = event_weights()
-    rf = rows(DM2_FIT)
-    prior = earth_prior_covariance(J[rf, :], D[rf, :], repeat(w_ev, length(DM2_FIT)))
-
-    # per-bin variance, prior / draws, event-weighted: on the fitted and the check Δm²₂₁
-    ratio(Σ, ms) = (r = rows(ms); w = repeat(w_ev, length(ms));
-                    sum(w .* bin_variance(J[r, :], Σ)) / sum(w .* vec(var(D[r, :]; dims=2))))
-    var_ratio = Dict(name => (fit=ratio(Σ, DM2_FIT), check=ratio(Σ, DM2_CHECK))
-                     for (name, Σ) in (("projection", prior.cov_projection), ("prior", prior.cov)))
+    rf = reduce(vcat, rows.(DM2_FIT))
+    blocks = rows.(dm2_all)
+    function build(idx)
+        p = earth_prior_covariance(J[rf, :], D[rf, idx], repeat(w_ev, length(DM2_FIT)))
+        k, Σ = cover(J, D[:, idx], w_ev, p.cov, blocks, COVERAGE)
+        return p, k, Σ
+    end
+    prior, k, Σ = build(1:n_draws)
 
     rng = Xoshiro(1)
-    boot = reduce(hcat, map(1:N_BOOT) do _
-        idx = rand(rng, 1:n_draws, n_draws)
-        sqrt.(diag(earth_prior_covariance(J[rf, :], D[rf, idx], repeat(w_ev, length(DM2_FIT))).cov))
-    end)
-    sd, sd_err = sqrt.(diag(prior.cov)), vec(std(boot; dims=2))
+    boot = reduce(hcat, [sqrt.(diag(build(rand(rng, 1:n_draws, n_draws))[3])) for _ in 1:N_BOOT])
+    sd, sd_err = sqrt.(diag(Σ)), vec(std(boot; dims=2))
 
-    println("\nlayer   sd       ± boot   (projection sd, extra sd)   mean offset")
+    println("\nlayer   sd       ± boot   (projection sd, extra sd, before ×$(round(sqrt(k), digits=3)))   mean offset")
     for (i, l) in enumerate(layers)
         @printf("%3d   %.4f   %.4f   (%.4f, %.4f)   %+.4f\n", l, sd[i], sd_err[i],
                 sqrt(prior.cov_projection[i, i]), sqrt(prior.extra_variance[i]), prior.mean[i])
     end
-    Cr = prior.cov ./ (sd * sd')
+    Cr = Σ ./ (sd * sd')
     println("\ncorrelations:"); foreach(i -> println(join([@sprintf("%+.2f", Cr[i, j]) for j in eachindex(layers)], " ")), eachindex(layers))
-    for (name, r) in var_ratio
-        @printf("\nper-bin variance %s / draws: fitted Δm² %.2f, check Δm² %.2f", name, r.fit, r.check)
+    cov_by_dm2 = Dict(name => [coverage(J[r, :], D[r, :], w_ev, S) for r in blocks]
+                      for (name, S) in (("projection", prior.cov_projection), ("matched", prior.cov), ("prior", Σ)))
+    println("\nper-bin variance / draws' mean square about PREM, event-weighted (fitted Δm²: $DM2_FIT):")
+    for name in ("projection", "matched", "prior")
+        @printf("  %-10s %s\n", name, join([@sprintf("%.1e: %.2f", m, c) for (m, c) in zip(dm2_all, cov_by_dm2[name])], "  "))
     end
-    println()
-    isposdef(prior.cov) || error("prior covariance is not positive definite")
-    abs(var_ratio["prior"].check - var_ratio["prior"].fit) > 0.2 &&
-        @warn "per-bin variance ratio differs between the fitted and the check Δm²₂₁ by more than 0.2"
+    isposdef(Σ) || error("prior covariance is not positive definite")
+    k > 2 && @warn "the matched covariance had to be scaled by $(round(k, digits=2)) to reach the coverage target"
 
     git(args...) = try readchomp(`git -C $ROOT $args`) catch; "unknown" end
-    jldsave(OUT_FILE; covariance=prior.cov, var"true"=ones(length(layers)), layers=collect(layers),
-            mean=1 .+ prior.mean, covariance_projection=prior.cov_projection, extra_variance=prior.extra_variance,
-            sd_bootstrap=sd_err, variance_ratio_fit=var_ratio["prior"].fit, variance_ratio_check=var_ratio["prior"].check,
+    jldsave(OUT_FILE; covariance=Σ, var"true"=ones(length(layers)), layers=collect(layers),
+            mean_draws=1 .+ prior.mean, covariance_projection=prior.cov_projection, extra_variance=prior.extra_variance,
+            coverage_target=COVERAGE, coverage_scale=k, coverage=cov_by_dm2["prior"], sd_bootstrap=sd_err,
             n_draws, draws_file=basename(DRAWS_FILE), draws_sha256=sha256_file(DRAWS_FILE), draws_attrs=attrs,
             dm2_fit=DM2_FIT, dm2_check=DM2_CHECK, cz_edges=CZ_EDGES, e_edges=E_EDGES,
             weights="CC events: $(basename(EXPOSURE_FILE)) flux weight x $(basename(FLUX_FILE)) 8B x $(basename(XSEC_FILE))",
