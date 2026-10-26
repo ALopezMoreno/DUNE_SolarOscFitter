@@ -21,7 +21,7 @@ Two marks on one item (e.g. 🟢🟡) mean part of it is tested and part is not;
 | Section | 🟢 | 🟡 | 🟣 | 🔴 |
 |---|:---:|:---:|:---:|:---:|
 | [1. Oscillation probabilities](#1-oscillation-probabilities) | 3 | 3 | 2 | – |
-| [2. Earth model](#2-earth-model) | 7 | 2 | 1 | – |
+| [2. Earth model](#2-earth-model) | 8 | 2 | 2 | – |
 | [3. Cross sections](#3-cross-sections) | 5 | – | – | – |
 | [4. Detector response and event rates](#4-detector-response-and-event-rates) | 10 | 1 | 2 | – |
 | [5. Likelihood](#5-likelihood) | 7 | 3 | 1 | – |
@@ -51,6 +51,7 @@ Partly tested items count in both columns.
 | [2.6](#26) | 🟢🟡 | Earth-norm priors use the full covariance |
 | [2.7](#27) | 🟢 | Parameter names sort numerically |
 | [2.8](#28) | 🟢🟣 | Analytic PREM with continental crust, 8 layers |
+| [2.9](#29) | 🟢🟣 | Layer-scale prior from full-model Earth draws |
 | [3.1](#31) | 🟢 | ES couplings (BKS95, PDG 2024), 5e-4 |
 | [3.2](#32) | 🟢 | ES σ = 0 below threshold |
 | [3.2a](#32a) | 🟢 | ES recoil quadrature vs analytic, 1e-12 |
@@ -198,6 +199,21 @@ crust (2.6 g/cm³) and the full 220 km jump: the nominal Earth of EarthModels/pa
 - makePaths and NightOsc cross the same 8 layers (2.3).
 > ✅ `test_prem.jl` (reference `tests/fixtures/prem_parchita.csv`). *(Inferred: drafted with the
 > Earth rework; confirm.)*
+
+<a id="29"></a>
+#### 🟢🟣 2.9 · Layer-scale prior from Earth draws
+`utils/make_earth_prior.jl` builds the prior of the layer scales from parchita draws of the full Earth
+model: each draw's binned night P₁ₑ deviation from PREM is projected onto the scales (weighted least
+squares, CC-event weights), and independent per-layer variances ≥ 0 are added so that J Σ Jᵀ matches
+the draws' per-bin variance (weighted least squares). Layers no path crosses get no parameter.
+- 🟢 Draws that are exact layer-scale perturbations give their sample covariance with no added variance,
+  to **1e-10**.
+- 🟢 The added variances satisfy the non-negative least-squares optimality conditions, to **1e-8**.
+- 🟢 The prior covariance is positive definite and is the projection covariance plus a non-negative
+  diagonal.
+- 🟣 The file records the draws (SHA-256, seed, parchita commit), the grids, the Δm²₂₁ values, the
+  fitter commit, the per-bin variance ratio on fitted and other Δm²₂₁, and a bootstrap error per width.
+> ✅ `test_earth_prior.jl` (synthetic draws). *(Inferred: drafted with the Earth rework; confirm.)*
 
 ---
 

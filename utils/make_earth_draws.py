@@ -5,11 +5,13 @@ n_e tabulated inside each shell, on the draw's own (shifted) radii.
 
 Usage::
 
-    python3 utils/make_earth_draws.py [--draws 500] [--seed 1] [--step-km 2] [--out inputs/earth_draws_parchita.h5]
+    python3 utils/make_earth_draws.py [--draws 1000] [--seed 1] [--step-km 2] [--out inputs/earth_draws_parchita.h5]
 
 Needs parchita (~/Desktop/parchita) and h5py.
 """
 import argparse
+import pathlib
+import subprocess
 
 import jax
 
@@ -45,9 +47,19 @@ def tables(n_draws, seed, step_km):
     return np.asarray(b), np.asarray(r), np.asarray(n_e), amp, f220
 
 
+def parchita_commit():
+    root = pathlib.Path(em.__file__).resolve().parents[2]
+    try:
+        run = lambda *c: subprocess.run(["git", "-C", root, *c], capture_output=True, text=True, check=True).stdout.strip()
+        dirty = run("status", "--porcelain", "--", "parchita")
+        return run("rev-parse", "--short", "HEAD") + ("-dirty" if dirty else "")
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--draws", type=int, default=500)
+    ap.add_argument("--draws", type=int, default=1000)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--step-km", type=float, default=2.0)
     ap.add_argument("--out", default="inputs/earth_draws_parchita.h5")
@@ -61,6 +73,7 @@ def main():
         f["f220"] = f220
         f.attrs["source"] = "parchita.osc.earth_model.sample_prior, lateral fields off"
         f.attrs["seed"] = a.seed
+        f.attrs["parchita_commit"] = parchita_commit()
     print(f"wrote {a.out}: {a.draws} draws, {r.shape[1]} points each")
 
 
