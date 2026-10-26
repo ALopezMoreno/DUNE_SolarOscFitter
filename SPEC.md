@@ -170,7 +170,8 @@ A layer not crossed by any path in the grid has **exactly zero gradient**.
 
 <a id="25"></a>
 #### 🟢 2.5 · Norm range
-`earth_norm_i` outside **[0, 2]** gives log L = −Inf.
+`earth_norm_i` outside **[0, 2]** gives log L = −Inf. In the MCMC this is the only bound: the prior
+(2.6) is untruncated.
 > ✅ `test_likelihood_correctness.jl`
 
 <a id="26"></a>
@@ -184,9 +185,12 @@ full-covariance MvNormal is not Enzyme-differentiable in BAT 4.0.9). Chain files
   round-trips.
 - 🟢 Enzyme and ForwardDiff agree to **1e-8** on the gradient of the transformed posterior HMC uses
   (BAT's PriorToNormal space), with the correlated 7-layer PREM prior.
-- 🟢 A prior may leave out inner layers no path crosses; they keep scale 1.
+- 🟢 A prior may leave out inner layers no path crosses; they keep scale 1. Setup refuses a prior that
+  misses a crossed layer, in both night calculations.
+- 🟢 A resume refuses a run state whose parameter layout differs from the current prior.
 - 🟢 The warm start reads vector-valued parameters from their flat chain columns.
-> ✅ `regression_likelihood.jl` (every variant; `night_prem --grad`), `test_warm_start.jl`
+> ✅ `regression_likelihood.jl` (every variant; `night_prem --grad`; only `night_prem` has a correlated
+> prior, so only it detects a wrong L), `test_warm_start.jl`
 
 <a id="27"></a>
 #### 🟢 2.7 · Parameter-name order

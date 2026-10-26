@@ -15,12 +15,26 @@ struct RunState
     mcmc_states::Vector       # Vector{MCMCState}  (chain + tuners + temperer)
     f_pretransform            # PriorToNormal unshaping transform
     end_step::Int
+    param_names::Vector{Symbol}   # BAT's flat parameter dimensions, checked on resume
 end
 
 save_runstate(rs::RunState, filename::String) =
     open(io -> serialize(io, rs), filename, "w")
-load_runstate(filename::String)::RunState =
-    open(deserialize, filename, "r")
+
+# A resume must find the same parameter layout: positions and the tuned transform are stored by index
+function load_runstate(filename::String, prior)::RunState
+    rs = try
+        open(deserialize, filename, "r")
+    catch err
+        error("Cannot resume from $filename (written by an older fitter version?): $(sprint(showerror, err)). " *
+              "Start a new run; warm_start_chain can start it from the old chain.")
+    end
+    names = reduce(vcat, last.(chain_columns(prior)))
+    rs isa RunState && rs.param_names == names ||
+        error("Cannot resume from $filename: its parameters $(rs isa RunState ? rs.param_names : "?") differ from " *
+              "the current prior's $names. Start a new run; warm_start_chain can start it from the old chain.")
+    return rs
+end
 
 
 # No-op burn-in (used when maxTuningAttempts == 0 → no native tuning phase).
@@ -101,7 +115,7 @@ function rebuild_live_state(run_state::RunState)
         cs_final  = mk(transformed_m, prop_live)
         MCMCState(cs_final, ms.proposal_tuner_state, ms.trafo_tuner_state, ms.temperer_state)
     end
-    return RunState(new_states, f_pretransform, run_state.end_step)
+    return RunState(new_states, f_pretransform, run_state.end_step, run_state.param_names)
 end
 
 
@@ -213,9 +227,9 @@ function runMCMCbatch(currentBatch, priors, args...)
           end
           _GRADIENTS_AT_BATCH_START[] = NightOsc.GRADIENT_COUNT[]   # count sampling batches only
 
-          run_state = RunState(mcmc_states, f_pretransform, 0)
+          run_state = RunState(mcmc_states, f_pretransform, 0, reduce(vcat, last.(chain_columns(prior))))
       else
-          run_state = load_runstate(prevFile * "_chainState.bin")
+          run_state = load_runstate(prevFile * "_chainState.bin", prior)
           run_state = rebuild_live_state(run_state)   # live closures; numeric state from disk
           if get(ENV, "RESUME_WARMUP", "1") == "1"
               @logmsg MCMC "Warming process (heap + JIT) before continuing..."
@@ -239,7 +253,7 @@ function runMCMCbatch(currentBatch, priors, args...)
           new_states, batch_samples =
               _sample_one_batch(run_state.mcmc_states, run_state.f_pretransform, nsteps)
           saveBatch(batch_samples, starting_step, priors, currentBatch)
-          run_state = RunState(new_states, run_state.f_pretransform, starting_step + nsteps)
+          run_state = RunState(new_states, run_state.f_pretransform, starting_step + nsteps, run_state.param_names)
           save_runstate(run_state, outFile * "_chainState.bin")
       end
 

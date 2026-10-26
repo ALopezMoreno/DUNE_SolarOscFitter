@@ -47,15 +47,20 @@ end
 
 # Names of BAT's flat parameter dimensions: a vector-valued `x` of length K gives x_1…x_K
 function chain_columns(prior)
-    x = rand(prior)
-    return [k => (x[k] isa AbstractVector ? [Symbol(k, "_", i) for i in eachindex(x[k])] : [k]) for k in keys(x)]
+    vs = BAT.varshape(prior)
+    shape(k) = BAT.ValueShapes.valshape(getproperty(vs, k))
+    return [k => (shape(k) isa BAT.ValueShapes.ScalarShape ? [k] :
+                  [Symbol(k, "_", i) for i in 1:BAT.ValueShapes.totalndof(shape(k))]) for k in keys(vs)]
 end
+
+# A point of the prior's shape (zeros), for its parameter names
+zero_point(prior) = (vs = BAT.varshape(prior); vs(zeros(BAT.ValueShapes.totalndof(vs))))
 
 # (transform, init, nsamples, scales) for BAT from the run `prefix`. `flat` maps BAT's parameters to the
 # chain-file columns (saveBatch), `unflat` maps them back.
 function build_warm_start(prefix::AbstractString, posterior, prior, pretransform;
                           max_samples::Integer = 20_000, init = nothing, flat = identity, unflat = identity)
-    names = collect(keys(flat(rand(prior))))
+    names = collect(keys(flat(zero_point(prior))))
     cols, w = load_chain_samples(prefix, names)
     n = length(w)
     n > 2 * length(names) || error("warm_start_chain: only $n samples in $prefix for $(length(names)) parameters")

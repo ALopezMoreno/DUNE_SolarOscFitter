@@ -45,6 +45,14 @@ if get(ENV, "JULIA_REGRESSION", "0") == "1"
             cmd = `$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) $(joinpath(@__DIR__, "regression_likelihood.jl")) $variant`
             @test success(pipeline(cmd; stdout=stdout, stderr=stderr))
         end
+        # SPEC 2.6: a prior that misses a crossed Earth layer is refused at setup, in both night calculations
+        for variant in ("refuse_night_K3", "refuse_legacy_K3")
+            cmd = `$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) $(joinpath(@__DIR__, "regression_likelihood.jl")) $variant`
+            out = IOBuffer()
+            ok = success(pipeline(cmd; stdout=out, stderr=out))
+            log = String(take!(out))
+            @test !ok && occursin("the Earth-uncertainty prior has 3 normalisations", log)
+        end
     end
 else
     @info "Skipping likelihood regression (set JULIA_REGRESSION=1 to enable)"

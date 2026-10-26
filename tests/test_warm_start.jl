@@ -94,9 +94,11 @@ include(joinpath(@__DIR__, "..", "src", "warmStart.jl"))
         @test abs(x.a - 0.3) < 0.1 && abs(x.b - 4) < 1 && abs(x.c - 2) < 2
     end
     file = joinpath(dir, "state.bin")
-    save_runstate(RunState(states, fpt2, 0), file)
+    save_runstate(RunState(states, fpt2, 0, [:a, :b, :c]), file)
     global warm_start = nothing                        # a resumed run does not rebuild the warm start
-    rs = rebuild_live_state(load_runstate(file))
+    # a resume with a different parameter layout is refused (positions and transform are by index)
+    @test_throws ErrorException load_runstate(file, distprod(b = Uniform(0, 10), a = Normal(0, 1), c = Normal()))
+    rs = rebuild_live_state(load_runstate(file, prior))
     new_states, _ = _sample_one_batch(rs.mcmc_states, rs.f_pretransform, 50)
     @test all(s.chain_state.f_transform.A == A && s.chain_state.f_transform.b == b for s in new_states)
     @test all(s.trafo_tuner_state isa BAT.NoMCMCTransformTuningState for s in new_states)

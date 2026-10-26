@@ -31,6 +31,11 @@ const VARIANTS  = Dict(
     # analytic PREM (8 layers, the inner core not crossed) with the correlated prior on layers 1–7
     "night_prem"     => Dict{String,Any}("nightOsc" => true, "earth_model_file" => "PREM",
                                          "earth_normalisation_prior_file" => "tests/fixtures/earth_prior_parchita.jld2"),
+    # a prior on 3 layers when paths cross 5: setup must refuse it (runtests.jl expects these to fail)
+    "refuse_night_K3"  => Dict{String,Any}("nightOsc" => true,
+                                           "earth_normalisation_prior_file" => "tests/fixtures/earth_prior_diag3.jld2"),
+    "refuse_legacy_K3" => Dict{String,Any}("nightOsc" => false, "fastFit" => true,
+                                           "earth_normalisation_prior_file" => "tests/fixtures/earth_prior_diag3.jld2"),
 )
 const RTOL = 1e-9
 

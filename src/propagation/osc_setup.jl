@@ -60,6 +60,11 @@ function build_osc_setup(; night_osc::Bool, fast::Bool, earth_uncertainty::Bool,
         check_exposure_normalisation(engine, cosz_edges, exposure, exposure_weights)
         NightOscNight{NightOsc.n_layers(earth)}(engine)
     else
+        # one lookup entry per crossed layer (padded to the prior's K): the prior must cover them all
+        if earth_uncertainty && length(legacy_lookup) != n_earth_norms
+            error("nightOsc = false: the Earth-uncertainty prior has $n_earth_norms normalisations, but paths " *
+                  "cross $(length(legacy_lookup)) layers of $earth_model_file")
+        end
         NumOscNight{fast}(legacy_paths, legacy_lookup)
     end
     return OscSetup{typeof(night),earth_uncertainty,fast}(night)
