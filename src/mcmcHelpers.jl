@@ -247,9 +247,13 @@ function runMCMCbatch(currentBatch, priors, args...)
       log_sampler_cost(nsteps, length(run_state.mcmc_states))
 
       if is_last
-          mode_result = mode(batch_samples)
-          mean_result = mean(batch_samples)
-          std_result  = std(batch_samples)
+          # in the chain-file parameters (flat_params: earth_norm_i, not BAT's earth_z)
+          mode_result = flat_params(mode(batch_samples))
+          flat = [flat_params(x.v) for x in batch_samples]
+          w = StatsBase.FrequencyWeights([x.weight for x in batch_samples])
+          ks = keys(flat[1])
+          mean_result = NamedTuple{ks}(Tuple(mean(getfield.(flat, k), w) for k in ks))
+          std_result  = NamedTuple{ks}(Tuple(std(getfield.(flat, k), w) for k in ks))
           batch_samples = nothing
           GC.gc()
           println(" ")
