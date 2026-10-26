@@ -51,8 +51,11 @@ Night-time P₁ₑ for the configured backend. Returns (oscProbs_1e, earth_norm_
 """
 setup_earth_propagation(E_calc, mixingPars, params) = _earth_crossing(OSC.night, E_calc, mixingPars, params)
 
-function _earth_crossing(night::NightOscNight, E_calc, mixingPars, params)
-    earth_norms = earth_uncertainty(OSC) ? _params_by_prefix(params, Val(:earth_norm_)) : nothing
+# Scales of all L layers: the sampled ones, then 1 for the uncrossed layers beyond them
+_layer_norms(x::Tuple, ::Val{L}) where {L} = ntuple(i -> i <= length(x) ? x[i] : one(eltype(x)), Val(L))
+
+function _earth_crossing(night::NightOscNight{L}, E_calc, mixingPars, params) where {L}
+    earth_norms = earth_uncertainty(OSC) ? _layer_norms(_params_by_prefix(params, Val(:earth_norm_)), Val(L)) : nothing
     p1e = NightOsc.binned_p1e(night.engine, mixingPars.Δm²₂₁, mixingPars.θ₁₂, mixingPars.θ₁₃, earth_norms)
     return p1e, earth_norms, nothing
 end

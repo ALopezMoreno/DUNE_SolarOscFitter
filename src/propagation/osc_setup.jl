@@ -5,7 +5,7 @@ osc_setup.jl — the oscillation calculation, chosen once from the config and st
 
 abstract type NightBackend end
 
-struct NightOscNight <: NightBackend
+struct NightOscNight{L} <: NightBackend      # L: layers of the Earth model
     engine::NightOsc.BinnedP1e
 end
 
@@ -46,17 +46,19 @@ function build_osc_setup(; night_osc::Bool, fast::Bool, earth_uncertainty::Bool,
 
     night = if night_osc
         earth = night_earth_model(earth_model_file)
-        if earth_uncertainty && n_earth_norms != NightOsc.n_layers(earth)
-            error("nightOsc: Earth model $earth_model_file has $(NightOsc.n_layers(earth)) layers, " *
-                  "but the Earth-uncertainty prior has $n_earth_norms normalisations")
-        end
         check_layer_agreement(earth, legacy_path, depth_km)
         engine = NightOsc.BinnedP1e(cosz_edges, energy_edges, exposure, earth;
                                     depth_km=depth_km, phase_const=Osc.PHASE_CONST)
+        # the prior covers layers 1…K; the layers beyond (kept at scale 1) must not be crossed
+        if earth_uncertainty && !(maximum(engine.used_layers) <= n_earth_norms <= NightOsc.n_layers(earth))
+            error("nightOsc: the Earth-uncertainty prior has $n_earth_norms normalisations, but Earth model " *
+                  "$earth_model_file has $(NightOsc.n_layers(earth)) layers and paths cross layers up to " *
+                  "$(maximum(engine.used_layers))")
+        end
         engine.shape == (n_cosz, n_E) ||
             error("nightOsc: engine grid $(engine.shape) differs from the analysis grid ($n_cosz, $n_E)")
         check_exposure_normalisation(engine, cosz_edges, exposure, exposure_weights)
-        NightOscNight(engine)
+        NightOscNight{NightOsc.n_layers(earth)}(engine)
     else
         NumOscNight{fast}(legacy_paths, legacy_lookup)
     end

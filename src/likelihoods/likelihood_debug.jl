@@ -24,13 +24,3 @@ function print_negatives_2d(arr, parameters)
         end
     end
 end
-# Correlation term −½ Δxᵀ M Δx, M = C⁻¹ − diag(C)⁻¹, that turns the independent earth_norm_i priors
-# into the full MvNormal(μ, C). Plain loops for Enzyme.
-function earth_prior_correlation(parameters, M::AbstractMatrix, μ::AbstractVector)
-    x = _params_by_prefix(parameters, Val(:earth_norm_))
-    acc = zero(eltype(x))
-    @inbounds for j in eachindex(μ), i in eachindex(μ)
-        acc += (x[i] - μ[i]) * M[i, j] * (x[j] - μ[j])
-    end
-    return -acc / 2
-end

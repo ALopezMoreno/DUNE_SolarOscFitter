@@ -99,6 +99,9 @@ function load_earth_normalisation_prior(jld2_file::String; required::Bool=true)
     data = JLD2.load(jld2_file)
     covariance = data["covariance"]
     central = data["true"]
+    # a prior from utils/make_earth_prior.jl covers layers 1…K (the crossed ones)
+    haskey(data, "layers") && data["layers"] != 1:length(central) &&
+        error("$jld2_file: Earth prior layers $(data["layers"]) must be 1…$(length(central))")
     global earth_normalisation_prior = MvNormal(central, covariance)
     global earth_normalisation_true = central
     return earth_normalisation_prior

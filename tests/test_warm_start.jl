@@ -101,3 +101,27 @@ include(joinpath(@__DIR__, "..", "src", "warmStart.jl"))
     @test all(s.chain_state.f_transform.A == A && s.chain_state.f_transform.b == b for s in new_states)
     @test all(s.trafo_tuner_state isa BAT.NoMCMCTransformTuningState for s in new_states)
 end
+
+# A vector-valued parameter (the Earth layer scales, SPEC 2.6), stored in the chain file as e_1…e_K
+@testset "warm start with a vector-valued parameter" begin
+    rng = Xoshiro(5)
+    prior = distprod(a = Normal(0, 1), e = MvNormal([1.0, 1.0], [0.01 0.006; 0.006 0.02]))
+    post = PosteriorMeasure(logfuncdensity(p -> -0.5 * ((p.a - 0.3)^2 / 1e-2 + sum(abs2, p.e .- 1) / 1e-3)), prior)
+    _, fpt = BAT.transform_and_unshape(PriorToNormal(), post, BATContext())
+    finv = BAT.inverse(fpt)
+    μ, Σ = [0.3, 0.1, -0.2], [0.01 0 0; 0 0.02 0.01; 0 0.01 0.03]
+    Z = rand(rng, MvNormal(μ, Σ), 2000)
+    X = [finv(Z[:, i]) for i in 1:size(Z, 2)]
+    prefix = joinpath(mktempdir(), "vec")
+    jldopen(prefix * ".jld2", "w") do f
+        g = JLD2.Group(f, "batch_1")
+        g["a"] = [x.a for x in X]; g["e_1"] = [x.e[1] for x in X]; g["e_2"] = [x.e[2] for x in X]
+        g["weights"] = ones(Int, length(X)); g["stepno"] = collect(1:length(X)); g["chainid"] = ones(Int, length(X))
+    end
+    flat(p) = (a = p.a, e_1 = p.e[1], e_2 = p.e[2])
+    unflat(q) = (e = [q.e_1, q.e_2], a = q.a)          # deliberately not in the prior's order
+    ws = build_warm_start(prefix, post, prior, PriorToNormal(); flat, unflat)
+    @test ws.names == [:a, :e_1, :e_2]
+    @test ws.transform.f.b ≈ vec(mean(Z, dims = 2)) rtol = 1e-8
+    @test ws.transform.f.A * ws.transform.f.A' ≈ cov(Z, dims = 2) rtol = 1e-8
+end

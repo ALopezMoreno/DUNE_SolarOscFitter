@@ -45,15 +45,24 @@ function weighted_mean_cov(Z::AbstractMatrix, w::AbstractVector)
     return μ, Symmetric(Σ)
 end
 
-# (transform, init, nsamples, scales) for BAT from the run `prefix`
+# Names of BAT's flat parameter dimensions: a vector-valued `x` of length K gives x_1…x_K
+function chain_columns(prior)
+    x = rand(prior)
+    return [k => (x[k] isa AbstractVector ? [Symbol(k, "_", i) for i in eachindex(x[k])] : [k]) for k in keys(x)]
+end
+
+# (transform, init, nsamples, scales) for BAT from the run `prefix`. `flat` maps BAT's parameters to the
+# chain-file columns (saveBatch), `unflat` maps them back.
 function build_warm_start(prefix::AbstractString, posterior, prior, pretransform;
-                          max_samples::Integer = 20_000, init = nothing)
-    names = collect(keys(BAT.varshape(prior)))
+                          max_samples::Integer = 20_000, init = nothing, flat = identity, unflat = identity)
+    names = collect(keys(flat(rand(prior))))
     cols, w = load_chain_samples(prefix, names)
     n = length(w)
     n > 2 * length(names) || error("warm_start_chain: only $n samples in $prefix for $(length(names)) parameters")
     keep = n <= max_samples ? (1:n) : round.(Int, range(1, n, length = max_samples))   # thin evenly
-    nts = [NamedTuple{Tuple(names)}(Tuple(cols[k][i] for k in names)) for i in keep]
+    ks = Tuple(keys(BAT.varshape(prior)))
+    inorder(x) = NamedTuple{ks}(Tuple(x[k] for k in ks))
+    nts = [inorder(unflat(NamedTuple{Tuple(names)}(Tuple(cols[k][i] for k in names)))) for i in keep]
     wk = w[keep]
 
     _, f_pretransform = BAT.transform_and_unshape(pretransform, posterior, BATContext())
@@ -77,5 +86,5 @@ function build_warm_start(prefix::AbstractString, posterior, prior, pretransform
     init_alg = init === nothing ? MCMCChainPoolInit(initval_alg = InitFromSamples(smp)) :
         MCMCChainPoolInit(init.init_tries_per_chain, init.nsteps_init, InitFromSamples(smp), init.strict)
     return (transform = transform, init = init_alg, nsamples = length(nts),
-            scales = sqrt.(diag(Σ)), names = names)
+            scales = sqrt.(diag(Σ)), names = reduce(vcat, last.(chain_columns(prior))))
 end

@@ -109,14 +109,14 @@ end
 function saveBatch(samples, start_step_number, priors, batchNumber)
   println("Saving batch $batchNumber (starting step $start_step_number)")
 
-  # 1) pick out only the sampled parameters
-  param_names = filter(p -> p in keys(priors),
-                       fieldnames(typeof(samples[1].v)))
+  # 1) pick out only the sampled parameters, with earth_norm unpacked (flat_params)
+  flat = [flat_params(s.v) for s in samples]
+  param_names = filter(p -> p in keys(priors), fieldnames(typeof(flat[1])))
 
   # 2) extract per-sample values
   param_data = Dict{Symbol, Any}()
   for pname in param_names
-      param_data[pname] = [getfield(s.v, pname) for s in samples]
+      param_data[pname] = [getfield(v, pname) for v in flat]
   end
 
   # 3) metadata
@@ -207,7 +207,7 @@ function runMCMCbatch(currentBatch, priors, args...)
           @logmsg MCMC "Tuning finished, running batches"
           try
               A = mcmc_states[1].chain_state.f_transform.A
-              log_transform_scales("Chain 1 tuned", sqrt.(diag(A * A')), collect(keys(BAT.varshape(prior))))
+              log_transform_scales("Chain 1 tuned", sqrt.(diag(A * A')), reduce(vcat, last.(chain_columns(prior))))
           catch err
               @logmsg MCMC "Could not log the tuned transform scales: $(sprint(showerror, err))"
           end

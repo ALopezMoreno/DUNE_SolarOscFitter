@@ -21,7 +21,7 @@ Two marks on one item (e.g. 🟢🟡) mean part of it is tested and part is not;
 | Section | 🟢 | 🟡 | 🟣 | 🔴 |
 |---|:---:|:---:|:---:|:---:|
 | [1. Oscillation probabilities](#1-oscillation-probabilities) | 3 | 3 | 2 | – |
-| [2. Earth model](#2-earth-model) | 8 | 2 | 2 | – |
+| [2. Earth model](#2-earth-model) | 9 | 1 | 2 | – |
 | [3. Cross sections](#3-cross-sections) | 5 | – | – | – |
 | [4. Detector response and event rates](#4-detector-response-and-event-rates) | 10 | 1 | 2 | – |
 | [5. Likelihood](#5-likelihood) | 7 | 3 | 1 | – |
@@ -48,7 +48,7 @@ Partly tested items count in both columns.
 | [2.3](#23) | 🟢 | makePaths and NightOsc cross the same layers |
 | [2.4](#24) | 🟢 | Uncrossed layer has zero gradient |
 | [2.5](#25) | 🟢 | `earth_norm_i` outside [0, 2] gives −Inf |
-| [2.6](#26) | 🟢🟡 | Earth-norm priors use the full covariance |
+| [2.6](#26) | 🟢 | Earth-norm prior: the file's MvNormal, Enzyme-differentiable |
 | [2.7](#27) | 🟢 | Parameter names sort numerically |
 | [2.8](#28) | 🟢🟣 | Analytic PREM with continental crust, 8 layers |
 | [2.9](#29) | 🟢🟣 | Layer-scale prior from full-model Earth draws |
@@ -174,14 +174,19 @@ A layer not crossed by any path in the grid has **exactly zero gradient**.
 > ✅ `test_likelihood_correctness.jl`
 
 <a id="26"></a>
-#### 🟢🟡 2.6 · Earth-norm prior covariance
-Earth-norm priors use the full covariance of `earth_normalisation_prior_file`.
-- 🟢 Independent normals plus `earth_prior_correlation` (added in `mcmc.jl` when the covariance is not
-  diagonal) equal the MvNormal up to a constant (`test_likelihood_correctness.jl`).
-- 🟡 The current covariance file is diagonal, so the term has never run inside BAT or under Enzyme.
-
-> [!IMPORTANT]
-> Run `regression_likelihood.jl night --grad` with a correlated covariance file before using one.
+#### 🟢 2.6 · Earth-norm prior covariance
+The MCMC prior of the layer scales is the MvNormal of `earth_normalisation_prior_file` (full
+covariance), with no term added to the likelihood. BAT samples K independent standard normals
+`earth_z`; the likelihood reads `earth_norm = μ + L z`, L L' = the covariance (BAT's own transform of a
+full-covariance MvNormal is not Enzyme-differentiable in BAT 4.0.9). Chain files store `earth_norm_i`.
+- 🟢 BAT's log prior equals the sum of the parameter priors, and its differences between two points
+  equal those of the file's MvNormal in the layer scales, to **1e-10**; `earth_z` ↔ `earth_norm_i`
+  round-trips.
+- 🟢 Enzyme and ForwardDiff agree to **1e-8** on the gradient of the transformed posterior HMC uses
+  (BAT's PriorToNormal space), with the correlated 7-layer PREM prior.
+- 🟢 A prior may leave out inner layers no path crosses; they keep scale 1.
+- 🟢 The warm start reads vector-valued parameters from their flat chain columns.
+> ✅ `regression_likelihood.jl` (every variant; `night_prem --grad`), `test_warm_start.jl`
 
 <a id="27"></a>
 #### 🟢 2.7 · Parameter-name order
