@@ -15,24 +15,7 @@ include(joinpath(@__DIR__, "warmStart.jl"))
 
 include(joinpath(@__DIR__, "priors.jl"))
 priors = build_priors()
-if earthUncertainty
-  means = mean(earth_normalisation_prior)
-  covmat = cov(earth_normalisation_prior)
-end
-
-prior = distprod(; priors...)
-
-# A correlated Earth covariance: add the correlation term, making the product the full MvNormal.
-if earthUncertainty && !isdiag(covmat)
-  @logmsg MCMC "Earth prior covariance is correlated: adding the correlation term to the log-density"
-  global likelihood_all_samples = let f = total_llh,
-                                      M = Matrix(inv(covmat) - Diagonal(1 ./ diag(covmat))),
-                                      μ = Vector{Float64}(means)
-    logfuncdensity(p -> f(p) + earth_prior_correlation(p, M, μ))
-  end
-end
-
-posterior = PosteriorMeasure(likelihood_all_samples, prior)
+prior, posterior = build_posterior(total_llh, priors)
 
 init = MCMCChainPoolInit(
   init_tries_per_chain=IntervalSets.ClosedInterval(4, 180),  # min > 1 avoids a BAT v4 bug
@@ -58,7 +41,8 @@ if warm_start_chain !== nothing
   if prevFile !== nothing
     @logmsg MCMC "warm_start_chain is ignored when resuming from prevFile"
   else
-    global warm_start = build_warm_start(warm_start_chain, posterior, prior, PriorToNormal(); init = init)
+    global warm_start = build_warm_start(warm_start_chain, posterior, prior, PriorToNormal(); init = init,
+                                         flat = flat_params, unflat = bat_params)
     global init = warm_start.init
     @logmsg MCMC "Warm start from $warm_start_chain: mass matrix from $(warm_start.nsamples) samples, " *
                  "kept fixed (step size still tuned); chains start from its draws"

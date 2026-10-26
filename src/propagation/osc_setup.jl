@@ -5,7 +5,7 @@ osc_setup.jl — the oscillation calculation, chosen once from the config and st
 
 abstract type NightBackend end
 
-struct NightOscNight <: NightBackend
+struct NightOscNight{L} <: NightBackend      # L: layers of the Earth model
     engine::NightOsc.BinnedP1e
 end
 
@@ -45,22 +45,41 @@ function build_osc_setup(; night_osc::Bool, fast::Bool, earth_uncertainty::Bool,
     end
 
     night = if night_osc
-        earth = NightOsc.EarthModel(earth_model_file; potential_const=MATTER_POTENTIAL_CONST)
-        if earth_uncertainty && n_earth_norms != NightOsc.n_layers(earth)
-            error("nightOsc: Earth model $earth_model_file has $(NightOsc.n_layers(earth)) layers, " *
-                  "but the Earth-uncertainty prior has $n_earth_norms normalisations")
-        end
+        earth = night_earth_model(earth_model_file)
         check_layer_agreement(earth, legacy_path, depth_km)
         engine = NightOsc.BinnedP1e(cosz_edges, energy_edges, exposure, earth;
                                     depth_km=depth_km, phase_const=Osc.PHASE_CONST)
+        # the prior covers layers 1…K; the layers beyond (kept at scale 1) must not be crossed
+        if earth_uncertainty && !(maximum(engine.used_layers) <= n_earth_norms <= NightOsc.n_layers(earth))
+            error("nightOsc: the Earth-uncertainty prior has $n_earth_norms normalisations, but Earth model " *
+                  "$earth_model_file has $(NightOsc.n_layers(earth)) layers and paths cross layers up to " *
+                  "$(maximum(engine.used_layers))")
+        end
         engine.shape == (n_cosz, n_E) ||
             error("nightOsc: engine grid $(engine.shape) differs from the analysis grid ($n_cosz, $n_E)")
         check_exposure_normalisation(engine, cosz_edges, exposure, exposure_weights)
-        NightOscNight(engine)
+        NightOscNight{NightOsc.n_layers(earth)}(engine)
     else
+        # one lookup entry per crossed layer (padded to the prior's K): the prior must cover them all
+        if earth_uncertainty && length(legacy_lookup) != n_earth_norms
+            error("nightOsc = false: the Earth-uncertainty prior has $n_earth_norms normalisations, but paths " *
+                  "cross $(length(legacy_lookup)) layers of $earth_model_file")
+        end
         NumOscNight{fast}(legacy_paths, legacy_lookup)
     end
     return OscSetup{typeof(night),earth_uncertainty,fast}(night)
+end
+
+"""
+    night_earth_model(earth_model_file) -> NightOsc.EarthModel
+
+A table file (layers from its density steps), or `"PREM"` with its exact boundaries.
+"""
+function night_earth_model(earth_model_file::AbstractString)
+    earth_model_file == "PREM" ||
+        return NightOsc.EarthModel(earth_model_file; potential_const=MATTER_POTENTIAL_CONST)
+    m = load_earth_model("PREM")
+    return NightOsc.EarthModel(m[:radius], m[:potential], m[:boundaries])
 end
 
 # makePaths and NightOsc must cross the same layers in the same order (so earth_norm_i

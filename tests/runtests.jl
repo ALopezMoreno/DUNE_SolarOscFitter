@@ -18,6 +18,8 @@ include(joinpath(@__DIR__, "test_es_xsec.jl"))
 include(joinpath(@__DIR__, "test_cc_xsec.jl"))
 include(joinpath(@__DIR__, "test_osc_night.jl"))
 include(joinpath(@__DIR__, "test_tabulated.jl"))
+include(joinpath(@__DIR__, "test_prem.jl"))           # after test_osc_night.jl (NightOsc, makePaths)
+include(joinpath(@__DIR__, "test_earth_prior.jl"))
 include(joinpath(@__DIR__, "test_response_and_backgrounds.jl"))
 include(joinpath(@__DIR__, "test_input_checks.jl"))
 include(joinpath(@__DIR__, "test_mcstat.jl"))
@@ -39,9 +41,17 @@ end
 # End-to-end likelihood regression (full setup, one process per variant; a few minutes)
 if get(ENV, "JULIA_REGRESSION", "0") == "1"
     @testset "likelihood regression" begin
-        for variant in ("night", "legacy", "night_da", "night_bb", "night_da_indep", "night_sym")
+        for variant in ("night", "legacy", "night_da", "night_bb", "night_da_indep", "night_sym", "night_prem")
             cmd = `$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) $(joinpath(@__DIR__, "regression_likelihood.jl")) $variant`
             @test success(pipeline(cmd; stdout=stdout, stderr=stderr))
+        end
+        # SPEC 2.6: a prior that misses a crossed Earth layer is refused at setup, in both night calculations
+        for variant in ("refuse_night_K3", "refuse_legacy_K3")
+            cmd = `$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) $(joinpath(@__DIR__, "regression_likelihood.jl")) $variant`
+            out = IOBuffer()
+            ok = success(pipeline(cmd; stdout=out, stderr=out))
+            log = String(take!(out))
+            @test !ok && occursin("the Earth-uncertainty prior has 3 normalisations", log)
         end
     end
 else

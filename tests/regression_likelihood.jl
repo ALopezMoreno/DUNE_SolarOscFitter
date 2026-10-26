@@ -7,8 +7,11 @@ semi-inclusive angular ES) against tests/regression_reference.toml.
 
 variants: night (NightOsc), legacy (NumOsc), night_da / night_bb / night_da_indep (MC statistics:
 Dembinski–Abdelmotteleb or Barlow–Beeston, shared or independent day/night), night_sym (symmetric
-exposure, splits 0.5 exactly; matches the old hard-coded 0.5/0.5 split to 6e-9). --update rewrites
-the reference; --grad checks Enzyme against ForwardDiff (night only). One process per variant.
+exposure, splits 0.5 exactly; matches the old hard-coded 0.5/0.5 split to 6e-9), night_prem (PREM
+with the correlated 7-layer prior of utils/make_earth_prior.jl, frozen in tests/fixtures). Every
+variant checks the BAT prior (the Earth prior's MvNormal through whitened normals, SPEC 2.6). --update rewrites the
+reference; --grad checks Enzyme against ForwardDiff (night only), on total_llh and on the transformed
+posterior HMC differentiates. One process per variant.
 =#
 using YAML, TOML, Printf
 
@@ -25,6 +28,14 @@ const VARIANTS  = Dict(
     # day/night split of 0.5 from a symmetric exposure file (SPEC 4.6)
     "night_sym"      => Dict{String,Any}("nightOsc" => true,
                                          "solar_exposure_file" => "tests/fixtures/solarExposure_symmetric.csv"),
+    # analytic PREM (8 layers, the inner core not crossed) with the correlated prior on layers 1–7
+    "night_prem"     => Dict{String,Any}("nightOsc" => true, "earth_model_file" => "PREM",
+                                         "earth_normalisation_prior_file" => "tests/fixtures/earth_prior_parchita.jld2"),
+    # a prior on 3 layers when paths cross 5: setup must refuse it (runtests.jl expects these to fail)
+    "refuse_night_K3"  => Dict{String,Any}("nightOsc" => true,
+                                           "earth_normalisation_prior_file" => "tests/fixtures/earth_prior_diag3.jld2"),
+    "refuse_legacy_K3" => Dict{String,Any}("nightOsc" => false, "fastFit" => true,
+                                           "earth_normalisation_prior_file" => "tests/fixtures/earth_prior_diag3.jld2"),
 )
 const RTOL = 1e-9
 
@@ -112,6 +123,29 @@ end
 
 haskey(ref, variant) || error("no reference for '$variant' in $REF_FILE; run with --update first")
 failed = false
+
+# BAT prior (SPEC 2.6): the Earth layers' MvNormal via whitened normals; posterior = total_llh + log prior
+@eval using BAT, DensityInterface, Distributions
+Base.invokelatest(include, joinpath(ROOT, "src", "priors.jl"))
+prior, post = Base.invokelatest(build_posterior, total_llh)
+# a point as BAT holds it: the prior's parameters only, the Earth layers as earth_z
+bat_point(p) = (pf = Base.invokelatest(bat_params, p); ks = Tuple(keys(BAT.varshape(prior))); NamedTuple{ks}(Tuple(pf[k] for k in ks)))
+let pr = Base.invokelatest(() -> bat_priors(build_priors())), x1 = bat_point(points["near"]), x2 = bat_point(points["slow"])
+    flat_ok = all(Base.invokelatest(flat_params, x1)[k] ≈ points["near"][k] for k in keys(Base.invokelatest(flat_params, x1)))
+    lp(x) = sum(logpdf(d, x[k]) for (k, d) in pr)
+    # differences of the log prior are those of the Earth prior's MvNormal in the layer scales
+    mv = Base.invokelatest(() -> earth_normalisation_prior)
+    earth(p) = [p[k] for k in Base.invokelatest(() -> EARTH_NORM_NAMES)]
+    rest(x) = sum(logpdf(d, x[k]) for (k, d) in pr if k !== :earth_z)
+    mv_ok = isapprox(lp(x1) - lp(x2), rest(x1) - rest(x2) + logpdf(mv, earth(points["near"])) - logpdf(mv, earth(points["slow"]));
+                     rtol = 1e-10)
+    prior_ok = isapprox(logdensityof(prior, x1), lp(x1); rtol = 1e-12) &&
+               isapprox(logdensityof(post, x1), llh_values["near"] + lp(x1); rtol = 1e-12)
+    @printf("BAT prior: Earth layers as %d whitened normals; log density %s, MvNormal of the prior file %s, round trip %s\n",
+            length(x1.earth_z), prior_ok ? "ok" : "MISMATCH", mv_ok ? "ok" : "MISMATCH", flat_ok ? "ok" : "MISMATCH")
+    global failed |= !(prior_ok && mv_ok && flat_ok)
+end
+
 for (name, v) in sort(collect(llh_values))
     r = ref[variant][name]
     ok = isapprox(v, r; rtol=RTOL, atol=1e-9)
@@ -130,8 +164,18 @@ if check_grad
     g_fd = Base.invokelatest(ForwardDiff.gradient, f, x)
     g_ez = Base.invokelatest(() -> Enzyme.gradient(Enzyme.Reverse, Enzyme.Const(f), x)[1])
     rel = maximum(abs.(g_ez .- g_fd)) / maximum(abs.(g_fd))
-    @printf("gradient: max |Enzyme - ForwardDiff| / max |ForwardDiff| = %.2e\n", rel)
-    if rel > 1e-8
+    @printf("gradient of total_llh: max |Enzyme - ForwardDiff| / max |ForwardDiff| = %.2e\n", rel)
+
+    # what HMC differentiates: the posterior in BAT's PriorToNormal space, through valgrad_func
+    @eval import AutoDiffOperators: ADSelector, valgrad_func
+    tm, fpt = Base.invokelatest(BAT.transform_and_unshape, PriorToNormal(), post, BATContext())
+    z = Base.invokelatest(fpt, bat_point(p))
+    fz = BAT.checked_logdensityof(tm)
+    (v_fd, gz_fd), (v_ez, gz_ez) = (Base.invokelatest(valgrad_func(fz, ADSelector(b)), z) for b in (:ForwardDiff, :Enzyme))
+    rel_z = maximum(abs.(gz_ez .- gz_fd)) / maximum(abs.(gz_fd))
+    @printf("gradient of the transformed posterior (%d dims): max |Enzyme - ForwardDiff| / max |ForwardDiff| = %.2e\n",
+            length(z), rel_z)
+    if max(rel, rel_z) > 1e-8 || !(v_fd ≈ v_ez)
         global failed = true
         println("gradient MISMATCH")
     end

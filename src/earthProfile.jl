@@ -8,13 +8,16 @@ global earth = create_interpolated_model(earth_model)
 # no bin straddles a density jump, and covers only the exposure's support. Oscillations are computed
 # at N_COSZ_SUB midpoints per coarse bin and block-averaged back.
 
-# cos z of the inner-core and core-mantle boundaries: the two largest jumps of the potential
+# cos z of the inner-core and core-mantle boundaries: given by PREM, else the two largest jumps
+# of the table's potential
 const _IC_COSZ, _CM_COSZ = let
-    r      = earth_model[:radius]      # km, centre→surface
-    p      = earth_model[:potential]
-    jumps  = abs.(diff(p))
-    top2   = sort(sortperm(jumps, rev=true)[1:2])
-    r_bdry = [(r[i] + r[i+1]) / 2.0 for i in top2]
+    r_bdry = if haskey(earth_model, :boundaries)
+        earth_model[:boundaries][1:2]
+    else
+        r     = earth_model[:radius]      # km, centre→surface
+        jumps = abs.(diff(earth_model[:potential]))
+        [(r[i] + r[i+1]) / 2.0 for i in sort(sortperm(jumps, rev=true)[1:2])]
+    end
     cosz_v = sort([-sqrt(max(0.0, 1.0 - (rb / EARTH_RADIUS_KM)^2)) for rb in r_bdry])
     cosz_v[1], cosz_v[2]   # (inner-core boundary, core-mantle boundary)
 end

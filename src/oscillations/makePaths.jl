@@ -157,7 +157,8 @@ function make_potential_for_integrand(cosz, earth_potential_function, n=3)
     end
     layers[end] = (collected_jumps[end], collected_jumps[end])
 
-    if !isnothing(earth_normalisation_true) && length(layers) != length(earth_normalisation_true)
+    # the prior may leave out inner layers no path crosses (osc_setup.jl checks the crossed ones)
+    if !isnothing(earth_normalisation_true) && length(earth_normalisation_true) > length(layers)
         error("Mismatch in length: layers has ", length(layers), " elements, but earth_normalisation_true has ", length(earth_normalisation_true), " elements. Check your earth matter potential uncertainties prior covariance file")
     end
 

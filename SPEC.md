@@ -21,7 +21,7 @@ Two marks on one item (e.g. 🟢🟡) mean part of it is tested and part is not;
 | Section | 🟢 | 🟡 | 🟣 | 🔴 |
 |---|:---:|:---:|:---:|:---:|
 | [1. Oscillation probabilities](#1-oscillation-probabilities) | 3 | 3 | 2 | – |
-| [2. Earth model](#2-earth-model) | 6 | 2 | – | – |
+| [2. Earth model](#2-earth-model) | 9 | 1 | 2 | – |
 | [3. Cross sections](#3-cross-sections) | 5 | – | – | – |
 | [4. Detector response and event rates](#4-detector-response-and-event-rates) | 10 | 1 | 2 | – |
 | [5. Likelihood](#5-likelihood) | 7 | 3 | 1 | – |
@@ -48,8 +48,10 @@ Partly tested items count in both columns.
 | [2.3](#23) | 🟢 | makePaths and NightOsc cross the same layers |
 | [2.4](#24) | 🟢 | Uncrossed layer has zero gradient |
 | [2.5](#25) | 🟢 | `earth_norm_i` outside [0, 2] gives −Inf |
-| [2.6](#26) | 🟢🟡 | Earth-norm priors use the full covariance |
+| [2.6](#26) | 🟢 | Earth-norm prior: the file's MvNormal, Enzyme-differentiable |
 | [2.7](#27) | 🟢 | Parameter names sort numerically |
+| [2.8](#28) | 🟢🟣 | Analytic PREM with continental crust, 8 layers |
+| [2.9](#29) | 🟢🟣 | Layer-scale prior from full-model Earth draws |
 | [3.1](#31) | 🟢 | ES couplings (BKS95, PDG 2024), 5e-4 |
 | [3.2](#32) | 🟢 | ES σ = 0 below threshold |
 | [3.2a](#32a) | 🟢 | ES recoil quadrature vs analytic, 1e-12 |
@@ -168,23 +170,68 @@ A layer not crossed by any path in the grid has **exactly zero gradient**.
 
 <a id="25"></a>
 #### 🟢 2.5 · Norm range
-`earth_norm_i` outside **[0, 2]** gives log L = −Inf.
+`earth_norm_i` outside **[0, 2]** gives log L = −Inf. In the MCMC this is the only bound: the prior
+(2.6) is untruncated.
 > ✅ `test_likelihood_correctness.jl`
 
 <a id="26"></a>
-#### 🟢🟡 2.6 · Earth-norm prior covariance
-Earth-norm priors use the full covariance of `earth_normalisation_prior_file`.
-- 🟢 Independent normals plus `earth_prior_correlation` (added in `mcmc.jl` when the covariance is not
-  diagonal) equal the MvNormal up to a constant (`test_likelihood_correctness.jl`).
-- 🟡 The current covariance file is diagonal, so the term has never run inside BAT or under Enzyme.
-
-> [!IMPORTANT]
-> Run `regression_likelihood.jl night --grad` with a correlated covariance file before using one.
+#### 🟢 2.6 · Earth-norm prior covariance
+The MCMC prior of the layer scales is the MvNormal of `earth_normalisation_prior_file` (full
+covariance), with no term added to the likelihood. BAT samples K independent standard normals
+`earth_z`; the likelihood reads `earth_norm = μ + L z`, L L' = the covariance (BAT's own transform of a
+full-covariance MvNormal is not Enzyme-differentiable in BAT 4.0.9). Chain files store `earth_norm_i`.
+- 🟢 BAT's log prior equals the sum of the parameter priors, and its differences between two points
+  equal those of the file's MvNormal in the layer scales, to **1e-10**; `earth_z` ↔ `earth_norm_i`
+  round-trips.
+- 🟢 Enzyme and ForwardDiff agree to **1e-8** on the gradient of the transformed posterior HMC uses
+  (BAT's PriorToNormal space), with the correlated 7-layer PREM prior.
+- 🟢 A prior may leave out inner layers no path crosses; they keep scale 1. Setup refuses a prior that
+  misses a crossed layer, in both night calculations.
+- 🟢 A resume refuses a run state whose parameter layout differs from the current prior.
+- 🟢 The warm start reads vector-valued parameters from their flat chain columns.
+> ✅ `regression_likelihood.jl` (every variant; `night_prem --grad`; only `night_prem` has a correlated
+> prior, so only it detects a wrong L), `test_warm_start.jl`
 
 <a id="27"></a>
 #### 🟢 2.7 · Parameter-name order
 Parameter names sort numerically (`earth_norm_2` before `earth_norm_10`).
 > ✅ `test_response_and_backgrounds.jl`
+
+<a id="28"></a>
+#### 🟢🟣 2.8 · Analytic PREM
+`earth_model_file: "PREM"` gives PREM (Dziewonski & Anderson 1981) with the ocean replaced by upper
+crust (2.6 g/cm³) and the full 220 km jump: the nominal Earth of EarthModels/parchita (θ = 0).
+- n_e equals parchita's profile at θ = 0 to **1e-12** relative, away from the jumps.
+- **7 density jumps** at the PREM radii (ICB, CMB, 670, 400, 220, Moho, upper/lower crust), taken
+  from the model, not detected from the table: **8 layers**, numbered from 1 (upper crust).
+- The tabulated potential matches the formulas to **1e-6** relative.
+- makePaths and NightOsc cross the same 8 layers (2.3).
+> ✅ `test_prem.jl` (reference `tests/fixtures/prem_parchita.csv`). *(Inferred: drafted with the
+> Earth rework; confirm.)*
+
+<a id="29"></a>
+#### 🟢🟣 2.9 · Layer-scale prior from Earth draws
+`utils/make_earth_prior.jl` builds the prior of the layer scales from parchita draws of the full Earth
+model, on a fixed E_true × cos z grid (34 × 40, not the analysis binning), weighted by CC events (W).
+The prior is **centred at PREM** (all scales 1), and spreads are second moments about PREM, so the
+draws' offset from PREM counts as uncertainty. Each draw's binned night P₁ₑ deviation from PREM is
+projected onto the scales by weighted least squares; independent per-layer variances ≥ 0 are added so
+that diag(J Σ Jᵀ) matches the draws' per-bin mean square (non-negative least squares, same weights);
+the result is scaled so that the event-weighted per-bin variance is **1.1 × the draws' per-bin mean
+square** about PREM at the worst
+Δm²₂₁ evaluated (it covers, with a small margin). Layers no path crosses get no parameter.
+- 🟢 The projection is (JᵀWJ)⁻¹JᵀW D, to **1e-10** relative; draws that are exact layer-scale
+  perturbations give their second moment with no added variance.
+- 🟢 The added variances satisfy the non-negative least-squares optimality conditions of that match,
+  to **1e-8** relative, for problems scaled from 1e-10 to 1e12.
+- 🟢 After scaling, the smallest coverage over the Δm²₂₁ blocks is the target, to **1e-12**.
+- 🟢 The prior covariance is positive definite.
+- 🟣 The file records the draws (SHA-256, seed, parchita commit), the weight inputs (SHA-256), the
+  grids, the Δm²₂₁ values, the fitter commit (both marked `-dirty` when built from uncommitted code), the coverage per Δm²₂₁, the
+  scale factor, and a bootstrap error per width; its covariance is the scale × (projection + added
+  variances), and its smallest coverage is the target.
+> ✅ `test_earth_prior.jl` (synthetic draws). Centre at PREM and overshooting coverage: maintainer,
+> 26 Oct 2026; the 1.1 margin is Claude's reading of "slightly overshoot". *(Rest inferred: confirm.)*
 
 ---
 
