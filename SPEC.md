@@ -213,10 +213,10 @@ the result is scaled so that the event-weighted per-bin variance is **1.1 × the
 - 🟢 The projection is (JᵀWJ)⁻¹JᵀW D, to **1e-10** relative; draws that are exact layer-scale
   perturbations give their second moment with no added variance.
 - 🟢 The added variances satisfy the non-negative least-squares optimality conditions of that match,
-  to **1e-8** relative.
+  to **1e-8** relative, for problems scaled from 1e-10 to 1e12.
 - 🟢 After scaling, the smallest coverage over the Δm²₂₁ blocks is the target, to **1e-12**.
 - 🟢 The prior covariance is positive definite.
-- 🟣 The file records the draws (SHA-256, seed, parchita commit), the grids, the Δm²₂₁ values, the
+- 🟣 The file records the draws (SHA-256, seed, parchita commit), the weight inputs (SHA-256), the grids, the Δm²₂₁ values, the
   fitter commit (both marked `-dirty` when built from uncommitted code), the coverage per Δm²₂₁, the
   scale factor, and a bootstrap error per width.
 > ✅ `test_earth_prior.jl` (synthetic draws). Centre at PREM and overshooting coverage: maintainer,

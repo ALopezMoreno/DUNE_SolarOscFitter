@@ -70,7 +70,7 @@ end
     end
 
     @testset "nnls optimality" begin
-        for scale in (1e-10, 1.0, 1e6), _ in 1:10
+        for scale in (1e-10, 1.0, 1e6, 1e10, 1e12), _ in 1:10
             M, b = scale .* randn(rng, 50, 7), randn(rng, 50)
             x = nnls(M, b)
             @test all(>=(0), x)
