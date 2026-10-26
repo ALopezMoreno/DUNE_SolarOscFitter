@@ -260,7 +260,7 @@ Results are written into `{prevFile}.jld2` (`outFile` is not used), and the run 
 ## Input Data Requirements
 
 The repository ships the physics model: solar model (`inputs/SF3_GS98.jld2`), solar fluxes
-(`inputs/fluxes.jld2`), Earth density table (`inputs/EARTH_MODEL_PREM_DENSE.dat`), solar exposure
+(`inputs/fluxes.jld2`), Earth model (analytic PREM with continental crust, prior `inputs/earth_prior_parchita.jld2`), solar exposure
 (`inputs/solarExposure_v2.csv`) and the CC ν_e–⁴⁰Ar cross section (MARLEY 2.0.0). The fitter
 computes the ES cross sections itself. **An analyser provides the detector**: for each detector
 in `detectors:`, event-level Monte Carlo samples for the signal response and for each background.

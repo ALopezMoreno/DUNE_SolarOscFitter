@@ -12,7 +12,7 @@ cosz_fine_edge:  -0.15
 # ── Input files ──
 solar_model_file:               "inputs/SF3_GS98.jld2"
 flux_model_file:                "inputs/fluxes.jld2"
-earth_model_file:               "inputs/EARTH_MODEL_PREM_DENSE.dat"
+earth_model_file:               "PREM"
 earth_uncertainty_file:         "inputs/earth_uncertainty_4.5e-5.jld2"   # required key, not read
-earth_normalisation_prior_file: "inputs/earth_uncertainty_cov.jld2"
+earth_normalisation_prior_file: "inputs/earth_prior_parchita.jld2"
 solar_exposure_file:            "inputs/solarExposure_v2.csv"

@@ -21,7 +21,7 @@ Two marks on one item (e.g. 🟢🟡) mean part of it is tested and part is not;
 | Section | 🟢 | 🟡 | 🟣 | 🔴 |
 |---|:---:|:---:|:---:|:---:|
 | [1. Oscillation probabilities](#1-oscillation-probabilities) | 3 | 3 | 2 | – |
-| [2. Earth model](#2-earth-model) | 9 | 1 | 2 | – |
+| [2. Earth model](#2-earth-model) | 10 | 1 | 2 | – |
 | [3. Cross sections](#3-cross-sections) | 5 | – | – | – |
 | [4. Detector response and event rates](#4-detector-response-and-event-rates) | 10 | 1 | 2 | – |
 | [5. Likelihood](#5-likelihood) | 7 | 3 | 1 | – |
@@ -43,7 +43,7 @@ Partly tested items count in both columns.
 | [1.5](#15) | 🟢 | Day-night factorisation error, < 5e-4 |
 | [1.6](#16) | 🟡 | Convergence in zenith steps and E_calc |
 | [1.7](#17) | 🟣 | Legacy vs NightOsc, ≤ 0.06 per bin |
-| [2.1](#21) | 🟡⚠️ | Nominal potential reproduces the Earth table |
+| [2.1](#21) | 🟢🟡 | Nominal potential: PREM with crust (default) or a table |
 | [2.2](#22) | 🟢 | 6 sorted layers; segment lengths sum to the chord |
 | [2.3](#23) | 🟢 | makePaths and NightOsc cross the same layers |
 | [2.4](#24) | 🟢 | Uncrossed layer has zero gradient |
@@ -142,14 +142,10 @@ known accuracy limit of the legacy method, not a requirement to tighten. *(Infer
 > 📖 Source: [oscillation_physics.md §7](docs/oscillation_physics.md)
 
 <a id="21"></a>
-#### 🟡⚠️ 2.1 · Nominal potential
-With all `earth_norm_i = 1`, the potential reproduces PREM (`inputs/EARTH_MODEL_PREM_DENSE.dat`)
-exactly.
-
-> [!WARNING]
-> The file is not PREM (input audit, 2026-10-18): it has no crust or ocean (3.38 g/cm³ up to the
-> surface) and its layer boundaries are shifted by up to 15 km. The item currently means "reproduces
-> the shipped table". The Earth modelling is being reworked; restate this item then.
+#### 🟢🟡 2.1 · Nominal potential
+With all `earth_norm_i = 1`, the potential is the nominal Earth: by default (`earth_model_file:
+"PREM"`) the analytic PREM with continental crust, 🟢 tested in 2.8; 🟡 a table file (legacy, e.g.
+`inputs/EARTH_MODEL_PREM_DENSE.dat`, which has no crust) is reproduced as tabulated.
 
 <a id="22"></a>
 #### 🟢 2.2 · Layers and chords
