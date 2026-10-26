@@ -203,17 +203,22 @@ crust (2.6 g/cm³) and the full 220 km jump: the nominal Earth of EarthModels/pa
 <a id="29"></a>
 #### 🟢🟣 2.9 · Layer-scale prior from Earth draws
 `utils/make_earth_prior.jl` builds the prior of the layer scales from parchita draws of the full Earth
-model: each draw's binned night P₁ₑ deviation from PREM is projected onto the scales (weighted least
-squares, CC-event weights), and independent per-layer variances ≥ 0 are added so that J Σ Jᵀ matches
-the draws' per-bin variance (weighted least squares). Layers no path crosses get no parameter.
-- 🟢 Draws that are exact layer-scale perturbations give their sample covariance with no added variance,
-  to **1e-10**.
-- 🟢 The added variances satisfy the non-negative least-squares optimality conditions, to **1e-8**.
+model, on a fixed E_true × cos z grid (34 × 40, not the analysis binning): each draw's binned night P₁ₑ
+deviation from PREM is projected onto the scales by weighted least squares (CC-event weights W), and
+independent per-layer variances ≥ 0 are added so that diag(J Σ Jᵀ) matches the draws' per-bin variance
+(non-negative least squares, same weights). Layers no path crosses get no parameter.
+- 🟢 The projection is (JᵀWJ)⁻¹JᵀW D, to **1e-10** relative; draws that are exact layer-scale
+  perturbations give their sample covariance with no added variance.
+- 🟢 The added variances satisfy the non-negative least-squares optimality conditions of that match,
+  to **1e-8** relative.
 - 🟢 The prior covariance is positive definite and is the projection covariance plus a non-negative
   diagonal.
 - 🟣 The file records the draws (SHA-256, seed, parchita commit), the grids, the Δm²₂₁ values, the
-  fitter commit, the per-bin variance ratio on fitted and other Δm²₂₁, and a bootstrap error per width.
+  fitter commit (both marked `-dirty` when built from uncommitted code), the per-bin variance ratio
+  on fitted and other Δm²₂₁, and a bootstrap error per width.
 > ✅ `test_earth_prior.jl` (synthetic draws). *(Inferred: drafted with the Earth rework; confirm.)*
+> Open for the maintainer: the prior centre (PREM or the draws' mean, ~1% lower in the deep layers)
+> and the accepted range of the per-bin variance ratio (now 0.80 fitted, 0.89 other Δm²₂₁).
 
 ---
 

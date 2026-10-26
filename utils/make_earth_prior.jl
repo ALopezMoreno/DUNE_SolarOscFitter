@@ -123,7 +123,8 @@ function main()
             n_draws, draws_file=basename(DRAWS_FILE), draws_sha256=sha256_file(DRAWS_FILE), draws_attrs=attrs,
             dm2_fit=DM2_FIT, dm2_check=DM2_CHECK, cz_edges=CZ_EDGES, e_edges=E_EDGES,
             weights="CC events: $(basename(EXPOSURE_FILE)) flux weight x $(basename(FLUX_FILE)) 8B x $(basename(XSEC_FILE))",
-            fitter_commit=git("rev-parse", "--short", "HEAD"), created=string(now()))
+            fitter_commit=git("rev-parse", "--short", "HEAD") * (isempty(git("status", "--porcelain", "--", "src", "utils")) ? "" : "-dirty"),
+            created=string(now()))
     println("\nwrote $OUT_FILE ($(length(layers)) layer scales: $(collect(layers)))")
 end
 

@@ -16,14 +16,15 @@ function nnls(A::AbstractMatrix, b::AbstractVector; tol=1e-12 * opnorm(A, 1) * n
         g = A' * (b .- A * x)
         (all(P) || maximum(g[.!P]) <= tol) && return x
         P[argmax(ifelse.(P, -Inf, g))] = true
-        while true
+        for inner in 1:n+1
             z = zeros(n)
             z[P] = A[:, P] \ b
             all(>(0), z[P]) && (x = z; break)
+            inner == n + 1 && error("nnls: inner loop did not converge")
             neg = P .& (z .<= 0)
             α = minimum(x[neg] ./ (x[neg] .- z[neg]))
             x .+= α .* (z .- x)
-            P .&= x .> tol
+            P .&= x .> 10eps() * maximum(x)
             x[.!P] .= 0
         end
     end
