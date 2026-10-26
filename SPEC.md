@@ -208,7 +208,8 @@ The prior is **centred at PREM** (all scales 1), and spreads are second moments 
 draws' offset from PREM counts as uncertainty. Each draw's binned night P₁ₑ deviation from PREM is
 projected onto the scales by weighted least squares; independent per-layer variances ≥ 0 are added so
 that diag(J Σ Jᵀ) matches the draws' per-bin mean square (non-negative least squares, same weights);
-the result is scaled so that the event-weighted per-bin variance is **1.1 × the draws'** at the worst
+the result is scaled so that the event-weighted per-bin variance is **1.1 × the draws' per-bin mean
+square** about PREM at the worst
 Δm²₂₁ evaluated (it covers, with a small margin). Layers no path crosses get no parameter.
 - 🟢 The projection is (JᵀWJ)⁻¹JᵀW D, to **1e-10** relative; draws that are exact layer-scale
   perturbations give their second moment with no added variance.
@@ -216,9 +217,10 @@ the result is scaled so that the event-weighted per-bin variance is **1.1 × the
   to **1e-8** relative, for problems scaled from 1e-10 to 1e12.
 - 🟢 After scaling, the smallest coverage over the Δm²₂₁ blocks is the target, to **1e-12**.
 - 🟢 The prior covariance is positive definite.
-- 🟣 The file records the draws (SHA-256, seed, parchita commit), the weight inputs (SHA-256), the grids, the Δm²₂₁ values, the
-  fitter commit (both marked `-dirty` when built from uncommitted code), the coverage per Δm²₂₁, the
-  scale factor, and a bootstrap error per width.
+- 🟣 The file records the draws (SHA-256, seed, parchita commit), the weight inputs (SHA-256), the
+  grids, the Δm²₂₁ values, the fitter commit (both marked `-dirty` when built from uncommitted code), the coverage per Δm²₂₁, the
+  scale factor, and a bootstrap error per width; its covariance is the scale × (projection + added
+  variances), and its smallest coverage is the target.
 > ✅ `test_earth_prior.jl` (synthetic draws). Centre at PREM and overshooting coverage: maintainer,
 > 26 Oct 2026; the 1.1 margin is Claude's reading of "slightly overshoot". *(Rest inferred: confirm.)*
 

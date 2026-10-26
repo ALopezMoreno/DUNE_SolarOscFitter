@@ -92,8 +92,7 @@ function main()
     blocks = rows.(dm2_all)
     function build(idx)
         p = earth_prior_covariance(J[rf, :], D[rf, idx], repeat(w_ev, length(DM2_FIT)))
-        k, Σ = cover(J, D[:, idx], w_ev, p.cov, blocks, COVERAGE)
-        return p, k, Σ
+        return p, cover(J, D[:, idx], w_ev, p.cov, blocks, COVERAGE)...
     end
     prior, k, Σ = build(1:n_draws)
 
@@ -115,6 +114,7 @@ function main()
         @printf("  %-10s %s\n", name, join([@sprintf("%.1e: %.2f", m, c) for (m, c) in zip(dm2_all, cov_by_dm2[name])], "  "))
     end
     isposdef(Σ) || error("prior covariance is not positive definite")
+    Σ ≈ k .* prior.cov && minimum(cov_by_dm2["prior"]) ≈ COVERAGE || error("prior is not the scaled match of all draws")
     k > 2 && @warn "the matched covariance had to be scaled by $(round(k, digits=2)) to reach the coverage target"
 
     git(args...) = try readchomp(`git -C $ROOT $args`) catch; "unknown" end
